@@ -10,6 +10,7 @@ const URGENT_DAYS = 3;
 const PRIORITIES = ["Critical", "High", "Medium", "Low"];
 const STATUSES = ["Open", "In Progress", "On Hold", "Completed", "Cancelled"];
 const DEFAULT_STATUS = "Open";
+const INLINE_STATUS_OPTIONS = ["Open", "On Hold", "Completed"];
 const TASK_RULE_DEFAULT_STATUSES = ["Open", "In Progress"];
 
 const TASK_RULE_PRESET_TASK_NAMES = [
@@ -362,6 +363,7 @@ async function bootstrapApp() {
   });
   els.filterStudy.addEventListener("change", renderTable);
   els.filterStatus.addEventListener("change", renderTable);
+  document.addEventListener("click", closeAllStatusDropdowns);
   els.dashboardFilterCards.forEach((card) => {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
@@ -3463,11 +3465,18 @@ const TaskStore = {
     const idx = tasks.findIndex((t) => t.id === id);
     if (idx === -1) return false;
 
-    tasks[idx] = {
+    const merged = {
       ...tasks[idx],
       ...updates,
+      id,
       updatedAt: new Date().toISOString(),
     };
+
+    if (updates.status && updates.status !== "Completed") {
+      delete merged.completedAt;
+    }
+
+    tasks[idx] = normalizeTask(merged);
     this.persist();
     return true;
   },
@@ -3569,6 +3578,10 @@ function normalizeTask(item) {
 
   if (item.dueDateManuallyEdited) {
     normalized.dueDateManuallyEdited = true;
+  }
+
+  if (item.status === "Completed" && item.completedAt) {
+    normalized.completedAt = item.completedAt;
   }
 
   const calendarSync = normalizeCalendarSync(item.calendarSync, item);
@@ -4582,7 +4595,6 @@ function handleAddTask(e) {
   const standardSite = getStandardSiteName(site);
   const taskName = form.get("task").trim();
   const dueDate = form.get("dueDate");
-  const status = form.get("status") || DEFAULT_STATUS;
   const priority = form.get("priority");
 
   const newTask = {
@@ -4591,7 +4603,7 @@ function handleAddTask(e) {
     site: standardSite,
     task: taskName,
     dueDate,
-    status,
+    status: DEFAULT_STATUS,
     priority,
     createdAt: new Date().toISOString(),
   };
@@ -4602,23 +4614,10 @@ function handleAddTask(e) {
     CalendarSyncManager.onTaskCreated(newTask.id);
   }
 
-  let workflowCount = 0;
-  if (status === "Completed") {
-    workflowCount = runWorkflowAutomation(tasks.find((t) => t.id === newTask.id) || newTask).length;
-  }
-
-  if (workflowCount > 0 && window.CalendarSyncManager) {
-    getSubtasks(newTask.id).forEach((subtask) => CalendarSyncManager.onTaskCreated(subtask.id));
-  }
-
   els.taskForm.reset();
   refreshTaskStudySiteSelects();
   updateSiteInfoDisplays();
   renderAll();
-
-  if (workflowCount > 0) {
-    alert(`${workflowCount}개의 후속 업무가 자동 생성되었습니다.`);
-  }
 }
 
 function handleEditTask(e) {
@@ -4647,6 +4646,10 @@ function handleEditTask(e) {
     status: newStatus,
     priority: document.getElementById("editPriority").value,
   };
+
+  if (newStatus === "Completed") {
+    updatePayload.completedAt = existing.completedAt || new Date().toISOString();
+  }
 
   if (existing.parentTaskId && dueDateChanged) {
     updatePayload.dueDateManuallyEdited = true;
@@ -4770,11 +4773,100 @@ function closeModal() {
 function statusClass(status) {
   const map = {
     Open: "open",
+    "In Progress": "in-progress",
     "On Hold": "on-hold",
     Completed: "completed",
     Cancelled: "cancelled",
   };
   return map[status] || "open";
+}
+
+function renderInlineStatusDropdown(task) {
+  const currentClass = statusClass(task.status);
+  const options = INLINE_STATUS_OPTIONS.map(
+    (status) => `
+      <button type="button" class="status-dropdown__option${status === task.status ? " status-dropdown__option--active" : ""}" data-status-option data-task-id="${escapeAttr(task.id)}" data-status="${escapeAttr(status)}" role="option" aria-selected="${status === task.status}">
+        ${escapeHtml(status)}
+      </button>
+    `
+  ).join("");
+
+  return `
+    <div class="status-dropdown" data-status-dropdown="${escapeAttr(task.id)}">
+      <button type="button" class="status-badge status-badge--${currentClass} status-dropdown__trigger" data-status-trigger="${escapeAttr(task.id)}" aria-haspopup="listbox" aria-expanded="false">
+        ${escapeHtml(task.status)} <span class="status-dropdown__caret" aria-hidden="true">▼</span>
+      </button>
+      <div class="status-dropdown__menu" role="listbox" hidden>
+        ${options}
+      </div>
+    </div>
+  `;
+}
+
+function closeAllStatusDropdowns() {
+  document.querySelectorAll(".status-dropdown__menu").forEach((menu) => {
+    menu.hidden = true;
+  });
+  document.querySelectorAll("[data-status-trigger]").forEach((btn) => {
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindStatusDropdowns() {
+  els.taskTableBody.querySelectorAll("[data-status-trigger]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = btn.closest(".status-dropdown")?.querySelector(".status-dropdown__menu");
+      if (!menu) return;
+
+      const willOpen = menu.hidden;
+      closeAllStatusDropdowns();
+      if (willOpen) {
+        menu.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+
+  els.taskTableBody.querySelectorAll("[data-status-option]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyTaskStatusChange(btn.dataset.taskId, btn.dataset.status);
+      closeAllStatusDropdowns();
+    });
+  });
+}
+
+function applyTaskStatusChange(taskId, newStatus) {
+  const existing = tasks.find((task) => task.id === taskId);
+  if (!existing || existing.status === newStatus) return;
+
+  const wasCompleted = existing.status === "Completed";
+  const updatePayload = { status: newStatus };
+
+  if (newStatus === "Completed") {
+    updatePayload.completedAt = existing.completedAt || new Date().toISOString();
+  }
+
+  if (!TaskStore.update(taskId, updatePayload)) return;
+
+  let workflowCount = 0;
+  if (!wasCompleted && newStatus === "Completed") {
+    workflowCount = runWorkflowAutomation(tasks.find((task) => task.id === taskId)).length;
+  }
+
+  renderAll();
+
+  if (window.CalendarSyncManager) {
+    CalendarSyncManager.onTaskUpdated(taskId);
+    if (workflowCount > 0) {
+      getSubtasks(taskId).forEach((subtask) => CalendarSyncManager.onTaskCreated(subtask.id));
+    }
+  }
+
+  if (workflowCount > 0) {
+    showToast(`${workflowCount}개의 후속 업무가 자동 생성되었습니다.`);
+  }
 }
 
 function priorityClass(priority) {
@@ -5075,6 +5167,7 @@ function renderTable() {
   els.taskTableBody.querySelectorAll("[data-delete]").forEach((btn) => {
     btn.addEventListener("click", () => deleteTask(btn.dataset.delete));
   });
+  bindStatusDropdowns();
 }
 
 function renderTableRow({ task, isSubtask, isLastSubtask }) {
@@ -5108,7 +5201,7 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
       </td>
       <td><span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span></td>
       <td><span class="${dueClass}">${escapeHtml(dueLabel)}</span></td>
-      <td><span class="status-badge status-badge--${statusClass(task.status)}">${escapeHtml(task.status)}</span></td>
+      <td class="status-cell">${renderInlineStatusDropdown(task)}</td>
       <td class="actions-cell">
         <button type="button" class="btn btn--calendar" data-google-calendar="${task.id}">📅 Google Calendar 추가</button>
         <button type="button" class="btn btn--edit" data-edit="${task.id}">수정</button>

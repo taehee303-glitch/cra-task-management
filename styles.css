@@ -1612,9 +1612,83 @@ select:disabled {
   color: #b45309;
 }
 
+.status-badge--in-progress {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
 .status-badge--cancelled {
   background: #f1f5f9;
   color: #b91c1c;
+}
+
+.status-cell {
+  position: relative;
+  min-width: calc(108px * var(--ui-scale));
+}
+
+.status-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.status-dropdown__trigger {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+
+.status-dropdown__trigger:hover {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+.status-dropdown__caret {
+  font-size: 0.62rem;
+  opacity: 0.75;
+  margin-left: calc(2px * var(--ui-scale));
+}
+
+.status-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: calc(120px * var(--ui-scale));
+  padding: calc(4px * var(--ui-scale));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--ui-scale));
+  box-shadow: var(--shadow);
+}
+
+.status-dropdown__menu[hidden] {
+  display: none;
+}
+
+.status-dropdown__option {
+  display: block;
+  width: 100%;
+  padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  border: none;
+  border-radius: calc(6px * var(--ui-scale));
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.status-dropdown__option:hover {
+  background: #f1f5f9;
+}
+
+.status-dropdown__option--active {
+  background: #eff6ff;
+  color: var(--primary);
 }
 
 /* Priority badges */
