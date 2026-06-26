@@ -4458,9 +4458,26 @@ function showFileProtocolBannerIfNeeded() {
 }
 
 const MOBILE_HOST_IP_KEY = "cra-mobile-host-ip";
+const DEV_MOBILE_LINK_FLAG = "cra-dev-show-mobile-link";
 
 function isLocalDevHost(hostname = window.location.hostname) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+function isDevMobileLinkEnabled() {
+  if (!isLocalDevHost()) return false;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("devMobile") === "1") {
+    localStorage.setItem(DEV_MOBILE_LINK_FLAG, "1");
+    return true;
+  }
+  if (params.get("devMobile") === "0") {
+    localStorage.removeItem(DEV_MOBILE_LINK_FLAG);
+    return false;
+  }
+
+  return localStorage.getItem(DEV_MOBILE_LINK_FLAG) === "1";
 }
 
 function isLikelyMobileDevice() {
@@ -4488,28 +4505,18 @@ async function fetchMobileHostFromServer() {
   }
 }
 
-function isDeployedPublicSite() {
-  return window.location.protocol === "https:" && !isLocalDevHost();
-}
-
-function renderMobileAccessBanner(url, { deployed = false } = {}) {
+function renderMobileAccessBanner(url) {
   const banner = document.getElementById("mobileAccessBanner");
   const link = document.getElementById("mobileAccessLink");
   const qr = document.getElementById("mobileAccessQr");
   const setup = document.getElementById("mobileAccessSetup");
-  const hint = banner?.querySelector(".mobile-access-banner__hint");
   if (!banner || !link) return;
 
   link.href = url;
   link.textContent = url;
   banner.hidden = false;
+  banner.setAttribute("aria-hidden", "false");
   if (setup) setup.hidden = true;
-
-  if (hint) {
-    hint.innerHTML = deployed
-      ? "이 링크를 휴대폰에 저장·공유하면 <strong>Wi-Fi 없이 어디서든</strong> 접속할 수 있습니다. (홈 화면 추가 가능)"
-      : 'PC와 휴대폰이 <strong>같은 Wi-Fi</strong>일 때 아래 링크를 휴대폰에서 열거나 QR을 스캔하세요. (<code>127.0.0.1</code>은 휴대폰에서 사용할 수 없습니다.)';
-  }
 
   if (qr) {
     qr.hidden = false;
@@ -4519,7 +4526,8 @@ function renderMobileAccessBanner(url, { deployed = false } = {}) {
 
 async function initMobileAccessBanner() {
   const banner = document.getElementById("mobileAccessBanner");
-  if (!banner || isLikelyMobileDevice()) return;
+  if (!banner) return;
+  if (!isDevMobileLinkEnabled() || isLikelyMobileDevice()) return;
   if (window.location.protocol !== "http:" && window.location.protocol !== "https:") return;
 
   const copyBtn = document.getElementById("copyMobileAccessLinkBtn");
@@ -4544,18 +4552,8 @@ async function initMobileAccessBanner() {
       return;
     }
     localStorage.setItem(MOBILE_HOST_IP_KEY, ip);
-    renderMobileAccessBanner(buildMobileAccessUrl(ip), { deployed: false });
+    renderMobileAccessBanner(buildMobileAccessUrl(ip));
   });
-
-  if (isDeployedPublicSite()) {
-    renderMobileAccessBanner(window.location.href.split("#")[0].split("?")[0], { deployed: true });
-    return;
-  }
-
-  if (!isLocalDevHost()) {
-    renderMobileAccessBanner(window.location.href.split("#")[0].split("?")[0]);
-    return;
-  }
 
   const hostFromFile = await fetchMobileHostFromServer();
   const hostFromStorage = localStorage.getItem(MOBILE_HOST_IP_KEY) || "";
@@ -4563,11 +4561,12 @@ async function initMobileAccessBanner() {
 
   if (hostIp) {
     if (hostFromFile) localStorage.setItem(MOBILE_HOST_IP_KEY, hostFromFile);
-    renderMobileAccessBanner(buildMobileAccessUrl(hostIp), { deployed: false });
+    renderMobileAccessBanner(buildMobileAccessUrl(hostIp));
     return;
   }
 
   banner.hidden = false;
+  banner.setAttribute("aria-hidden", "false");
   const setup = document.getElementById("mobileAccessSetup");
   if (setup) setup.hidden = false;
   if (ipInput && hostFromStorage) ipInput.value = hostFromStorage;

@@ -20,7 +20,7 @@ cd C:\Users\taehe\cra-task-manager
 ```
 
 PC 브라우저: `http://127.0.0.1:5500/`  
-같은 Wi-Fi 휴대폰: PC 화면 상단 **「📱 휴대폰에서 열기」** 링크 사용
+로컬 LAN 테스트(개발용): `http://127.0.0.1:5500/?devMobile=1` → 휴대폰 접속 링크 표시
 
 ---
 
