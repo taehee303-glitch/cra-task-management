@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="description" content="Clinical Research Associate Task Manager" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CRA 업무" />
+  <title>CRA 업무 관리</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="file-protocol-banner" id="fileProtocolBanner" hidden>
+    <p>
+      <strong>Google Calendar 연동을 사용하려면 localhost로 실행해야 합니다.</strong>
+      index.html 파일을 직접 열면(file://) Google OAuth가 차단됩니다.
+    </p>
+    <p class="file-protocol-banner__steps">
+      Cursor/VS Code → <code>index.html</code> 우클릭 → <strong>Open with Live Server</strong>
+      → 브라우저 주소가 <code>http://127.0.0.1:5500</code> 인지 확인하세요.
+    </p>
+  </div>
+  <div class="mobile-access-banner" id="mobileAccessBanner" hidden>
+    <div class="mobile-access-banner__inner">
+      <div class="mobile-access-banner__text">
+        <strong>📱 휴대폰에서 열기</strong>
+        <p class="mobile-access-banner__hint">PC와 휴대폰이 <strong>같은 Wi-Fi</strong>일 때 아래 링크를 휴대폰에서 열거나 QR을 스캔하세요. (<code>127.0.0.1</code>은 휴대폰에서 사용할 수 없습니다.)</p>
+        <div class="mobile-access-banner__link-row">
+          <a id="mobileAccessLink" class="mobile-access-banner__link" href="#" target="_blank" rel="noopener"></a>
+          <button type="button" class="btn btn--ghost btn--sm" id="copyMobileAccessLinkBtn">링크 복사</button>
+        </div>
+        <div class="mobile-access-banner__setup" id="mobileAccessSetup" hidden>
+          <label for="mobileHostIpInput">PC IP 주소 (예: 192.168.0.10)</label>
+          <div class="mobile-access-banner__setup-row">
+            <input type="text" id="mobileHostIpInput" inputmode="decimal" placeholder="192.168.x.x" />
+            <button type="button" class="btn btn--primary btn--sm" id="saveMobileHostIpBtn">링크 만들기</button>
+          </div>
+          <p class="form-hint">PC에서 <code>ipconfig</code> → IPv4 주소 확인. <code>start-server.ps1</code> 실행 시 자동 표시됩니다.</p>
+        </div>
+      </div>
+      <img id="mobileAccessQr" class="mobile-access-banner__qr" alt="휴대폰 접속 QR 코드" width="120" height="120" hidden />
+    </div>
+  </div>
+  <div class="app">
+    <header class="header">
+      <div class="header-inner">
+        <div class="brand">
+          <span class="brand-icon">📋</span>
+          <div>
+            <h1>CRA 업무 관리</h1>
+            <p class="subtitle">Clinical Research Associate Task Manager</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="header-date" id="todayLabel"></div>
+          <button type="button" class="header-settings-btn" id="openSettingsBtn" title="설정">⚙️ 설정</button>
+        </div>
+      </div>
+      <nav class="app-nav">
+        <button type="button" class="app-nav__btn app-nav__btn--active" data-view="tasks">업무 관리</button>
+        <button type="button" class="app-nav__btn" data-view="study-master">Study Master</button>
+        <button type="button" class="app-nav__btn" data-view="system-master">System Master</button>
+        <button type="button" class="app-nav__btn" data-view="site-master">Site Master</button>
+      </nav>
+    </header>
+
+    <main class="main">
+      <!-- Tasks View -->
+      <div id="viewTasks" class="view-panel">
+        <section class="dashboard">
+          <h2 class="section-title">대시보드</h2>
+
+          <section class="attention-panel">
+            <div class="attention-panel__header">
+              <h3 class="attention-panel__title">오늘 주의가 필요한 업무</h3>
+              <span class="attention-panel__reminder-badge" id="reminderStatusBadge">Reminder ON</span>
+            </div>
+            <div class="attention-grid">
+              <div class="dash-card dash-card--attention-today">
+                <div class="dash-card-header">
+                  <span class="dash-icon">📅</span>
+                  <h3>오늘 마감 업무</h3>
+                  <span class="badge badge--primary" id="attentionTodayCount">0</span>
+                </div>
+                <div class="dash-list" id="attentionTodayList">
+                  <p class="empty-msg">오늘 마감 업무가 없습니다.</p>
+                </div>
+              </div>
+              <div class="dash-card dash-card--attention-overdue">
+                <div class="dash-card-header">
+                  <span class="dash-icon">⚠️</span>
+                  <h3>지연된 업무</h3>
+                  <span class="badge badge--danger" id="attentionOverdueCount">0</span>
+                </div>
+                <div class="dash-list" id="attentionOverdueList">
+                  <p class="empty-msg">지연된 업무가 없습니다.</p>
+                </div>
+              </div>
+              <div class="dash-card dash-card--attention-d1">
+                <div class="dash-card-header">
+                  <span class="dash-icon">🔔</span>
+                  <h3>D-1 업무</h3>
+                  <span class="badge badge--warning" id="attentionD1Count">0</span>
+                </div>
+                <div class="dash-list" id="attentionD1List">
+                  <p class="empty-msg">D-1 업무가 없습니다.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="stats-grid">
+            <button type="button" class="stat-card stat-card--total stat-card--filter" data-dashboard-filter="all" aria-pressed="false">
+              <div class="stat-card__icon">📊</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">전체 업무</p>
+                <p class="stat-card__value" id="statTotal">0</p>
+              </div>
+            </button>
+            <button type="button" class="stat-card stat-card--completed stat-card--filter" data-dashboard-filter="completed" aria-pressed="false">
+              <div class="stat-card__icon">✅</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">완료된 업무</p>
+                <p class="stat-card__value" id="statCompleted">0</p>
+              </div>
+            </button>
+            <button type="button" class="stat-card stat-card--overdue stat-card--filter" data-dashboard-filter="overdue" aria-pressed="false">
+              <div class="stat-card__icon">⚠️</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">지연 업무</p>
+                <p class="stat-card__value" id="statOverdue">0</p>
+              </div>
+            </button>
+            <button type="button" class="stat-card stat-card--week stat-card--filter" data-dashboard-filter="week" aria-pressed="false">
+              <div class="stat-card__icon">📆</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">이번 주 마감</p>
+                <p class="stat-card__value" id="statWeekDue">0</p>
+              </div>
+            </button>
+          </div>
+
+          <div class="progress-card">
+            <div class="progress-card__header">
+              <div>
+                <h3 class="progress-card__title">업무 완료율</h3>
+                <p class="progress-card__subtitle" id="progressSubtitle">0 / 0 완료</p>
+              </div>
+              <span class="progress-card__percent" id="progressPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-bar__fill" id="progressFill" style="width: 0%"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2 class="section-title">업무 등록</h2>
+          <form id="taskForm" class="task-form">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="study">Study</label>
+                <select id="study" name="study" required>
+                  <option value="">Study 선택</option>
+                </select>
+                <p class="form-hint">새로운 Study는 Study Master에서, 새로운 Site는 Site Master에서 관리하세요.</p>
+              </div>
+              <div class="form-group">
+                <label for="site">Site</label>
+                <select id="site" name="site" required disabled>
+                  <option value="">Site 선택</option>
+                </select>
+                <p class="form-hint" id="siteMasterHint" hidden>연결된 Site가 없습니다. Study Master에서 Site를 연결하세요.</p>
+              </div>
+              <div class="form-group form-group--wide task-site-info-toggle-wrap">
+                <button type="button" class="btn btn--ghost site-info-toggle" id="siteInfoToggleBtn" hidden aria-expanded="false">
+                  📋 Site 정보 보기
+                </button>
+              </div>
+              <div id="siteInfoPanel" class="site-info-panel form-group--wide" hidden>
+                <h4 class="site-info-panel__title">Site / IRB 정보</h4>
+                <dl class="site-info-panel__grid" id="siteInfoContent"></dl>
+              </div>
+              <div class="form-group form-group--wide">
+                <label for="task">Task</label>
+                <input type="text" id="task" name="task" placeholder="예: MV - Site 101 방문, SDV, EDC 쿼리 확인" required />
+              </div>
+              <div class="form-group">
+                <label for="dueDate">Due Date</label>
+                <input type="date" id="dueDate" name="dueDate" required />
+              </div>
+              <div class="form-group">
+                <label for="status">Status</label>
+                <select id="status" name="status" required>
+                  <option value="Open" selected>Open</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="On Hold">On Hold</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="priority">Priority</label>
+                <select id="priority" name="priority" required>
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn--primary">업무 추가</button>
+              <button type="button" class="btn btn--ghost" id="resetFormBtn">초기화</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="list-section" id="taskListSection">
+          <div class="list-header">
+            <h2 class="section-title">전체 업무 목록</h2>
+            <div class="list-header__actions">
+              <div class="csv-actions">
+                <button type="button" class="btn btn--ghost" id="exportCsvBtn">CSV 내보내기</button>
+                <button type="button" class="btn btn--ghost" id="importCsvBtn">CSV 가져오기</button>
+                <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
+              </div>
+              <div class="list-filters">
+                <select id="filterStudy">
+                  <option value="all">전체 Study</option>
+                </select>
+                <select id="filterStatus">
+                  <option value="all">전체 Status</option>
+                  <option value="Open">Open</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="On Hold">On Hold</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <input type="text" id="searchInput" placeholder="Study, Site, Task 검색..." />
+              </div>
+            </div>
+          </div>
+          <div id="dashboardFilterBar" class="dashboard-filter-bar" hidden>
+            <div class="dashboard-filter-bar__content">
+              <span class="dashboard-filter-bar__label">현재 필터:</span>
+              <span class="dashboard-filter-bar__chip" id="dashboardFilterChip">
+                <span id="dashboardFilterLabel">지연 업무</span>
+                <button type="button" class="dashboard-filter-bar__clear" id="clearDashboardFilterBtn" aria-label="필터 해제">✕</button>
+              </span>
+              <span class="dashboard-filter-bar__count" id="dashboardFilterCount"></span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th>Study</th>
+                  <th>Site</th>
+                  <th>Task</th>
+                  <th>Priority</th>
+                  <th>Due Date</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="taskTableBody">
+                <tr class="empty-row">
+                  <td colspan="7">등록된 업무가 없습니다. 위 폼에서 업무를 추가하세요.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Study Master View -->
+      <div id="viewStudyMaster" class="view-panel" hidden>
+        <section class="study-master-section">
+          <h2 class="section-title">Study Master</h2>
+          <div class="study-master">
+            <aside class="study-master__sidebar">
+              <div class="study-master__sidebar-header">
+                <h3>Study 목록</h3>
+                <button type="button" class="btn btn--primary btn--sm" id="newStudyBtn">+ Study</button>
+              </div>
+              <ul id="studyMasterList" class="study-master-list">
+                <li class="study-master-list__empty">등록된 Study가 없습니다.</li>
+              </ul>
+            </aside>
+
+            <div class="study-master__content">
+              <div id="studyMasterEmpty" class="study-master-empty">
+                <p>Study를 선택하거나 새 Study를 등록해주세요.</p>
+              </div>
+
+              <form id="studyMasterForm" class="task-form" hidden>
+                <input type="hidden" id="studyMasterId" />
+                <div class="site-master-tabs study-master-tabs" role="tablist">
+                  <button type="button" class="site-master-tabs__btn site-master-tabs__btn--active" data-study-tab="basic" role="tab">기본정보</button>
+                  <button type="button" class="site-master-tabs__btn" data-study-tab="sites" role="tab">연결 Site</button>
+                  <button type="button" class="site-master-tabs__btn" data-study-tab="systems" role="tab">System</button>
+                  <button type="button" class="site-master-tabs__btn" data-study-tab="task-rules" role="tab">Task Rule</button>
+                </div>
+
+                <div class="site-master-tab-panel" data-study-tab-panel="basic">
+                <div class="form-grid">
+                  <div class="form-group form-group--wide">
+                    <label for="studyName">Study Name</label>
+                    <input type="text" id="studyName" required placeholder="예: ABC-301 Phase III Oncology Study" />
+                  </div>
+                  <div class="form-group">
+                    <label for="protocolNumber">Protocol Number</label>
+                    <input type="text" id="protocolNumber" required placeholder="예: ABC-301" />
+                  </div>
+                  <div class="form-group">
+                    <label for="sponsor">Sponsor</label>
+                    <input type="text" id="sponsor" placeholder="예: Example Pharma" />
+                  </div>
+                  <div class="form-group">
+                    <label for="therapeuticArea">Therapeutic Area</label>
+                    <input type="text" id="therapeuticArea" placeholder="예: Oncology" />
+                  </div>
+                  <div class="form-group">
+                    <label for="pmName">PM</label>
+                    <input type="text" id="pmName" />
+                  </div>
+                  <div class="form-group">
+                    <label for="ctaName">CTA</label>
+                    <input type="text" id="ctaName" />
+                  </div>
+                  <div class="form-group form-group--wide">
+                    <label for="studyNotes">Notes</label>
+                    <textarea id="studyNotes" rows="3" placeholder="Study 관련 메모"></textarea>
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn--primary">Study 저장</button>
+                  <button type="button" class="btn btn--danger" id="deleteStudyBtn">Study 삭제</button>
+                </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-study-tab-panel="sites" hidden>
+              <div id="linkedSitesPanel" class="sites-panel sites-panel--embedded">
+                <div class="sites-panel__header">
+                  <h3 class="section-title">연결된 Site</h3>
+                  <button type="button" class="btn btn--primary btn--sm" id="linkSiteBtn">+ Site 연결</button>
+                </div>
+                <div class="table-wrap">
+                  <table class="task-table sites-table">
+                    <thead>
+                      <tr>
+                        <th>Site Number</th>
+                        <th>Standard Site Name</th>
+                        <th>PI Name</th>
+                        <th>CRC Name</th>
+                        <th>Site Contact</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="linkedSitesTableBody">
+                      <tr class="empty-row">
+                        <td colspan="6">연결된 Site가 없습니다. Site Master에서 Site를 등록한 후 연결하세요.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-study-tab-panel="systems" hidden>
+              <div id="studySystemsPanel" class="sites-panel sites-panel--embedded">
+                <div class="sites-panel__header">
+                  <h3 class="section-title">Study Systems &amp; Login Management</h3>
+                  <button type="button" class="btn btn--primary btn--sm" id="newStudySystemBtn">+ System</button>
+                </div>
+                <p id="studySystemsNewStudyHint" class="form-hint" hidden>Study 저장 후 System을 등록할 수 있습니다.</p>
+                <div class="table-wrap">
+                  <table class="task-table systems-table">
+                    <thead>
+                      <tr>
+                        <th>System Type</th>
+                        <th>System Name</th>
+                        <th>Website URL</th>
+                        <th>Login ID</th>
+                        <th>Password</th>
+                        <th>Password Hint</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="studySystemsTableBody">
+                      <tr class="empty-row">
+                        <td colspan="8">등록된 System이 없습니다.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-study-tab-panel="task-rules" hidden>
+              <div id="studyTaskRulesPanel" class="sites-panel sites-panel--embedded">
+                <div class="sites-panel__header">
+                  <h3 class="section-title">Task Rule</h3>
+                  <button type="button" class="btn btn--primary btn--sm" id="newStudyTaskRuleBtn">+ Rule</button>
+                </div>
+                <p id="studyTaskRulesNewStudyHint" class="form-hint" hidden>Study 저장 후 Task Rule을 등록할 수 있습니다.</p>
+                <p id="studyTaskRuleOverrideNotice" class="task-rule-override-notice" hidden></p>
+                <p class="form-hint">MV/SIV/COV 완료 시 자동 생성 업무와 Due Date를 Study별로 설정합니다. 해당 기준 이벤트에 Rule이 없으면 기본 자동 생성 규칙이 적용됩니다.</p>
+                <div class="table-wrap">
+                  <table class="task-table task-rules-table">
+                    <thead>
+                      <tr>
+                        <th>Task Name</th>
+                        <th>Auto Generate</th>
+                        <th>Priority</th>
+                        <th>Default Status</th>
+                        <th>Due Offset</th>
+                        <th>Due Unit</th>
+                        <th>기준 이벤트</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="studyTaskRulesTableBody">
+                      <tr class="empty-row">
+                        <td colspan="8">등록된 Task Rule이 없습니다. 기본 자동 생성 규칙이 사용됩니다.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- System Master View -->
+      <div id="viewSystemMaster" class="view-panel" hidden>
+        <section class="study-master-section">
+          <h2 class="section-title">System Master</h2>
+          <p class="section-desc">CTMS, EDC, IWRS 등 공통 System 정보를 등록하고 여러 Study에서 재사용합니다.</p>
+          <div class="study-master">
+            <aside class="study-master__sidebar">
+              <div class="study-master__sidebar-header">
+                <h3>System 목록</h3>
+                <button type="button" class="btn btn--primary btn--sm" id="newSystemMasterBtn">+ System</button>
+              </div>
+              <div class="site-master-search">
+                <input type="text" id="systemMasterSearch" placeholder="System Name / Type 검색..." />
+              </div>
+              <ul id="systemMasterList" class="study-master-list">
+                <li class="study-master-list__empty">등록된 System이 없습니다.</li>
+              </ul>
+            </aside>
+
+            <div class="study-master__content">
+              <div id="systemMasterEmpty" class="study-master-empty">
+                <p>System을 선택하거나 새 System을 등록해주세요.</p>
+              </div>
+
+              <form id="systemMasterForm" class="task-form" hidden>
+                <input type="hidden" id="systemMasterEntryId" />
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="systemMasterType">System Type</label>
+                    <select id="systemMasterType" required>
+                      <option value="CTMS">CTMS</option>
+                      <option value="EDC">EDC</option>
+                      <option value="IWRS/IRT">IWRS/IRT</option>
+                      <option value="eTMF">eTMF</option>
+                      <option value="Safety Portal">Safety Portal</option>
+                      <option value="ePRO/eCOA">ePRO/eCOA</option>
+                      <option value="Training Portal">Training Portal</option>
+                      <option value="Vendor Portal">Vendor Portal</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="systemMasterName">System Name</label>
+                    <input type="text" id="systemMasterName" required placeholder="예: Medidata Rave" />
+                  </div>
+                  <div class="form-group form-group--wide">
+                    <label for="systemMasterWebsiteUrl">Website URL</label>
+                    <input type="url" id="systemMasterWebsiteUrl" placeholder="https://portal.example.com" />
+                  </div>
+                </div>
+                <p class="form-hint" id="systemMasterUsageInfo"></p>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn--primary">System 저장</button>
+                  <button type="button" class="btn btn--danger" id="deleteSystemMasterBtn">System 삭제</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Site Master View -->
+      <div id="viewSiteMaster" class="view-panel" hidden>
+        <section class="study-master-section">
+          <h2 class="section-title">Site Master</h2>
+          <p class="section-desc">Site 정보, IRB Portal, 병원명 별칭(Alias)을 통합 관리합니다.</p>
+          <div class="study-master">
+            <aside class="study-master__sidebar">
+              <div class="study-master__sidebar-header">
+                <h3>표준 Site 목록</h3>
+                <button type="button" class="btn btn--primary btn--sm" id="newSiteMasterBtn">+ Site</button>
+              </div>
+              <div class="site-master-search">
+                <input type="text" id="siteMasterSearch" placeholder="Standard Name / Alias 검색..." />
+              </div>
+              <ul id="siteMasterList" class="study-master-list">
+                <li class="study-master-list__empty">등록된 Site가 없습니다.</li>
+              </ul>
+            </aside>
+
+            <div class="study-master__content">
+              <div id="siteMasterEmpty" class="study-master-empty">
+                <p>Site를 선택하거나 새 Site를 등록해주세요.</p>
+              </div>
+
+              <form id="siteMasterForm" class="task-form" hidden>
+                <input type="hidden" id="siteMasterEntryId" />
+                <div class="site-master-tabs" role="tablist">
+                  <button type="button" class="site-master-tabs__btn site-master-tabs__btn--active" data-site-tab="basic" role="tab">기본정보</button>
+                  <button type="button" class="site-master-tabs__btn" data-site-tab="contact" role="tab">연락처</button>
+                  <button type="button" class="site-master-tabs__btn" data-site-tab="system" role="tab">System</button>
+                  <button type="button" class="site-master-tabs__btn" data-site-tab="misc" role="tab">기타</button>
+                </div>
+
+                <div class="site-master-tab-panel" data-site-tab-panel="basic">
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="smSiteNumber">Site Number</label>
+                      <input type="text" id="smSiteNumber" required placeholder="예: Site 101" />
+                    </div>
+                    <div class="form-group form-group--wide">
+                      <label for="standardSiteName">Standard Site Name (공식 병원명)</label>
+                      <input type="text" id="standardSiteName" required placeholder="예: 한림성심대학교병원" />
+                    </div>
+                    <div class="form-group form-group--wide">
+                      <label for="aliasNames">Alias Names (별칭 목록)</label>
+                      <textarea id="aliasNames" rows="4" placeholder="한림성심, 한림 성심, 한림성심대병원 (쉼표 또는 줄바꿈으로 구분)"></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-site-tab-panel="contact" hidden>
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="smPiName">PI Name</label>
+                      <input type="text" id="smPiName" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smPiPhoneNumber">PI Phone Number</label>
+                      <input type="tel" id="smPiPhoneNumber" placeholder="예: 02-1234-5678" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smCrcName">CRC Name</label>
+                      <input type="text" id="smCrcName" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smCrcPhoneNumber">CRC Phone Number</label>
+                      <input type="tel" id="smCrcPhoneNumber" placeholder="예: 02-2345-6789" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smPharmacyContactName">Pharmacy Contact Name</label>
+                      <input type="text" id="smPharmacyContactName" placeholder="예: 김약사" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smPharmacyPhoneNumber">Pharmacy Phone Number</label>
+                      <input type="tel" id="smPharmacyPhoneNumber" placeholder="예: 02-1234-5678" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smLabContactName">Lab Contact Name</label>
+                      <input type="text" id="smLabContactName" placeholder="예: 이검사" />
+                    </div>
+                    <div class="form-group">
+                      <label for="smLabPhoneNumber">Lab Phone Number</label>
+                      <input type="tel" id="smLabPhoneNumber" placeholder="예: 02-2345-6789" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-site-tab-panel="system" hidden>
+                  <div id="siteSystemsPanel" class="sites-panel sites-panel--embedded">
+                    <div class="sites-panel__header">
+                      <h3 class="section-title">Site Systems &amp; Login Management</h3>
+                      <button type="button" class="btn btn--primary btn--sm" id="newSiteSystemBtn">+ System</button>
+                    </div>
+                    <p id="siteSystemsNewSiteHint" class="form-hint" hidden>Site 저장 후 System을 등록할 수 있습니다.</p>
+                    <div class="table-wrap">
+                      <table class="task-table systems-table">
+                        <thead>
+                          <tr>
+                            <th>System Type</th>
+                            <th>System Name</th>
+                            <th>Website URL</th>
+                            <th>Login ID</th>
+                            <th>Password</th>
+                            <th>Password Hint</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody id="siteSystemsTableBody">
+                          <tr class="empty-row">
+                            <td colspan="8">등록된 System이 없습니다.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-site-tab-panel="misc" hidden>
+                  <div class="form-grid">
+                    <div class="form-group form-group--wide">
+                      <label for="smIpStorageLocation">IP Storage Location</label>
+                      <input type="text" id="smIpStorageLocation" placeholder="예: 약국 IP 보관실 / 3층 CRC" />
+                    </div>
+                    <div class="form-group form-group--wide">
+                      <label for="smSiteNotes">Site Notes</label>
+                      <textarea id="smSiteNotes" rows="4"></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="submit" class="btn btn--primary">Site 저장</button>
+                  <button type="button" class="btn btn--danger" id="deleteSiteMasterBtn">Site 삭제</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Edit Task Modal -->
+  <div class="modal-overlay" id="editModal" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3>업무 수정</h3>
+        <button type="button" class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      <form id="editForm" class="task-form">
+        <input type="hidden" id="editId" />
+        <div id="editSourceVisit" class="edit-source-visit" hidden></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="editStudy">Study</label>
+            <select id="editStudy" required>
+              <option value="">Study 선택</option>
+            </select>
+            <p class="form-hint">새로운 Study는 Study Master에서, 새로운 Site는 Site Master에서 관리하세요.</p>
+          </div>
+          <div class="form-group">
+            <label for="editSite">Site</label>
+            <select id="editSite" required disabled>
+              <option value="">Site 선택</option>
+            </select>
+            <p class="form-hint" id="editSiteMasterHint" hidden>연결된 Site가 없습니다. Study Master에서 Site를 연결하세요.</p>
+          </div>
+          <div class="form-group form-group--wide">
+            <button type="button" class="btn btn--ghost site-info-toggle" id="editSiteInfoToggleBtn" hidden aria-expanded="false">
+              📋 Site 정보 보기
+            </button>
+          </div>
+          <div id="editSiteInfoPanel" class="site-info-panel form-group--wide" hidden>
+            <h4 class="site-info-panel__title">Site / IRB 정보</h4>
+            <dl class="site-info-panel__grid" id="editSiteInfoContent"></dl>
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="editTask">Task</label>
+            <input type="text" id="editTask" required />
+          </div>
+          <div class="form-group">
+            <label for="editDueDate">Due Date</label>
+            <input type="date" id="editDueDate" required />
+          </div>
+          <div class="form-group">
+            <label for="editStatus">Status</label>
+            <select id="editStatus" required>
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="On Hold">On Hold</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="editPriority">Priority</label>
+            <select id="editPriority" required>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">저장</button>
+          <button type="button" class="btn btn--ghost" id="cancelEditBtn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Study Task Rule Modal -->
+  <div class="modal-overlay" id="studyTaskRuleModal" hidden>
+    <div class="modal modal--wide">
+      <div class="modal-header">
+        <h3 id="studyTaskRuleModalTitle">Task Rule 등록</h3>
+        <button type="button" class="modal-close" id="closeStudyTaskRuleModalBtn">&times;</button>
+      </div>
+      <form id="studyTaskRuleForm" class="task-form">
+        <input type="hidden" id="studyTaskRuleId" />
+        <p id="studyTaskRuleModalNotice" class="task-rule-override-notice task-rule-override-notice--modal" hidden></p>
+        <div class="form-grid">
+          <div class="form-group form-group--wide">
+            <label for="studyTaskRuleNameSelect">Task Name</label>
+            <select id="studyTaskRuleNameSelect" required>
+              <option value="">Task 선택...</option>
+            </select>
+            <input type="text" id="studyTaskRuleCustomName" class="task-rule-custom-name" hidden placeholder="Custom Task Name 입력" />
+            <p class="form-hint">목록에서 선택하거나 Custom Task를 직접 추가할 수 있습니다.</p>
+          </div>
+          <div class="form-group">
+            <label for="studyTaskRuleAutoGenerate">Auto Generate</label>
+            <select id="studyTaskRuleAutoGenerate" required>
+              <option value="true">On</option>
+              <option value="false">Off</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="studyTaskRulePriority">Priority</label>
+            <select id="studyTaskRulePriority" required>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="studyTaskRuleDefaultStatus">Default Status</label>
+            <select id="studyTaskRuleDefaultStatus" required>
+              <option value="Open" selected>Open</option>
+              <option value="In Progress">In Progress</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="studyTaskRuleDueOffset">Due Offset</label>
+            <input type="number" id="studyTaskRuleDueOffset" min="0" step="1" value="0" required />
+          </div>
+          <div class="form-group">
+            <label for="studyTaskRuleDueUnit">Due 기준 단위</label>
+            <select id="studyTaskRuleDueUnit" required>
+              <option value="calendar">Calendar Day</option>
+              <option value="business">Business Day</option>
+            </select>
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="studyTaskRuleBaseEvent">기준 이벤트</label>
+            <select id="studyTaskRuleBaseEvent" required>
+              <option value="mv">MV 완료일</option>
+              <option value="siv">SIV 완료일</option>
+              <option value="cov">COV 완료일</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">저장</button>
+          <button type="button" class="btn btn--ghost" id="cancelStudyTaskRuleBtn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Study System Modal -->
+  <div class="modal-overlay" id="studySystemModal" hidden>
+    <div class="modal modal--wide">
+      <div class="modal-header">
+        <h3 id="studySystemModalTitle">System 등록</h3>
+        <button type="button" class="modal-close" id="closeStudySystemModalBtn">&times;</button>
+      </div>
+      <form id="studySystemForm" class="task-form">
+        <input type="hidden" id="studySystemId" />
+        <div class="form-grid">
+          <div class="form-group form-group--wide">
+            <label for="studySystemMasterSelect">System 선택</label>
+            <select id="studySystemMasterSelect" required>
+              <option value="">System 선택...</option>
+            </select>
+            <p class="form-hint" id="studySystemMasterHint">새로운 System은 System Master에서 등록해주세요.</p>
+          </div>
+          <div class="form-group">
+            <label for="studySystemLoginId">Login ID</label>
+            <input type="text" id="studySystemLoginId" placeholder="예: cra.user@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="studySystemPassword">Password</label>
+            <input type="password" id="studySystemPassword" autocomplete="new-password" placeholder="비밀번호 입력" />
+            <p id="studySystemPasswordStatus" class="form-hint" hidden>비밀번호가 저장되어 있습니다. 변경 시에만 입력하세요.</p>
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="studySystemPasswordHint">Password Hint</label>
+            <input type="text" id="studySystemPasswordHint" placeholder="예: Corporate SSO" />
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="studySystemNotes">Notes</label>
+            <textarea id="studySystemNotes" rows="3" placeholder="Study별 System 관련 메모"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">저장</button>
+          <button type="button" class="btn btn--ghost" id="cancelStudySystemBtn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Site System Modal -->
+  <div class="modal-overlay" id="siteSystemModal" hidden>
+    <div class="modal modal--wide">
+      <div class="modal-header">
+        <h3 id="siteSystemModalTitle">System 등록</h3>
+        <button type="button" class="modal-close" id="closeSiteSystemModalBtn">&times;</button>
+      </div>
+      <form id="siteSystemForm" class="task-form">
+        <input type="hidden" id="siteSystemId" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="siteSystemType">System Type</label>
+            <select id="siteSystemType" required>
+              <option value="IRB">IRB</option>
+              <option value="EMR">EMR</option>
+              <option value="LIS/Laboratory System">LIS/Laboratory System</option>
+              <option value="Hospital Portal">Hospital Portal</option>
+              <option value="eSource">eSource</option>
+              <option value="PACS">PACS</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="siteSystemName">System Name</label>
+            <input type="text" id="siteSystemName" required placeholder="예: Hospital EMR" />
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="siteSystemWebsiteUrl">Website URL</label>
+            <input type="url" id="siteSystemWebsiteUrl" placeholder="https://portal.example.com" />
+          </div>
+          <div class="form-group">
+            <label for="siteSystemLoginId">Login ID</label>
+            <input type="text" id="siteSystemLoginId" placeholder="예: cra.user@hospital.com" />
+          </div>
+          <div class="form-group">
+            <label for="siteSystemPassword">Password</label>
+            <input type="password" id="siteSystemPassword" autocomplete="new-password" placeholder="비밀번호 입력" />
+            <p id="siteSystemPasswordStatus" class="form-hint" hidden>비밀번호가 저장되어 있습니다. 변경 시에만 입력하세요.</p>
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="siteSystemPasswordHint">Password Hint</label>
+            <input type="text" id="siteSystemPasswordHint" placeholder="예: Hospital SSO" />
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="siteSystemNotes">Notes</label>
+            <textarea id="siteSystemNotes" rows="3" placeholder="System 관련 메모"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">저장</button>
+          <button type="button" class="btn btn--ghost" id="cancelSiteSystemBtn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Link Site Modal -->
+  <div class="modal-overlay" id="linkSiteModal" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Site 연결</h3>
+        <button type="button" class="modal-close" id="closeLinkSiteModalBtn">&times;</button>
+      </div>
+      <form id="linkSiteForm" class="task-form">
+        <div class="form-grid">
+          <div class="form-group form-group--wide">
+            <label for="linkSiteSelect">Site Master에서 선택</label>
+            <select id="linkSiteSelect" required>
+              <option value="">Site 선택</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">연결</button>
+          <button type="button" class="btn btn--ghost" id="cancelLinkSiteBtn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3>설정</h3>
+        <button type="button" class="modal-close" id="closeSettingsModalBtn">&times;</button>
+      </div>
+      <div class="settings-panel">
+        <h4 class="settings-section-title">표시</h4>
+        <div class="settings-item settings-item--stacked">
+          <div class="settings-item__body">
+            <strong class="settings-item__title">UI 크기</strong>
+            <p class="form-hint">글씨, 버튼, 입력창, 테이블 등 앱 UI 크기를 조절합니다.</p>
+          </div>
+          <select id="uiScaleSelect" class="ui-scale-select" aria-label="UI 크기">
+            <option value="xsmall">매우 작게 (80%)</option>
+            <option value="small">작게 (90%)</option>
+            <option value="normal">보통 (100%)</option>
+            <option value="large">크게 (110%)</option>
+            <option value="xlarge">매우 크게 (125%)</option>
+          </select>
+        </div>
+
+        <h4 class="settings-section-title">Google Calendar</h4>
+        <p class="google-account-status google-account-status--disconnected" id="googleAccountStatus">⚪ Google 계정 미연동</p>
+        <div class="settings-google-actions">
+          <button type="button" class="btn btn--primary" id="googleConnectBtn">Google 계정 연동</button>
+          <button type="button" class="btn btn--ghost" id="googleDisconnectBtn">연동 해제</button>
+        </div>
+        <p class="form-hint settings-setup-hint" id="googleSetupHint" hidden></p>
+
+        <h4 class="settings-section-title">Desktop Reminder</h4>
+        <div class="settings-item">
+          <div class="settings-item__body">
+            <strong class="settings-item__title">Desktop Reminder</strong>
+            <p class="form-hint">D-3, D-1, D-0, 지연 업무에 대해 브라우저 데스크탑 알림을 표시합니다.</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="reminderEnabledToggle" />
+            <span class="toggle-switch__slider" aria-hidden="true"></span>
+          </label>
+        </div>
+        <p class="form-hint" id="reminderPermissionStatus"></p>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn--primary" id="saveSettingsBtn">저장</button>
+        <button type="button" class="btn btn--ghost" id="cancelSettingsBtn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="calendar-config.js"></script>
+  <script src="calendar-sync.js"></script>
+  <script src="app.js"></script>
+  <script src="pwa.js"></script>
+</body>
+</html>
