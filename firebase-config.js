@@ -19,5 +19,5 @@ window.FIREBASE_CONFIG = {
   storageBucket: "cra-task-management.firebasestorage.app",
   messagingSenderId: "1022286935221",
   appId: "1:1022286935221:web:28083c98ac7f0075e87afc",
-  googleWebClientId: "",
+  googleWebClientId: "1022286935221-u2jvohi82bb26rctv0hgi4o19hg7cnbi.apps.googleusercontent.com",
 };
