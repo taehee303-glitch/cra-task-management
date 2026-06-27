@@ -375,18 +375,19 @@
         console.warn("Firebase auth persistence unavailable:", err);
       }
 
+      let redirectResult = null;
       try {
-        await state.db.enablePersistence({ synchronizeTabs: true });
-      } catch (err) {
-        console.warn("Firestore offline persistence unavailable:", err);
-      }
-
-      try {
-        const redirectResult = await state.auth.getRedirectResult();
+        redirectResult = await state.auth.getRedirectResult();
         sessionStorage.removeItem(REDIRECT_PENDING_KEY);
 
         if (redirectResult?.error) {
           reportAuthError(formatAuthError(redirectResult.error));
+        } else if (redirectResult?.user) {
+          await handleSignedIn(redirectResult.user);
+        } else if (hasPendingAuthRedirect()) {
+          reportAuthError(
+            "Google 로그인 결과를 불러오지 못했습니다. Chrome에서 사이트 데이터를 삭제한 뒤 다시 시도해 주세요."
+          );
         }
       } catch (err) {
         sessionStorage.removeItem(REDIRECT_PENDING_KEY);
@@ -394,18 +395,33 @@
         reportAuthError(formatAuthError(err));
       }
 
+      try {
+        await state.db.enablePersistence({ synchronizeTabs: true });
+      } catch (err) {
+        console.warn("Firestore offline persistence unavailable:", err);
+      }
+
       state.auth.onAuthStateChanged(async (user) => {
         if (user) {
           sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+          if (state.user?.uid === user.uid && state.ready) return;
           await handleSignedIn(user);
-        } else {
-          handleSignedOut();
+          return;
         }
+
+        if (redirectResult?.user) return;
+        if (hasPendingAuthRedirect()) return;
+        handleSignedOut();
       });
     }
 
     notifyUi();
     return true;
+  }
+
+  function hasPendingAuthRedirect() {
+    const href = window.location.href || "";
+    return href.includes("__/auth/") || Boolean(sessionStorage.getItem(REDIRECT_PENDING_KEY));
   }
 
   function isIosDevice() {
@@ -436,7 +452,8 @@
 
     if (isIosDevice()) return "redirect";
 
-    if (isAndroidDevice()) return "popup-first";
+    // Android Chrome은 redirect 복귀 처리가 안정적 (popup 자격 증명 전달 실패 방지)
+    if (isAndroidDevice()) return "redirect";
 
     return "popup-first";
   }
@@ -447,6 +464,16 @@
 
   async function signInWithRedirectFlow(provider) {
     sessionStorage.setItem(REDIRECT_PENDING_KEY, String(Date.now()));
+
+    if ("serviceWorker" in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      } catch (err) {
+        console.warn("Service Worker unregister before auth redirect failed:", err);
+      }
+    }
+
     await state.auth.signInWithRedirect(provider);
   }
 
@@ -560,5 +587,6 @@
     formatAuthError,
     getMobileLoginHint,
     setAuthErrorCallback,
+    hasPendingAuthRedirect,
   };
 })();

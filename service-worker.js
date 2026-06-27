@@ -1,4 +1,4 @@
-const CACHE_VERSION = "6";
+const CACHE_VERSION = "7";
 const CACHE_NAME = `cra-task-manager-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -20,6 +20,12 @@ function isAppShellRequest(url) {
   if (url.pathname.endsWith("/") || url.pathname.endsWith("/index.html")) return true;
   return /\.(html|js|css|webmanifest)$/i.test(url.pathname);
 }
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
