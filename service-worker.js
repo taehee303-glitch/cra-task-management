@@ -1,4 +1,4 @@
-const CACHE_VERSION = "3";
+const CACHE_VERSION = "4";
 const CACHE_NAME = `cra-task-manager-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -8,8 +8,9 @@ const PRECACHE_URLS = [
   "./app.js",
   "./calendar-config.js",
   "./calendar-sync.js",
-  "./pwa.js",
-  "./manifest.webmanifest",
+  "./firebase-config.js",
+  "./firebase-sync.js",
+  "./pwa.js",  "./manifest.webmanifest",
   "./404.html",
   "./icons/icon.svg",
   "./icons/icon-maskable.svg",

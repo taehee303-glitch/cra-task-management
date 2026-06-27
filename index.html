@@ -59,6 +59,11 @@
           </div>
         </div>
         <div class="header-actions">
+          <div class="cloud-sync" id="cloudSyncPanel">
+            <span class="cloud-sync__status" id="cloudSyncStatus" title="데이터 동기화 상태">로컬 저장</span>
+            <button type="button" class="cloud-sync__btn" id="cloudSignInBtn">Google 로그인</button>
+            <button type="button" class="cloud-sync__btn cloud-sync__btn--out" id="cloudSignOutBtn" hidden>로그아웃</button>
+          </div>
           <div class="header-date" id="todayLabel"></div>
           <button type="button" class="header-settings-btn" id="openSettingsBtn" title="설정">⚙️ 설정</button>
         </div>
@@ -955,6 +960,11 @@
   <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="firebase-sync.js"></script>
   <script src="calendar-config.js"></script>
   <script src="calendar-sync.js"></script>
   <script src="app.js"></script>

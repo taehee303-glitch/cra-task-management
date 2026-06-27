@@ -238,7 +238,176 @@ const els = {
   dashboardFilterChip: document.getElementById("dashboardFilterChip"),
   clearDashboardFilterBtn: document.getElementById("clearDashboardFilterBtn"),
   toastContainer: document.getElementById("toastContainer"),
+  cloudSyncStatus: document.getElementById("cloudSyncStatus"),
+  cloudSignInBtn: document.getElementById("cloudSignInBtn"),
+  cloudSignOutBtn: document.getElementById("cloudSignOutBtn"),
 };
+
+function notifyCloudSync(key) {
+  window.CloudSyncManager?.notifyChange?.(key);
+}
+
+function loadAllFromLocalStorage() {
+  tasks = TaskStore.load();
+  StudyMasterStore.load();
+  SiteMasterStore.load();
+  SystemMasterStore.load();
+}
+
+function refreshAfterCloudSync() {
+  reconcileSiteNamesAfterMasterChange();
+  updateTodayLabel();
+  renderAll();
+  renderStudyMaster();
+  renderSystemMaster();
+  refreshTaskStudySiteSelects();
+}
+
+function registerCloudSyncSources() {
+  if (!window.CloudSyncManager) return;
+
+  CloudSyncManager.registerSources({
+    tasks: {
+      kind: "array",
+      localStorageKey: STORAGE_KEY,
+      getPayload: () => tasks,
+      applyPayload: (items) => {
+        tasks = (Array.isArray(items) ? items : []).filter(isValidTask).map(normalizeTask);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      },
+    },
+    studies: {
+      kind: "array",
+      localStorageKey: STUDY_MASTER_KEY,
+      getPayload: () => StudyMasterStore.studies,
+      applyPayload: (items) => {
+        StudyMasterStore.studies = Array.isArray(items) ? items : [];
+        localStorage.setItem(STUDY_MASTER_KEY, JSON.stringify(StudyMasterStore.studies));
+      },
+    },
+    sites: {
+      kind: "array",
+      localStorageKey: SITE_MASTER_KEY,
+      getPayload: () => SiteMasterStore.sites,
+      applyPayload: (items) => {
+        SiteMasterStore.sites = (Array.isArray(items) ? items : []).map(normalizeSiteMasterRecord);
+        localStorage.setItem(SITE_MASTER_KEY, JSON.stringify(SiteMasterStore.sites));
+      },
+    },
+    systems: {
+      kind: "array",
+      localStorageKey: SYSTEM_MASTER_KEY,
+      getPayload: () => SystemMasterStore.systems,
+      applyPayload: (items) => {
+        SystemMasterStore.systems = Array.isArray(items) ? items : [];
+        localStorage.setItem(SYSTEM_MASTER_KEY, JSON.stringify(SystemMasterStore.systems));
+      },
+    },
+    uiSettings: {
+      kind: "object",
+      localStorageKey: UI_SETTINGS_KEY,
+      getPayload: () => UiSettingsStore.load(),
+      applyPayload: (data) => {
+        const next =
+          data && typeof data === "object"
+            ? data
+            : { size: "normal", taskSiteInfoExpanded: false };
+        localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(next));
+        applyUiScale(UiSettingsStore.getScaleValue());
+      },
+    },
+    reminderSettings: {
+      kind: "object",
+      localStorageKey: REMINDER_SETTINGS_KEY,
+      getPayload: () => ReminderSettingsStore.load(),
+      applyPayload: (data) => {
+        localStorage.setItem(
+          REMINDER_SETTINGS_KEY,
+          JSON.stringify(
+            data && typeof data === "object"
+              ? data
+              : { enabled: true, permissionRequested: false, sentNotifications: {} }
+          )
+        );
+      },
+    },
+  });
+
+  CloudSyncManager.setRefreshCallback(refreshAfterCloudSync);
+}
+
+function initCloudSyncUi() {
+  if (!window.CloudSyncManager) {
+    if (els.cloudSyncPanel) els.cloudSyncPanel.hidden = true;
+    return;
+  }
+
+  let wasSignedIn = CloudSyncManager.isSignedIn();
+
+  const updateCloudSyncUi = ({ configured, signedIn, syncing, user }) => {
+    const statusEl = els.cloudSyncStatus;
+    const signInBtn = els.cloudSignInBtn;
+    const signOutBtn = els.cloudSignOutBtn;
+
+    if (!configured) {
+      statusEl.textContent = "클라우드 미설정";
+      statusEl.className = "cloud-sync__status cloud-sync__status--setup";
+      statusEl.title = "firebase-config.js에 Firebase 설정을 입력하세요";
+      signInBtn.hidden = false;
+      signOutBtn.hidden = true;
+      return;
+    }
+
+    if (signedIn && user) {
+      const name = user.displayName || user.email || "Google 계정";
+      statusEl.textContent = syncing ? "동기화 중…" : `클라우드 · ${name}`;
+      statusEl.className = syncing
+        ? "cloud-sync__status cloud-sync__status--syncing"
+        : "cloud-sync__status cloud-sync__status--online";
+      statusEl.title = "PC와 휴대폰에서 같은 데이터를 사용합니다";
+      signInBtn.hidden = true;
+      signOutBtn.hidden = false;
+    } else {
+      statusEl.textContent = "로컬 저장";
+      statusEl.className = "cloud-sync__status cloud-sync__status--local";
+      statusEl.title = "로그인하면 기기 간 데이터가 동기화됩니다";
+      signInBtn.hidden = false;
+      signOutBtn.hidden = true;
+    }
+
+    if (wasSignedIn && !signedIn) {
+      loadAllFromLocalStorage();
+      refreshAfterCloudSync();
+    }
+    wasSignedIn = signedIn;
+  };
+
+  CloudSyncManager.setUiCallback(updateCloudSyncUi);
+
+  els.cloudSignInBtn?.addEventListener("click", () => {
+    CloudSyncManager.signInWithGoogle().catch((err) => {
+      console.error("Google login failed:", err);
+      if (err?.code !== "auth/popup-closed-by-user") {
+        alert("Google 로그인에 실패했습니다. Firebase Authentication에서 Google 로그인을 활성화했는지 확인해 주세요.");
+      }
+    });
+  });
+
+  els.cloudSignOutBtn?.addEventListener("click", () => {
+    CloudSyncManager.signOut().catch((err) => {
+      console.error("Sign out failed:", err);
+      alert("로그아웃에 실패했습니다.");
+    });
+  });
+
+  updateCloudSyncUi({
+    configured: CloudSyncManager.isConfigured(),
+    signedIn: CloudSyncManager.isSignedIn(),
+    syncing: false,
+    user: null,
+  });
+}
+
 function init() {
   applyUiScale();
   bootstrapApp().catch((err) => {
@@ -248,10 +417,14 @@ function init() {
 }
 
 async function bootstrapApp() {
-  tasks = TaskStore.load();
-  StudyMasterStore.load();
-  SiteMasterStore.load();
-  SystemMasterStore.load();
+  registerCloudSyncSources();
+  initCloudSyncUi();
+  loadAllFromLocalStorage();
+
+  if (window.CloudSyncManager) {
+    await CloudSyncManager.init();
+  }
+
   await seedSiteMasterIfEmpty();
   migrateMasterStructureV2();
   migrateStudySystemsToSystemMaster();
@@ -611,6 +784,7 @@ const SiteMasterStore = {
 
   persist() {
     localStorage.setItem(SITE_MASTER_KEY, JSON.stringify(this.sites));
+    notifyCloudSync("sites");
   },
 
   normalizeKey(name) {
@@ -1045,6 +1219,7 @@ const SystemMasterStore = {
 
   persist() {
     localStorage.setItem(SYSTEM_MASTER_KEY, JSON.stringify(this.systems));
+    notifyCloudSync("systems");
   },
 
   getAll() {
@@ -1134,6 +1309,7 @@ const StudyMasterStore = {
 
   persist() {
     localStorage.setItem(STUDY_MASTER_KEY, JSON.stringify(this.studies));
+    notifyCloudSync("studies");
   },
 
   getAll() {
@@ -3434,6 +3610,7 @@ const TaskStore = {
   save(data) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      notifyCloudSync("tasks");
       return true;
     } catch (err) {
       console.error("Local Storage에 저장하지 못했습니다:", err);
@@ -3760,6 +3937,7 @@ const UiSettingsStore = {
   save(partial) {
     const next = { ...this.load(), ...partial };
     localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(next));
+    notifyCloudSync("uiSettings");
   },
 
   getSize() {
@@ -3810,6 +3988,7 @@ const ReminderSettingsStore = {
 
   save(settings) {
     localStorage.setItem(REMINDER_SETTINGS_KEY, JSON.stringify(settings));
+    notifyCloudSync("reminderSettings");
   },
 
   isEnabled() {
