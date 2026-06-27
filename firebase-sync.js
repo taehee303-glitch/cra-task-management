@@ -368,10 +368,43 @@
           handleSignedOut();
         }
       });
+
+      try {
+        const redirectResult = await state.auth.getRedirectResult();
+        if (redirectResult?.user) {
+          state.user = redirectResult.user;
+        }
+      } catch (err) {
+        console.warn("Firebase redirect sign-in result failed:", err);
+      }
     }
 
     notifyUi();
     return true;
+  }
+
+  function shouldUseRedirectSignIn() {
+    const ua = navigator.userAgent || "";
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+    const isStandalone =
+      window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      window.navigator.standalone === true;
+    return isMobile || isStandalone;
+  }
+
+  function formatAuthError(err) {
+    const code = err?.code || "";
+    const messages = {
+      "auth/popup-blocked":
+        "브라우저가 로그인 팝업을 차단했습니다. 주소창 옆 팝업 허용 후 다시 시도하거나, 페이지가 Google 로그인 화면으로 이동합니다.",
+      "auth/unauthorized-domain":
+        "이 사이트 도메인이 Firebase에 등록되지 않았습니다. Authentication → Authorized domains에 현재 도메인을 추가해 주세요.",
+      "auth/operation-not-allowed":
+        "Firebase Authentication에서 Google 로그인이 활성화되지 않았습니다.",
+      "auth/cancelled-popup-request":
+        "로그인 팝업이 중복 실행되었습니다. 잠시 후 다시 시도해 주세요.",
+    };
+    return messages[code] || err?.message || "Google 로그인에 실패했습니다.";
   }
 
   async function signInWithGoogle() {
@@ -386,9 +419,28 @@
       await init();
     }
 
+    if (!state.auth) {
+      alert("Firebase Auth를 초기화하지 못했습니다. 페이지를 새로고침해 주세요.");
+      return;
+    }
+
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    await state.auth.signInWithPopup(provider);
+
+    if (shouldUseRedirectSignIn()) {
+      await state.auth.signInWithRedirect(provider);
+      return;
+    }
+
+    try {
+      await state.auth.signInWithPopup(provider);
+    } catch (err) {
+      if (err?.code === "auth/popup-blocked" || err?.code === "auth/popup-closed-by-user") {
+        await state.auth.signInWithRedirect(provider);
+        return;
+      }
+      throw err;
+    }
   }
 
   async function signOut() {
@@ -407,5 +459,6 @@
     notifyChange,
     signInWithGoogle,
     signOut,
+    formatAuthError,
   };
 })();

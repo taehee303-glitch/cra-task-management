@@ -385,12 +385,23 @@ function initCloudSyncUi() {
   CloudSyncManager.setUiCallback(updateCloudSyncUi);
 
   els.cloudSignInBtn?.addEventListener("click", () => {
-    CloudSyncManager.signInWithGoogle().catch((err) => {
-      console.error("Google login failed:", err);
-      if (err?.code !== "auth/popup-closed-by-user") {
-        alert("Google 로그인에 실패했습니다. Firebase Authentication에서 Google 로그인을 활성화했는지 확인해 주세요.");
-      }
-    });
+    const btn = els.cloudSignInBtn;
+    const prevLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "로그인 중…";
+
+    CloudSyncManager.signInWithGoogle()
+      .catch((err) => {
+        console.error("Google login failed:", err);
+        if (err?.code !== "auth/popup-closed-by-user") {
+          const message = CloudSyncManager.formatAuthError?.(err) || "Google 로그인에 실패했습니다.";
+          alert(message);
+        }
+      })
+      .finally(() => {
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+      });
   });
 
   els.cloudSignOutBtn?.addEventListener("click", () => {

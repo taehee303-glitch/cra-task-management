@@ -27,7 +27,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p public
-          cp index.html styles.css app.js pwa.js service-worker.js manifest.webmanifest calendar-config.js calendar-sync.js 404.html public/
+          cp index.html styles.css app.js pwa.js service-worker.js manifest.webmanifest calendar-config.js calendar-sync.js firebase-config.js firebase-sync.js 404.html public/
           cp -r icons public/
           cp .nojekyll public/
 
