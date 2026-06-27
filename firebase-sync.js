@@ -4,6 +4,7 @@
  */
 (function () {
   const META_DOC = "meta";
+  const REDIRECT_PENDING_KEY = "cra-firebase-auth-redirect";
   const DEBOUNCE_MS = 400;
   const TAB_ID =
     typeof crypto !== "undefined" && crypto.randomUUID
@@ -22,6 +23,7 @@
     suppressRemoteUntil: 0,
     refreshCallback: null,
     uiCallback: null,
+    authErrorCallback: null,
     ready: false,
     syncing: false,
   };
@@ -79,6 +81,18 @@
 
   function setUiCallback(fn) {
     state.uiCallback = fn;
+  }
+
+  function setAuthErrorCallback(fn) {
+    state.authErrorCallback = fn;
+  }
+
+  function reportAuthError(message) {
+    if (typeof state.authErrorCallback === "function") {
+      state.authErrorCallback(message);
+      return;
+    }
+    alert(message);
   }
 
   function localHasAnyData() {
@@ -356,40 +370,84 @@
       state.db = firebase.firestore();
 
       try {
+        await state.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      } catch (err) {
+        console.warn("Firebase auth persistence unavailable:", err);
+      }
+
+      try {
         await state.db.enablePersistence({ synchronizeTabs: true });
       } catch (err) {
         console.warn("Firestore offline persistence unavailable:", err);
       }
 
+      try {
+        const redirectResult = await state.auth.getRedirectResult();
+        sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+
+        if (redirectResult?.error) {
+          reportAuthError(formatAuthError(redirectResult.error));
+        }
+      } catch (err) {
+        sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+        console.warn("Firebase redirect sign-in result failed:", err);
+        reportAuthError(formatAuthError(err));
+      }
+
       state.auth.onAuthStateChanged(async (user) => {
         if (user) {
+          sessionStorage.removeItem(REDIRECT_PENDING_KEY);
           await handleSignedIn(user);
         } else {
           handleSignedOut();
         }
       });
-
-      try {
-        const redirectResult = await state.auth.getRedirectResult();
-        if (redirectResult?.user) {
-          state.user = redirectResult.user;
-        }
-      } catch (err) {
-        console.warn("Firebase redirect sign-in result failed:", err);
-      }
     }
 
     notifyUi();
     return true;
   }
 
-  function shouldUseRedirectSignIn() {
-    const ua = navigator.userAgent || "";
-    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
-    const isStandalone =
+  function isIosDevice() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  }
+
+  function isAndroidDevice() {
+    return /Android/i.test(navigator.userAgent || "");
+  }
+
+  function isStandaloneApp() {
+    return (
       window.matchMedia?.("(display-mode: standalone)")?.matches ||
-      window.navigator.standalone === true;
-    return isMobile || isStandalone;
+      window.navigator.standalone === true
+    );
+  }
+
+  function isInAppBrowser() {
+    const ua = navigator.userAgent || "";
+    return /(KAKAOTALK|Instagram|FBAN|FBAV|Line\/|NAVER)/i.test(ua);
+  }
+
+  function getSignInStrategy() {
+    if (isInAppBrowser()) return "blocked-in-app";
+
+    // iOS 홈 화면 PWA는 redirect 후 세션이 앱으로 돌아오지 않는 경우가 많음
+    if (isIosDevice() && isStandaloneApp()) return "ios-standalone";
+
+    if (isIosDevice()) return "redirect";
+
+    if (isAndroidDevice()) return "popup-first";
+
+    return "popup-first";
+  }
+
+  function shouldUseRedirectSignIn() {
+    return getSignInStrategy() === "redirect";
+  }
+
+  async function signInWithRedirectFlow(provider) {
+    sessionStorage.setItem(REDIRECT_PENDING_KEY, String(Date.now()));
+    await state.auth.signInWithRedirect(provider);
   }
 
   function formatAuthError(err) {
@@ -403,8 +461,24 @@
         "Firebase Authentication에서 Google 로그인이 활성화되지 않았습니다.",
       "auth/cancelled-popup-request":
         "로그인 팝업이 중복 실행되었습니다. 잠시 후 다시 시도해 주세요.",
+      "auth/network-request-failed":
+        "네트워크 연결을 확인한 뒤 다시 시도해 주세요.",
     };
+    const hostname = window.location.hostname || "현재 사이트";
+    if (code === "auth/unauthorized-domain") {
+      return `${messages[code]}\n\n현재 도메인: ${hostname}`;
+    }
     return messages[code] || err?.message || "Google 로그인에 실패했습니다.";
+  }
+
+  function getMobileLoginHint() {
+    if (isInAppBrowser()) {
+      return "카카오톡/인스타 등 앱 내 브라우저에서는 Google 로그인이 차단될 수 있습니다. Safari 또는 Chrome에서 주소를 직접 열어 주세요.";
+    }
+    if (isIosDevice() && isStandaloneApp()) {
+      return "iPhone 홈 화면 앱에서는 Google 로그인이 제한될 수 있습니다. Safari에서 https://taehee303-glitch.github.io/cra-task-management/ 주소를 열어 로그인해 주세요.";
+    }
+    return "";
   }
 
   async function signInWithGoogle() {
@@ -427,16 +501,40 @@
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
 
-    if (shouldUseRedirectSignIn()) {
-      await state.auth.signInWithRedirect(provider);
+    const strategy = getSignInStrategy();
+    const mobileHint = getMobileLoginHint();
+
+    if (strategy === "blocked-in-app") {
+      reportAuthError(mobileHint);
+      return;
+    }
+
+    if (strategy === "ios-standalone") {
+      try {
+        await state.auth.signInWithPopup(provider);
+        return;
+      } catch (err) {
+        if (err?.code === "auth/popup-closed-by-user") return;
+        reportAuthError(`${formatAuthError(err)}\n\n${mobileHint}`);
+        return;
+      }
+    }
+
+    if (strategy === "redirect") {
+      await signInWithRedirectFlow(provider);
       return;
     }
 
     try {
       await state.auth.signInWithPopup(provider);
     } catch (err) {
-      if (err?.code === "auth/popup-blocked" || err?.code === "auth/popup-closed-by-user") {
-        await state.auth.signInWithRedirect(provider);
+      if (err?.code === "auth/popup-closed-by-user") return;
+      if (err?.code === "auth/popup-blocked") {
+        await signInWithRedirectFlow(provider);
+        return;
+      }
+      if (mobileHint) {
+        reportAuthError(`${formatAuthError(err)}\n\n${mobileHint}`);
         return;
       }
       throw err;
@@ -460,5 +558,7 @@
     signInWithGoogle,
     signOut,
     formatAuthError,
+    getMobileLoginHint,
+    setAuthErrorCallback,
   };
 })();

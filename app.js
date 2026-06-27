@@ -384,6 +384,15 @@ function initCloudSyncUi() {
 
   CloudSyncManager.setUiCallback(updateCloudSyncUi);
 
+  CloudSyncManager.setAuthErrorCallback((message) => {
+    showToast(message.replace(/\n+/g, " "));
+  });
+
+  const mobileHint = CloudSyncManager.getMobileLoginHint?.();
+  if (mobileHint && els.cloudSyncStatus) {
+    els.cloudSyncStatus.title = mobileHint;
+  }
+
   els.cloudSignInBtn?.addEventListener("click", () => {
     const btn = els.cloudSignInBtn;
     const prevLabel = btn.textContent;
