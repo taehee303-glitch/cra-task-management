@@ -9,6 +9,8 @@
  *    - localhost
  *    - taehee303-glitch.github.io
  * 6. Firestore → Rules 에 firestore.rules 내용 배포
+ * 7. Authentication → Sign-in method → Google → Web SDK configuration → Web client ID
+ *    → 아래 googleWebClientId 에 입력 (모바일 로그인 필수)
  */
 window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyCIW2Ux_g3WMoG0oA2iW7zf2jzXPbZDFwA",
@@ -17,4 +19,5 @@ window.FIREBASE_CONFIG = {
   storageBucket: "cra-task-management.firebasestorage.app",
   messagingSenderId: "1022286935221",
   appId: "1:1022286935221:web:28083c98ac7f0075e87afc",
+  googleWebClientId: "",
 };

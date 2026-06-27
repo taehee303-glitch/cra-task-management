@@ -26,6 +26,8 @@
     authErrorCallback: null,
     ready: false,
     syncing: false,
+    gisInitialized: false,
+    gisCredentialHandler: null,
   };
 
   function isConfigured() {
@@ -424,6 +426,126 @@
     return href.includes("__/auth/") || Boolean(sessionStorage.getItem(REDIRECT_PENDING_KEY));
   }
 
+  function getGoogleWebClientId() {
+    return String(window.FIREBASE_CONFIG?.googleWebClientId || "").trim();
+  }
+
+  function isMobileBrowser() {
+    return isAndroidDevice() || isIosDevice();
+  }
+
+  async function waitForGis(maxMs = 8000) {
+    if (window.google?.accounts?.id) return;
+
+    await new Promise((resolve, reject) => {
+      const started = Date.now();
+      const tick = () => {
+        if (window.google?.accounts?.id) {
+          resolve();
+          return;
+        }
+        if (Date.now() - started > maxMs) {
+          reject(new Error("Google 로그인 SDK를 불러오지 못했습니다. 네트워크 연결 후 새로고침해 주세요."));
+          return;
+        }
+        setTimeout(tick, 100);
+      };
+      tick();
+    });
+  }
+
+  function ensureGisInitialized(clientId) {
+    if (state.gisInitialized) return;
+
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response) => {
+        if (typeof state.gisCredentialHandler === "function") {
+          state.gisCredentialHandler(response);
+        }
+      },
+      auto_select: false,
+      cancel_on_tap_outside: false,
+      itp_support: true,
+    });
+
+    state.gisInitialized = true;
+  }
+
+  async function signInWithGoogleGisModal() {
+    const clientId = getGoogleWebClientId();
+    if (!clientId) {
+      throw {
+        code: "auth/missing-client-id",
+        message:
+          "모바일 Google 로그인 설정이 필요합니다.\n\nFirebase Console → Authentication → Google → Web client ID 를 firebase-config.js 의 googleWebClientId 에 입력해 주세요.",
+      };
+    }
+
+    if (!state.auth) {
+      await init();
+    }
+
+    await waitForGis();
+    ensureGisInitialized(clientId);
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const overlay = document.createElement("div");
+      overlay.className = "gis-auth-overlay";
+      overlay.innerHTML = `
+        <div class="gis-auth-panel" role="dialog" aria-modal="true" aria-labelledby="gisAuthTitle">
+          <h3 id="gisAuthTitle" class="gis-auth-panel__title">Google 로그인</h3>
+          <p class="gis-auth-panel__hint">아래 Google 버튼을 눌러 계정을 선택하세요.</p>
+          <div id="gisSignInButtonHost" class="gis-auth-panel__button"></div>
+          <button type="button" class="btn btn--ghost gis-auth-panel__cancel">취소</button>
+        </div>
+      `;
+
+      const finish = (err) => {
+        if (settled) return;
+        settled = true;
+        state.gisCredentialHandler = null;
+        overlay.remove();
+        document.body.style.overflow = "";
+        if (err) reject(err);
+        else resolve();
+      };
+
+      overlay.querySelector(".gis-auth-panel__cancel").addEventListener("click", () => {
+        finish({ code: "auth/popup-closed-by-user" });
+      });
+
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) {
+          finish({ code: "auth/popup-closed-by-user" });
+        }
+      });
+
+      state.gisCredentialHandler = async (response) => {
+        try {
+          const credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
+          await state.auth.signInWithCredential(credential);
+          finish(null);
+        } catch (err) {
+          finish(err);
+        }
+      };
+
+      document.body.appendChild(overlay);
+      document.body.style.overflow = "hidden";
+
+      google.accounts.id.renderButton(overlay.querySelector("#gisSignInButtonHost"), {
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        text: "signin_with",
+        width: 280,
+        locale: "ko",
+      });
+    });
+  }
+
   function isIosDevice() {
     return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
   }
@@ -446,15 +568,7 @@
 
   function getSignInStrategy() {
     if (isInAppBrowser()) return "blocked-in-app";
-
-    // iOS 홈 화면 PWA는 redirect 후 세션이 앱으로 돌아오지 않는 경우가 많음
-    if (isIosDevice() && isStandaloneApp()) return "ios-standalone";
-
-    if (isIosDevice()) return "redirect";
-
-    // Android Chrome은 redirect 복귀 처리가 안정적 (popup 자격 증명 전달 실패 방지)
-    if (isAndroidDevice()) return "redirect";
-
+    if (isMobileBrowser()) return "gis";
     return "popup-first";
   }
 
@@ -490,6 +604,8 @@
         "로그인 팝업이 중복 실행되었습니다. 잠시 후 다시 시도해 주세요.",
       "auth/network-request-failed":
         "네트워크 연결을 확인한 뒤 다시 시도해 주세요.",
+      "auth/missing-client-id":
+        "모바일 Google 로그인 설정이 필요합니다. Firebase Console → Authentication → Google → Web client ID 를 firebase-config.js 의 googleWebClientId 에 입력해 주세요.",
     };
     const hostname = window.location.hostname || "현재 사이트";
     if (code === "auth/unauthorized-domain") {
@@ -536,19 +652,8 @@
       return;
     }
 
-    if (strategy === "ios-standalone") {
-      try {
-        await state.auth.signInWithPopup(provider);
-        return;
-      } catch (err) {
-        if (err?.code === "auth/popup-closed-by-user") return;
-        reportAuthError(`${formatAuthError(err)}\n\n${mobileHint}`);
-        return;
-      }
-    }
-
-    if (strategy === "redirect") {
-      await signInWithRedirectFlow(provider);
+    if (strategy === "gis") {
+      await signInWithGoogleGisModal();
       return;
     }
 
@@ -556,12 +661,8 @@
       await state.auth.signInWithPopup(provider);
     } catch (err) {
       if (err?.code === "auth/popup-closed-by-user") return;
-      if (err?.code === "auth/popup-blocked") {
-        await signInWithRedirectFlow(provider);
-        return;
-      }
-      if (mobileHint) {
-        reportAuthError(`${formatAuthError(err)}\n\n${mobileHint}`);
+      if (err?.code === "auth/popup-blocked" && getGoogleWebClientId()) {
+        await signInWithGoogleGisModal();
         return;
       }
       throw err;
