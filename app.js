@@ -143,7 +143,7 @@ const els = {
   viewTasks: document.getElementById("viewTasks"),
   viewStudyMaster: document.getElementById("viewStudyMaster"),
   viewSystemMaster: document.getElementById("viewSystemMaster"),
-  navButtons: document.querySelectorAll(".app-nav__btn"),
+  navButtons: document.querySelectorAll("[data-view]"),
   studyMasterList: document.getElementById("studyMasterList"),
   studyMasterEmpty: document.getElementById("studyMasterEmpty"),
   studyMasterForm: document.getElementById("studyMasterForm"),
@@ -2167,12 +2167,20 @@ function switchView(viewName) {
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
   els.navButtons.forEach((btn) => {
-    btn.classList.toggle("app-nav__btn--active", btn.dataset.view === viewName);
+    const isActive = btn.dataset.view === viewName;
+    btn.classList.toggle("app-nav__btn--active", btn.classList.contains("app-nav__btn") && isActive);
+    btn.classList.toggle("bottom-nav__btn--active", btn.classList.contains("bottom-nav__btn") && isActive);
+    if (isActive) {
+      btn.setAttribute("aria-current", "page");
+    } else {
+      btn.removeAttribute("aria-current");
+    }
   });
   if (viewName === "study-master") renderStudyMaster();
   if (viewName === "system-master") renderSystemMaster();
   if (viewName === "site-master") renderSiteMaster();
   if (viewName === "tasks") refreshTaskStudySiteSelects();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function populateStudySelect(selectEl, selectedValue = "") {

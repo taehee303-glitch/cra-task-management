@@ -68,11 +68,23 @@
           <button type="button" class="header-settings-btn" id="openSettingsBtn" title="설정">⚙️ 설정</button>
         </div>
       </div>
-      <nav class="app-nav">
-        <button type="button" class="app-nav__btn app-nav__btn--active" data-view="tasks">업무 관리</button>
-        <button type="button" class="app-nav__btn" data-view="study-master">Study Master</button>
-        <button type="button" class="app-nav__btn" data-view="system-master">System Master</button>
-        <button type="button" class="app-nav__btn" data-view="site-master">Site Master</button>
+      <nav class="app-nav app-nav--header" aria-label="상단 메뉴">
+        <button type="button" class="app-nav__btn app-nav__btn--active" data-view="tasks" aria-current="page">
+          <span class="app-nav__icon" aria-hidden="true">📋</span>
+          <span class="app-nav__label">업무 관리</span>
+        </button>
+        <button type="button" class="app-nav__btn" data-view="study-master">
+          <span class="app-nav__icon" aria-hidden="true">📁</span>
+          <span class="app-nav__label">Study Master</span>
+        </button>
+        <button type="button" class="app-nav__btn" data-view="system-master">
+          <span class="app-nav__icon" aria-hidden="true">⚙️</span>
+          <span class="app-nav__label">System Master</span>
+        </button>
+        <button type="button" class="app-nav__btn" data-view="site-master">
+          <span class="app-nav__icon" aria-hidden="true">🏥</span>
+          <span class="app-nav__label">Site Master</span>
+        </button>
       </nav>
     </header>
 
@@ -81,6 +93,32 @@
       <div id="viewTasks" class="view-panel">
         <section class="dashboard">
           <h2 class="section-title">대시보드</h2>
+
+          <section class="quick-nav" aria-label="빠른 이동">
+            <div class="quick-nav__grid">
+              <button type="button" class="quick-nav__item" data-view="study-master">
+                <span class="quick-nav__icon" aria-hidden="true">📁</span>
+                <span class="quick-nav__text">
+                  <strong>Study Master</strong>
+                  <small>Study · Site 연결</small>
+                </span>
+              </button>
+              <button type="button" class="quick-nav__item" data-view="system-master">
+                <span class="quick-nav__icon" aria-hidden="true">⚙️</span>
+                <span class="quick-nav__text">
+                  <strong>System Master</strong>
+                  <small>시스템 정보 관리</small>
+                </span>
+              </button>
+              <button type="button" class="quick-nav__item" data-view="site-master">
+                <span class="quick-nav__icon" aria-hidden="true">🏥</span>
+                <span class="quick-nav__text">
+                  <strong>Site Master</strong>
+                  <small>Site · IRB 정보</small>
+                </span>
+              </button>
+            </div>
+          </section>
 
           <section class="attention-panel">
             <div class="attention-panel__header">
@@ -641,6 +679,25 @@
         </section>
       </div>
     </main>
+
+    <nav class="bottom-nav" aria-label="하단 메뉴">
+      <button type="button" class="bottom-nav__btn bottom-nav__btn--active" data-view="tasks" aria-current="page">
+        <span class="bottom-nav__icon" aria-hidden="true">📋</span>
+        <span class="bottom-nav__label">업무</span>
+      </button>
+      <button type="button" class="bottom-nav__btn" data-view="study-master">
+        <span class="bottom-nav__icon" aria-hidden="true">📁</span>
+        <span class="bottom-nav__label">Study</span>
+      </button>
+      <button type="button" class="bottom-nav__btn" data-view="system-master">
+        <span class="bottom-nav__icon" aria-hidden="true">⚙️</span>
+        <span class="bottom-nav__label">System</span>
+      </button>
+      <button type="button" class="bottom-nav__btn" data-view="site-master">
+        <span class="bottom-nav__icon" aria-hidden="true">🏥</span>
+        <span class="bottom-nav__label">Site</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Edit Task Modal -->
