@@ -125,13 +125,17 @@ let toastHideTimer = null;
 let toastRemoveTimer = null;
 
 const TASK_QUICK_FILTER_LABELS = {
+  overdue: "Overdue",
   today: "Today",
   d1: "D-1",
-  overdue: "Overdue",
+  open: "Open",
+  "in-progress": "In Progress",
+  completed: "Completed",
   week: "This Week",
   all: "All",
-  completed: "Completed",
 };
+
+const INLINE_PRIORITY_OPTIONS = ["Critical", "High", "Medium", "Low"];
 
 const VISIT_TASK_PRESETS = {
   mv: { task: "Monitoring Visit", priority: "High", title: "MV 방문" },
@@ -189,10 +193,7 @@ const els = {
   inboxNavBadge: document.getElementById("inboxNavBadge"),
   inboxTaskList: document.getElementById("inboxTaskList"),
   inboxCount: document.getElementById("inboxCount"),
-  todaySummaryCount: document.getElementById("todaySummaryCount"),
-  d1SummaryCount: document.getElementById("d1SummaryCount"),
-  overdueSummaryCount: document.getElementById("overdueSummaryCount"),
-  recentTasksList: document.getElementById("recentTasksList"),
+  openTasksList: document.getElementById("openTasksList"),
   weekPreviewList: document.getElementById("weekPreviewList"),
   taskTableWrap: document.getElementById("taskTableWrap"),
   taskViewCardBtn: document.getElementById("taskViewCardBtn"),
@@ -2416,13 +2417,10 @@ function handleFabAction(action) {
 
 function handleQuickFilterClick(filter) {
   if (!filter) return;
-  const wasActive = taskQuickFilter === filter;
-  taskQuickFilter = wasActive ? null : filter;
+  taskQuickFilter = filter;
   updateQuickFilterUi();
   renderTaskList();
-  if (taskQuickFilter) {
-    showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter]} · ${getFilteredTasks().length}건`);
-  }
+  showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter]} · ${getFilteredTasks().length}건`);
 }
 
 function handleQuickAddInput(inputEl) {
@@ -2473,63 +2471,96 @@ function updateInboxBadge() {
   }
 }
 
-function renderTodayWorkspace() {
-  const activeTasks = tasks.filter((t) => isActive(t) && !isInboxTask(t));
+function getTaskFilterCounts() {
+  const nonInbox = tasks.filter((t) => !isInboxTask(t));
   const todayStr = toDateString(getToday());
+  return {
+    overdue: nonInbox.filter((t) => isActive(t) && t.dueDate && daysUntilDue(t.dueDate) < 0).length,
+    today: nonInbox.filter((t) => isActive(t) && t.dueDate === todayStr).length,
+    d1: nonInbox.filter((t) => isActive(t) && t.dueDate && daysUntilDue(t.dueDate) === 1).length,
+    open: nonInbox.filter((t) => t.status === "Open").length,
+    "in-progress": nonInbox.filter((t) => t.status === "In Progress").length,
+    completed: nonInbox.filter((t) => t.status === "Completed").length,
+  };
+}
 
-  if (els.todaySummaryCount) {
-    els.todaySummaryCount.textContent = activeTasks.filter((t) => t.dueDate === todayStr).length;
-  }
-  if (els.d1SummaryCount) {
-    els.d1SummaryCount.textContent = activeTasks.filter((t) => daysUntilDue(t.dueDate) === 1).length;
-  }
-  if (els.overdueSummaryCount) {
-    els.overdueSummaryCount.textContent = activeTasks.filter((t) => daysUntilDue(t.dueDate) < 0).length;
-  }
+function updateTaskFilterCounts() {
+  const counts = getTaskFilterCounts();
+  document.querySelectorAll("[data-count-filter]").forEach((el) => {
+    const key = el.dataset.countFilter;
+    if (counts[key] !== undefined) el.textContent = String(counts[key]);
+  });
+}
 
-  if (els.recentTasksList) {
-    const recent = [...tasks]
-      .filter((t) => !isInboxTask(t))
-      .sort((a, b) => {
-        const aTime = new Date(a.updatedAt || a.createdAt).getTime();
-        const bTime = new Date(b.updatedAt || b.createdAt).getTime();
-        return bTime - aTime;
-      })
-      .slice(0, 5);
+function renderTodayWorkspace() {
+  updateTaskFilterCounts();
 
-    els.recentTasksList.innerHTML = recent.length
-      ? recent.map((t) => renderPreviewTaskItem(t)).join("")
-      : '<p class="workspace-preview__empty">최근 업무가 없습니다.</p>';
+  if (els.openTasksList) {
+    const openTasks = tasks
+      .filter((t) => !isInboxTask(t) && (t.status === "Open" || t.status === "In Progress"))
+      .sort(compareTasks)
+      .slice(0, 6);
 
-    bindPreviewTaskClicks(els.recentTasksList);
+    els.openTasksList.innerHTML = openTasks.length
+      ? openTasks.map((t) => renderCompactTaskPreview(t)).join("")
+      : '<p class="workspace-preview__empty">진행 중인 업무가 없습니다.</p>';
+
+    bindPreviewTaskClicks(els.openTasksList);
   }
 
   if (els.weekPreviewList) {
-    const weekTasks = activeTasks
-      .filter((t) => t.dueDate && isDueThisWeek(t.dueDate))
-      .sort(compareTasks)
-      .slice(0, 8);
+    const todayStr = toDateString(getToday());
+    const futureWeekTasks = tasks
+      .filter(
+        (t) =>
+          !isInboxTask(t) &&
+          isActive(t) &&
+          t.dueDate &&
+          t.dueDate >= todayStr &&
+          isDueThisWeek(t.dueDate)
+      )
+      .sort(compareTasks);
 
-    els.weekPreviewList.innerHTML = weekTasks.length
-      ? weekTasks.map((t) => renderPreviewTaskItem(t, { showDue: true })).join("")
-      : '<p class="workspace-preview__empty">이번 주 일정이 없습니다.</p>';
-
-    bindPreviewTaskClicks(els.weekPreviewList);
+    if (!futureWeekTasks.length) {
+      els.weekPreviewList.innerHTML =
+        '<p class="workspace-preview__empty">오늘 이후 이번 주 일정이 없습니다.</p>';
+    } else {
+      let lastDate = "";
+      const html = futureWeekTasks
+        .map((task) => {
+          let dateHeader = "";
+          if (task.dueDate !== lastDate) {
+            lastDate = task.dueDate;
+            const d = parseDate(task.dueDate);
+            dateHeader = `<div class="schedule-date">${d.getMonth() + 1}/${d.getDate()}</div>`;
+          }
+          return `${dateHeader}${renderScheduleItem(task)}`;
+        })
+        .join("");
+      els.weekPreviewList.innerHTML = html;
+      bindPreviewTaskClicks(els.weekPreviewList);
+    }
   }
 }
 
-function renderPreviewTaskItem(task, options = {}) {
-  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "";
-  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
-  const meta = [task.study || "Study 미정", task.site ? getStandardSiteName(task.site) : "Site 미정"]
-    .filter(Boolean)
-    .join(" · ");
-
+function renderCompactTaskPreview(task) {
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
+  const dueText = task.dueDate ? formatDueDisplay(task) : "Due 미정";
   return `
-    <button type="button" class="preview-task" data-edit="${escapeAttr(task.id)}">
+    <button type="button" class="preview-task preview-task--compact" data-edit="${escapeAttr(task.id)}">
+      <span class="priority-badge priority-badge--${priorityClass(task.priority)} priority-badge--xs">${escapeHtml(task.priority)}</span>
       <span class="preview-task__title">${escapeHtml(task.task)}</span>
-      <span class="preview-task__meta">${escapeHtml(meta)}</span>
-      ${options.showDue ? `<span class="preview-task__due ${dueClass}">${escapeHtml(dueLabel)}</span>` : ""}
+      <span class="preview-task__meta">${escapeHtml(task.study || "—")}</span>
+      <span class="preview-task__due ${dueClass}">${escapeHtml(dueText)}</span>
+    </button>
+  `;
+}
+
+function renderScheduleItem(task) {
+  return `
+    <button type="button" class="schedule-item" data-edit="${escapeAttr(task.id)}">
+      <span class="schedule-item__task">${escapeHtml(task.task)}</span>
+      <span class="schedule-item__meta">${escapeHtml(task.study || "—")}</span>
     </button>
   `;
 }
@@ -2569,7 +2600,6 @@ function renderInboxList() {
     .join("");
 
   bindTaskListActions(els.inboxTaskList);
-  bindStatusDropdowns(els.inboxTaskList);
 }
 
 function getWeekRangeWithOffset(offset = 0) {
@@ -2709,7 +2739,7 @@ function renderCalendarView() {
 }
 
 function bindTaskListActions(container) {
-  container?.querySelectorAll("[data-edit]").forEach((btn) => {
+  container?.querySelectorAll(".task-card__main, [data-edit]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       openEditModal(btn.dataset.edit);
@@ -2721,6 +2751,20 @@ function bindTaskListActions(container) {
       deleteTask(btn.dataset.delete);
     });
   });
+  container?.querySelectorAll("[data-complete]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyTaskStatusChange(btn.dataset.complete, "Completed");
+    });
+  });
+  container?.querySelectorAll("[data-google-calendar]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openGoogleCalendarForTask(btn.dataset.googleCalendar);
+    });
+  });
+  bindStatusDropdowns(container);
+  bindPriorityDropdowns(container);
 }
 
 function populateStudySelect(selectEl, selectedValue = "") {
@@ -4892,6 +4936,12 @@ function formatDueLabel(dueDateStr) {
   return `${dueDateStr} (${formatDueDaySuffix(dueDateStr)})`;
 }
 
+function formatDueDisplay(task) {
+  if (!task?.dueDate) return "Due 미정";
+  const suffix = formatDueDaySuffix(task.dueDate);
+  return `${task.dueDate} (${suffix})`;
+}
+
 function getDueDateDisplayClass(dueDateStr, status) {
   if (status === "Completed" || status === "Cancelled") return "due-date--normal";
   const diff = daysUntilDue(dueDateStr);
@@ -5562,6 +5612,72 @@ function statusClass(status) {
   return map[status] || "open";
 }
 
+function renderInlinePriorityDropdown(task) {
+  const currentClass = priorityClass(task.priority);
+  const options = INLINE_PRIORITY_OPTIONS.map(
+    (priority) => `
+      <button type="button" class="priority-dropdown__option${priority === task.priority ? " priority-dropdown__option--active" : ""}" data-priority-option data-task-id="${escapeAttr(task.id)}" data-priority="${escapeAttr(priority)}" role="option">
+        ${escapeHtml(priority)}
+      </button>
+    `
+  ).join("");
+
+  return `
+    <div class="priority-dropdown" data-priority-dropdown="${escapeAttr(task.id)}">
+      <button type="button" class="priority-badge priority-badge--${currentClass} priority-dropdown__trigger" data-priority-trigger="${escapeAttr(task.id)}" aria-haspopup="listbox" aria-expanded="false">
+        ${escapeHtml(task.priority)} <span class="status-dropdown__caret" aria-hidden="true">▼</span>
+      </button>
+      <div class="priority-dropdown__menu" role="listbox" hidden>
+        ${options}
+      </div>
+    </div>
+  `;
+}
+
+function closeAllPriorityDropdowns() {
+  document.querySelectorAll(".priority-dropdown__menu").forEach((menu) => {
+    menu.hidden = true;
+  });
+  document.querySelectorAll("[data-priority-trigger]").forEach((btn) => {
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindPriorityDropdowns(container = els.taskCardList) {
+  if (!container) return;
+
+  container.querySelectorAll("[data-priority-trigger]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = btn.closest(".priority-dropdown")?.querySelector(".priority-dropdown__menu");
+      if (!menu) return;
+      const willOpen = menu.hidden;
+      closeAllPriorityDropdowns();
+      closeAllStatusDropdowns();
+      if (willOpen) {
+        menu.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+
+  container.querySelectorAll("[data-priority-option]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyTaskPriorityChange(btn.dataset.taskId, btn.dataset.priority);
+      closeAllPriorityDropdowns();
+    });
+  });
+}
+
+function applyTaskPriorityChange(taskId, newPriority) {
+  if (!PRIORITIES.includes(newPriority)) return;
+  const existing = tasks.find((t) => t.id === taskId);
+  if (!existing || existing.priority === newPriority) return;
+  if (!TaskStore.update(taskId, { priority: newPriority })) return;
+  renderAll();
+}
+
 function renderInlineStatusDropdown(task) {
   const currentClass = statusClass(task.status);
   const options = INLINE_STATUS_OPTIONS.map(
@@ -5591,6 +5707,7 @@ function closeAllStatusDropdowns() {
   document.querySelectorAll("[data-status-trigger]").forEach((btn) => {
     btn.setAttribute("aria-expanded", "false");
   });
+  closeAllPriorityDropdowns();
 }
 
 function bindStatusDropdowns(container = els.taskCardList) {
@@ -5721,7 +5838,15 @@ function matchesTaskQuickFilter(task) {
   }
 
   if (taskQuickFilter === "overdue") {
-    return isActive(task) && daysUntilDue(task.dueDate) < 0;
+    return isActive(task) && task.dueDate && daysUntilDue(task.dueDate) < 0;
+  }
+
+  if (taskQuickFilter === "open") {
+    return task.status === "Open";
+  }
+
+  if (taskQuickFilter === "in-progress") {
+    return task.status === "In Progress";
   }
 
   if (taskQuickFilter === "week") {
@@ -5734,13 +5859,14 @@ function matchesTaskQuickFilter(task) {
 function updateQuickFilterUi() {
   els.taskQuickFilterBtns.forEach((btn) => {
     const isActive = taskQuickFilter === btn.dataset.quickFilter;
-    btn.classList.toggle("quick-filter__btn--active", isActive);
+    btn.classList.toggle("task-filter__btn--active", btn.classList.contains("task-filter__btn") && isActive);
+    btn.classList.toggle("quick-filter__btn--active", btn.classList.contains("quick-filter__btn") && isActive);
     btn.setAttribute("aria-selected", String(isActive));
   });
 
   if (els.tasksHomeSubtitle) {
     els.tasksHomeSubtitle.textContent = taskQuickFilter
-      ? TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "My Tasks"
+      ? TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "Task List"
       : "진행 중인 업무";
   }
 }
@@ -5950,7 +6076,6 @@ function renderTaskList() {
     els.taskTableWrap.hidden = false;
     els.taskTableBody.innerHTML = hierarchicalRows.map(renderTableRow).join("");
     bindTaskListActions(els.taskTableWrap);
-    bindStatusDropdowns(els.taskTableWrap);
     return;
   }
 
@@ -5958,31 +6083,37 @@ function renderTaskList() {
   els.taskCardList.hidden = false;
   els.taskCardList.innerHTML = hierarchicalRows.map(renderTaskCard).join("");
   bindTaskListActions(els.taskCardList);
-  bindStatusDropdowns(els.taskCardList);
 }
 
 function renderTaskCard({ task, isSubtask }) {
   const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
   const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
-  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
+  const dueText = formatDueDisplay(task);
   const urgencyClass =
     urgency === "overdue" ? "task-card--overdue" : urgency === "urgent" ? "task-card--urgent" : "";
   const studyLabel = task.study?.trim() || "Study 미정";
   const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
+  const calendarSynced = task.calendarSync?.eventId ? " task-card__action--synced" : "";
+  const isDone = task.status === "Completed";
 
   return `
-    <article class="task-card ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}" data-task-id="${escapeAttr(task.id)}">
-      <div class="task-card__row task-card__row--top">
-        <span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>
-        <div class="task-card__status">${renderInlineStatusDropdown(task)}</div>
-      </div>
-      <button type="button" class="task-card__body" data-edit="${escapeAttr(task.id)}">
+    <article class="task-card task-card--dense ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="task-card__main" data-edit="${escapeAttr(task.id)}">
+        <div class="task-card__head">
+          <span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>
+          <span class="task-card__due ${dueClass}">📅 ${escapeHtml(dueText)}</span>
+        </div>
         <h3 class="task-card__title">${escapeHtml(task.task)}</h3>
-        <p class="task-card__meta">${escapeHtml(studyLabel)} · ${escapeHtml(siteLabel)}</p>
+        <p class="task-card__study">${escapeHtml(studyLabel)}</p>
+        <p class="task-card__site">${escapeHtml(siteLabel)}</p>
       </button>
-      <div class="task-card__row task-card__row--bottom">
-        <span class="task-card__due ${dueClass}">${escapeHtml(dueLabel)}</span>
-        <button type="button" class="task-card__delete btn btn--ghost btn--sm" data-delete="${escapeAttr(task.id)}">삭제</button>
+      <div class="task-card__actions">
+        ${renderInlineStatusDropdown(task)}
+        <div class="task-card__action-row">
+          ${renderInlinePriorityDropdown(task)}
+          <button type="button" class="task-card__action task-card__action--complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료">✓</button>
+          <button type="button" class="task-card__action task-card__action--calendar${calendarSynced}" data-google-calendar="${escapeAttr(task.id)}" title="Calendar" aria-label="Calendar">📅</button>
+        </div>
       </div>
     </article>
   `;
@@ -6002,22 +6133,26 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
     .filter(Boolean)
     .join(" ");
   const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
-  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
+  const dueText = formatDueDisplay(task);
   const studyLabel = task.study?.trim() || "—";
   const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
+  const calendarSynced = task.calendarSync?.eventId ? " task-card__action--synced" : "";
 
   return `
     <tr class="${rowClass}" data-task-id="${escapeAttr(task.id)}">
-      <td class="task-list-check" aria-hidden="true">○</td>
+      <td class="task-list-check">
+        <button type="button" class="task-card__action task-card__action--complete task-card__action--sm" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료">✓</button>
+      </td>
       <td>
         <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
-      <td><span class="${dueClass}">${escapeHtml(dueLabel)}</span></td>
-      <td><span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span></td>
+      <td><span class="task-list-due ${dueClass}">${escapeHtml(dueText)}</span></td>
+      <td>${renderInlinePriorityDropdown(task)}</td>
       <td class="status-cell">${renderInlineStatusDropdown(task)}</td>
       <td class="actions-cell">
+        <button type="button" class="task-card__action task-card__action--calendar task-card__action--sm${calendarSynced}" data-google-calendar="${escapeAttr(task.id)}" title="Calendar" aria-label="Calendar">📅</button>
         <button type="button" class="btn btn--ghost btn--sm" data-delete="${escapeAttr(task.id)}">삭제</button>
       </td>
     </tr>

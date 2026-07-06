@@ -114,45 +114,49 @@
       <!-- Tasks View (Home / My Tasks) -->
       <div id="viewTasks" class="view-panel">
         <section class="today-workspace">
-          <h2 class="today-workspace__heading">오늘 할 일</h2>
-          <div class="today-summary" role="group" aria-label="오늘 업무 요약">
-            <button type="button" class="today-chip" data-quick-filter="today">
-              <span class="today-chip__label">오늘 마감</span>
-              <span class="today-chip__count" id="todaySummaryCount">0</span>
+          <div class="task-filter" role="tablist" aria-label="업무 필터">
+            <button type="button" class="task-filter__btn" data-quick-filter="overdue" role="tab">
+              🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
             </button>
-            <button type="button" class="today-chip today-chip--d1" data-quick-filter="d1">
-              <span class="today-chip__label">D-1</span>
-              <span class="today-chip__count" id="d1SummaryCount">0</span>
+            <button type="button" class="task-filter__btn task-filter__btn--active" data-quick-filter="today" role="tab" aria-selected="true">
+              📅 Today <span class="task-filter__count" data-count-filter="today">0</span>
             </button>
-            <button type="button" class="today-chip today-chip--overdue" data-quick-filter="overdue">
-              <span class="today-chip__label">지연</span>
-              <span class="today-chip__count" id="overdueSummaryCount">0</span>
+            <button type="button" class="task-filter__btn" data-quick-filter="d1" role="tab">
+              ⚠ D-1 <span class="task-filter__count" data-count-filter="d1">0</span>
+            </button>
+            <button type="button" class="task-filter__btn" data-quick-filter="open" role="tab">
+              ○ Open <span class="task-filter__count" data-count-filter="open">0</span>
+            </button>
+            <button type="button" class="task-filter__btn" data-quick-filter="in-progress" role="tab">
+              ⏳ In Progress <span class="task-filter__count" data-count-filter="in-progress">0</span>
+            </button>
+            <button type="button" class="task-filter__btn" data-quick-filter="completed" role="tab">
+              ✓ Completed <span class="task-filter__count" data-count-filter="completed">0</span>
             </button>
           </div>
 
-          <div class="quick-add">
-            <span class="quick-add__label">Quick Add</span>
+          <div class="quick-add quick-add--compact">
             <div class="quick-add__row">
-              <input type="text" id="quickAddInput" class="quick-add__input" placeholder="업무 입력..." autocomplete="off" aria-label="빠른 업무 추가" />
+              <input type="text" id="quickAddInput" class="quick-add__input" placeholder="예) CRC 전화, SDV 시작, Query 확인..." autocomplete="off" aria-label="빠른 업무 추가" />
               <button type="button" class="quick-add__btn" id="quickAddBtn" aria-label="Inbox에 추가">+</button>
             </div>
           </div>
 
-          <section class="workspace-preview" id="recentTasksSection">
-            <h3 class="workspace-preview__title">최근 업무</h3>
-            <div id="recentTasksList" class="workspace-preview__list"></div>
+          <section class="workspace-preview" id="openTasksSection">
+            <h3 class="workspace-preview__title">My Open Tasks</h3>
+            <div id="openTasksList" class="workspace-preview__list"></div>
           </section>
 
           <section class="workspace-preview" id="weekPreviewSection">
             <h3 class="workspace-preview__title">이번 주 일정</h3>
-            <div id="weekPreviewList" class="workspace-preview__list"></div>
+            <div id="weekPreviewList" class="workspace-preview__list workspace-preview__list--schedule"></div>
           </section>
         </section>
 
         <section class="tasks-home" id="taskListSection">
           <header class="tasks-home__header">
             <div>
-              <h2 class="tasks-home__title">My Tasks</h2>
+              <h2 class="tasks-home__title">Task List</h2>
               <p class="tasks-home__subtitle" id="tasksHomeSubtitle">Today</p>
             </div>
             <div class="tasks-home__tools">
@@ -165,15 +169,6 @@
               <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
             </div>
           </header>
-
-          <div class="quick-filter" role="tablist" aria-label="업무 필터">
-            <button type="button" class="quick-filter__btn quick-filter__btn--active" data-quick-filter="today" role="tab" aria-selected="true">Today</button>
-            <button type="button" class="quick-filter__btn" data-quick-filter="d1" role="tab">D-1</button>
-            <button type="button" class="quick-filter__btn" data-quick-filter="overdue" role="tab">Overdue</button>
-            <button type="button" class="quick-filter__btn" data-quick-filter="week" role="tab">This Week</button>
-            <button type="button" class="quick-filter__btn" data-quick-filter="completed" role="tab">Completed</button>
-            <button type="button" class="quick-filter__btn" data-quick-filter="all" role="tab">All</button>
-          </div>
 
           <div class="tasks-toolbar">
             <input type="search" id="searchInput" class="tasks-toolbar__search tasks-toolbar__search--wide" placeholder="검색..." aria-label="업무 검색" />
