@@ -120,6 +120,7 @@ let tasks = [];
 let taskQuickFilter = "today";
 let taskViewMode = "card";
 let calendarWeekOffset = 0;
+let calendarMonthOffset = 0;
 let toastHideTimer = null;
 let toastRemoveTimer = null;
 
@@ -198,8 +199,12 @@ const els = {
   taskViewListBtn: document.getElementById("taskViewListBtn"),
   calendarWeekGrid: document.getElementById("calendarWeekGrid"),
   calendarWeekLabel: document.getElementById("calendarWeekLabel"),
+  calendarMonthGrid: document.getElementById("calendarMonthGrid"),
+  calendarMonthLabel: document.getElementById("calendarMonthLabel"),
   calendarPrevWeekBtn: document.getElementById("calendarPrevWeekBtn"),
   calendarNextWeekBtn: document.getElementById("calendarNextWeekBtn"),
+  calendarPrevMonthBtn: document.getElementById("calendarPrevMonthBtn"),
+  calendarNextMonthBtn: document.getElementById("calendarNextMonthBtn"),
   calendarTodayBtn: document.getElementById("calendarTodayBtn"),
   fabToggleBtn: document.getElementById("fabToggleBtn"),
   fabMenu: document.getElementById("fabMenu"),
@@ -598,8 +603,17 @@ async function bootstrapApp() {
     calendarWeekOffset += 1;
     renderCalendarView();
   });
+  els.calendarPrevMonthBtn?.addEventListener("click", () => {
+    calendarMonthOffset -= 1;
+    renderCalendarView();
+  });
+  els.calendarNextMonthBtn?.addEventListener("click", () => {
+    calendarMonthOffset += 1;
+    renderCalendarView();
+  });
   els.calendarTodayBtn?.addEventListener("click", () => {
     calendarWeekOffset = 0;
+    calendarMonthOffset = 0;
     renderCalendarView();
   });
   els.fabToggleBtn?.addEventListener("click", (event) => {
@@ -2567,7 +2581,40 @@ function getWeekRangeWithOffset(offset = 0) {
   return { start, end };
 }
 
-function renderCalendarView() {
+function getMonthAnchorWithOffset(offset = 0) {
+  const today = getToday();
+  return new Date(today.getFullYear(), today.getMonth() + offset, 1);
+}
+
+function getTasksForDate(dateStr) {
+  return tasks.filter((t) => !isInboxTask(t) && t.dueDate === dateStr).sort(compareTasks);
+}
+
+function renderCalendarTaskButton(task) {
+  const synced = task.calendarSync?.eventId ? " calendar-task--synced" : "";
+  return `
+    <button type="button" class="calendar-task${synced}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(task.task)}">
+      <span class="calendar-task__name">${escapeHtml(task.task)}</span>
+      <span class="calendar-task__meta">${escapeHtml(task.study || "—")}</span>
+      ${task.calendarSync?.eventId ? '<span class="calendar-task__sync" title="Google Calendar 연동">📅</span>' : ""}
+    </button>
+  `;
+}
+
+function renderCalendarMonthTaskChip(task) {
+  const synced = task.calendarSync?.eventId ? " calendar-month-task--synced" : "";
+  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "normal";
+  const urgencyClass =
+    urgency === "overdue" ? " calendar-month-task--overdue" : urgency === "urgent" ? " calendar-month-task--urgent" : "";
+  return `
+    <button type="button" class="calendar-month-task${synced}${urgencyClass}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(task.task)}">
+      ${task.calendarSync?.eventId ? '<span class="calendar-month-task__sync" aria-hidden="true">📅</span>' : ""}
+      <span class="calendar-month-task__name">${escapeHtml(task.task)}</span>
+    </button>
+  `;
+}
+
+function renderCalendarWeekView() {
   if (!els.calendarWeekGrid) return;
 
   const { start, end } = getWeekRangeWithOffset(calendarWeekOffset);
@@ -2586,9 +2633,7 @@ function renderCalendarView() {
     const day = new Date(start);
     day.setDate(start.getDate() + i);
     const dateStr = toDateString(day);
-    const dayTasks = tasks
-      .filter((t) => !isInboxTask(t) && t.dueDate === dateStr)
-      .sort(compareTasks);
+    const dayTasks = getTasksForDate(dateStr);
 
     columns.push(`
       <div class="calendar-day${dateStr === todayStr ? " calendar-day--today" : ""}">
@@ -2599,18 +2644,7 @@ function renderCalendarView() {
         <div class="calendar-day__tasks">
           ${
             dayTasks.length
-              ? dayTasks
-                  .map((task) => {
-                    const synced = task.calendarSync?.eventId ? " calendar-task--synced" : "";
-                    return `
-                      <button type="button" class="calendar-task${synced}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(task.task)}">
-                        <span class="calendar-task__name">${escapeHtml(task.task)}</span>
-                        <span class="calendar-task__meta">${escapeHtml(task.study || "—")}</span>
-                        ${task.calendarSync?.eventId ? '<span class="calendar-task__sync" title="Google Calendar 연동">📅</span>' : ""}
-                      </button>
-                    `;
-                  })
-                  .join("")
+              ? dayTasks.map(renderCalendarTaskButton).join("")
               : '<p class="calendar-day__empty">—</p>'
           }
         </div>
@@ -2620,6 +2654,58 @@ function renderCalendarView() {
 
   els.calendarWeekGrid.innerHTML = columns.join("");
   bindPreviewTaskClicks(els.calendarWeekGrid);
+}
+
+function renderCalendarMonthView() {
+  if (!els.calendarMonthGrid) return;
+
+  const monthAnchor = getMonthAnchorWithOffset(calendarMonthOffset);
+  const year = monthAnchor.getFullYear();
+  const month = monthAnchor.getMonth();
+  const todayStr = toDateString(getToday());
+  const { start: weekStart, end: weekEnd } = getWeekRangeWithOffset(calendarWeekOffset);
+
+  if (els.calendarMonthLabel) {
+    els.calendarMonthLabel.textContent = `${year}년 ${month + 1}월`;
+  }
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startOffset = firstOfMonth.getDay() === 0 ? 6 : firstOfMonth.getDay() - 1;
+  const gridStart = new Date(year, month, 1 - startOffset);
+
+  const cells = [];
+  for (let i = 0; i < 42; i += 1) {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + i);
+    const dateStr = toDateString(day);
+    const inMonth = day.getMonth() === month;
+    const dayTasks = getTasksForDate(dateStr);
+    const isToday = dateStr === todayStr;
+    const inSelectedWeek = day >= weekStart && day <= weekEnd;
+    const visibleTasks = dayTasks.slice(0, 3);
+    const hiddenCount = Math.max(0, dayTasks.length - visibleTasks.length);
+
+    cells.push(`
+      <div class="calendar-month-day${inMonth ? "" : " calendar-month-day--outside"}${isToday ? " calendar-month-day--today" : ""}${inSelectedWeek ? " calendar-month-day--in-week" : ""}">
+        <div class="calendar-month-day__header">
+          <span class="calendar-month-day__date">${day.getDate()}</span>
+          ${dayTasks.length ? `<span class="calendar-month-day__count">${dayTasks.length}</span>` : ""}
+        </div>
+        <div class="calendar-month-day__tasks">
+          ${visibleTasks.map(renderCalendarMonthTaskChip).join("")}
+          ${hiddenCount ? `<span class="calendar-month-day__more">+${hiddenCount}</span>` : ""}
+        </div>
+      </div>
+    `);
+  }
+
+  els.calendarMonthGrid.innerHTML = cells.join("");
+  bindPreviewTaskClicks(els.calendarMonthGrid);
+}
+
+function renderCalendarView() {
+  renderCalendarWeekView();
+  renderCalendarMonthView();
 }
 
 function bindTaskListActions(container) {

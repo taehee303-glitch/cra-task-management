@@ -246,15 +246,37 @@
       <!-- Calendar View -->
       <div id="viewCalendar" class="view-panel" hidden>
         <section class="calendar-view">
-          <header class="calendar-view__header">
-            <div class="calendar-view__nav">
-              <button type="button" class="btn btn--ghost btn--sm" id="calendarPrevWeekBtn" aria-label="이전 주">‹</button>
-              <h2 class="calendar-view__title" id="calendarWeekLabel">이번 주</h2>
-              <button type="button" class="btn btn--ghost btn--sm" id="calendarNextWeekBtn" aria-label="다음 주">›</button>
-            </div>
+          <header class="calendar-view__topbar">
+            <h2 class="calendar-view__page-title">Calendar</h2>
             <button type="button" class="btn btn--ghost btn--sm" id="calendarTodayBtn">오늘</button>
           </header>
-          <div id="calendarWeekGrid" class="calendar-week" aria-live="polite"></div>
+
+          <section class="calendar-section" aria-labelledby="calendarWeekHeading">
+            <header class="calendar-section__header">
+              <h3 class="calendar-section__title" id="calendarWeekHeading">이번 주</h3>
+              <div class="calendar-view__nav">
+                <button type="button" class="btn btn--ghost btn--sm" id="calendarPrevWeekBtn" aria-label="이전 주">‹</button>
+                <span class="calendar-view__title" id="calendarWeekLabel">이번 주</span>
+                <button type="button" class="btn btn--ghost btn--sm" id="calendarNextWeekBtn" aria-label="다음 주">›</button>
+              </div>
+            </header>
+            <div id="calendarWeekGrid" class="calendar-week" aria-live="polite"></div>
+          </section>
+
+          <section class="calendar-section calendar-section--month" aria-labelledby="calendarMonthHeading">
+            <header class="calendar-section__header">
+              <h3 class="calendar-section__title" id="calendarMonthHeading">한 달</h3>
+              <div class="calendar-view__nav">
+                <button type="button" class="btn btn--ghost btn--sm" id="calendarPrevMonthBtn" aria-label="이전 달">‹</button>
+                <span class="calendar-view__title" id="calendarMonthLabel">2026년 7월</span>
+                <button type="button" class="btn btn--ghost btn--sm" id="calendarNextMonthBtn" aria-label="다음 달">›</button>
+              </div>
+            </header>
+            <div class="calendar-month__weekdays" aria-hidden="true">
+              <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span><span>일</span>
+            </div>
+            <div id="calendarMonthGrid" class="calendar-month" aria-live="polite"></div>
+          </section>
         </section>
       </div>
 
