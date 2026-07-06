@@ -10,7 +10,7 @@ const URGENT_DAYS = 3;
 const PRIORITIES = ["Critical", "High", "Medium", "Low"];
 const STATUSES = ["Open", "In Progress", "On Hold", "Completed", "Cancelled"];
 const DEFAULT_STATUS = "Open";
-const INLINE_STATUS_OPTIONS = ["Open", "On Hold", "Completed"];
+const INLINE_STATUS_OPTIONS = ["Open", "In Progress", "Completed", "On Hold"];
 const TASK_RULE_DEFAULT_STATUSES = ["Open", "In Progress"];
 
 const TASK_RULE_PRESET_TASK_NAMES = [
@@ -118,16 +118,18 @@ const WORKFLOW_VISIT_RULES = [
 ];
 let tasks = [];
 let taskQuickFilter = "today";
+let taskViewMode = "card";
+let calendarWeekOffset = 0;
 let toastHideTimer = null;
 let toastRemoveTimer = null;
 
 const TASK_QUICK_FILTER_LABELS = {
-  today: "오늘",
+  today: "Today",
   d1: "D-1",
-  overdue: "지연",
-  week: "이번 주",
-  all: "전체",
-  completed: "완료",
+  overdue: "Overdue",
+  week: "This Week",
+  all: "All",
+  completed: "Completed",
 };
 
 const VISIT_TASK_PRESETS = {
@@ -136,7 +138,17 @@ const VISIT_TASK_PRESETS = {
   cov: { task: "Close-out Visit", priority: "High", title: "COV" },
 };
 
-const MASTER_VIEWS = ["study-master", "site-master", "system-master"];
+const VIEW_TITLES = {
+  tasks: "My Tasks",
+  inbox: "Inbox",
+  calendar: "Calendar",
+  dashboard: "Dashboard",
+  "study-master": "Study",
+  "site-master": "Site",
+  "system-master": "System",
+};
+
+let addTaskPresetPriority = "Medium";
 const els = {
   todayLabel: document.getElementById("todayLabel"),
   statTotal: document.getElementById("statTotal"),
@@ -151,6 +163,8 @@ const els = {
   site: document.getElementById("site"),
   resetFormBtn: document.getElementById("resetFormBtn"),
   viewTasks: document.getElementById("viewTasks"),
+  viewInbox: document.getElementById("viewInbox"),
+  viewCalendar: document.getElementById("viewCalendar"),
   viewDashboard: document.getElementById("viewDashboard"),
   viewStudyMaster: document.getElementById("viewStudyMaster"),
   viewSystemMaster: document.getElementById("viewSystemMaster"),
@@ -163,9 +177,30 @@ const els = {
   addTaskModal: document.getElementById("addTaskModal"),
   closeAddTaskModalBtn: document.getElementById("closeAddTaskModalBtn"),
   addTaskModalTitle: document.getElementById("addTaskModalTitle"),
-  masterSheet: document.getElementById("masterSheet"),
-  masterMenuBtn: document.getElementById("masterMenuBtn"),
-  masterMenuDropdown: document.getElementById("masterMenuDropdown"),
+  sidebar: document.getElementById("sidebar"),
+  sidebarBackdrop: document.getElementById("sidebarBackdrop"),
+  sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
+  topbarTitle: document.getElementById("topbarTitle"),
+  quickAddInput: document.getElementById("quickAddInput"),
+  quickAddBtn: document.getElementById("quickAddBtn"),
+  inboxQuickAddInput: document.getElementById("inboxQuickAddInput"),
+  inboxQuickAddBtn: document.getElementById("inboxQuickAddBtn"),
+  inboxNavBadge: document.getElementById("inboxNavBadge"),
+  inboxTaskList: document.getElementById("inboxTaskList"),
+  inboxCount: document.getElementById("inboxCount"),
+  todaySummaryCount: document.getElementById("todaySummaryCount"),
+  d1SummaryCount: document.getElementById("d1SummaryCount"),
+  overdueSummaryCount: document.getElementById("overdueSummaryCount"),
+  recentTasksList: document.getElementById("recentTasksList"),
+  weekPreviewList: document.getElementById("weekPreviewList"),
+  taskTableWrap: document.getElementById("taskTableWrap"),
+  taskViewCardBtn: document.getElementById("taskViewCardBtn"),
+  taskViewListBtn: document.getElementById("taskViewListBtn"),
+  calendarWeekGrid: document.getElementById("calendarWeekGrid"),
+  calendarWeekLabel: document.getElementById("calendarWeekLabel"),
+  calendarPrevWeekBtn: document.getElementById("calendarPrevWeekBtn"),
+  calendarNextWeekBtn: document.getElementById("calendarNextWeekBtn"),
+  calendarTodayBtn: document.getElementById("calendarTodayBtn"),
   fabToggleBtn: document.getElementById("fabToggleBtn"),
   fabMenu: document.getElementById("fabMenu"),
   fabRoot: document.getElementById("fabRoot"),
@@ -222,7 +257,7 @@ const els = {
   siteSystemForm: document.getElementById("siteSystemForm"),
   closeSiteSystemModalBtn: document.getElementById("closeSiteSystemModalBtn"),
   cancelSiteSystemBtn: document.getElementById("cancelSiteSystemBtn"),
-  taskTableBody: document.getElementById("taskCardList"),
+  taskTableBody: document.getElementById("taskTableBody"),
   filterStudy: document.getElementById("filterStudy"),
   filterStatus: document.getElementById("filterStatus"),
   searchInput: document.getElementById("searchInput"),
@@ -477,6 +512,8 @@ async function bootstrapApp() {
   updateTodayLabel();
   showFileProtocolBannerIfNeeded();
   initMobileAccessBanner();
+  taskViewMode = UiSettingsStore.getTaskViewMode();
+  applyTaskViewModeUi();
   renderAll();
   renderStudyMaster();
   renderSystemMaster();
@@ -525,8 +562,7 @@ async function bootstrapApp() {
   els.editSiteInfoToggleBtn.addEventListener("click", toggleEditSiteInfo);
   els.navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      closeMasterSheet();
-      closeMasterMenuDropdown();
+      closeSidebar();
       switchView(btn.dataset.view);
     });
   });
@@ -536,15 +572,35 @@ async function bootstrapApp() {
       handleNavAction(btn.dataset.navAction);
     });
   });
-  els.masterMenuBtn?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (!els.masterMenuDropdown) return;
-    const willOpen = els.masterMenuDropdown.hidden;
-    els.masterMenuDropdown.hidden = !willOpen;
-    els.masterMenuBtn.setAttribute("aria-expanded", String(willOpen));
+  els.sidebarToggleBtn?.addEventListener("click", toggleSidebar);
+  els.sidebarBackdrop?.addEventListener("click", closeSidebar);
+  els.quickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.quickAddInput));
+  els.quickAddInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleQuickAddInput(els.quickAddInput);
+    }
   });
-  els.masterSheet?.addEventListener("click", (event) => {
-    if (event.target === els.masterSheet) closeMasterSheet();
+  els.inboxQuickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.inboxQuickAddInput));
+  els.inboxQuickAddInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleQuickAddInput(els.inboxQuickAddInput);
+    }
+  });
+  els.taskViewCardBtn?.addEventListener("click", () => setTaskViewMode("card"));
+  els.taskViewListBtn?.addEventListener("click", () => setTaskViewMode("list"));
+  els.calendarPrevWeekBtn?.addEventListener("click", () => {
+    calendarWeekOffset -= 1;
+    renderCalendarView();
+  });
+  els.calendarNextWeekBtn?.addEventListener("click", () => {
+    calendarWeekOffset += 1;
+    renderCalendarView();
+  });
+  els.calendarTodayBtn?.addEventListener("click", () => {
+    calendarWeekOffset = 0;
+    renderCalendarView();
   });
   els.fabToggleBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -558,7 +614,6 @@ async function bootstrapApp() {
   });
   document.addEventListener("click", () => {
     closeFabMenu();
-    closeMasterMenuDropdown();
   });
   els.taskQuickFilterBtns.forEach((btn) => {
     btn.addEventListener("click", () => handleQuickFilterClick(btn.dataset.quickFilter));
@@ -630,7 +685,7 @@ async function bootstrapApp() {
   els.editModal.addEventListener("click", (e) => {
     if (e.target === els.editModal) closeModal();
   });
-  els.openSettingsBtn.addEventListener("click", openSettingsModal);
+  els.openSettingsBtn?.addEventListener("click", openSettingsModal);
   els.closeSettingsModalBtn.addEventListener("click", closeSettingsModal);
   els.cancelSettingsBtn.addEventListener("click", closeSettingsModal);
   els.saveSettingsBtn.addEventListener("click", handleSaveSettings);
@@ -2222,63 +2277,71 @@ function migrateMasterStructureV2() {
 
 function switchView(viewName) {
   els.viewTasks.hidden = viewName !== "tasks";
+  els.viewInbox.hidden = viewName !== "inbox";
+  els.viewCalendar.hidden = viewName !== "calendar";
   els.viewDashboard.hidden = viewName !== "dashboard";
   els.viewStudyMaster.hidden = viewName !== "study-master";
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
 
   closeFabMenu();
-  closeMasterSheet();
-  closeMasterMenuDropdown();
+  closeSidebar();
+
+  if (els.topbarTitle) {
+    els.topbarTitle.textContent = VIEW_TITLES[viewName] || "CRA Workspace";
+  }
+
   updateNavHighlight(viewName);
 
   if (viewName === "study-master") renderStudyMaster();
   if (viewName === "system-master") renderSystemMaster();
   if (viewName === "site-master") renderSiteMaster();
   if (viewName === "dashboard") renderDashboard();
-  if (viewName === "tasks") refreshTaskStudySiteSelects();
+  if (viewName === "calendar") renderCalendarView();
+  if (viewName === "inbox") renderInboxList();
+  if (viewName === "tasks") {
+    refreshTaskStudySiteSelects();
+    renderTodayWorkspace();
+    renderTaskList();
+  }
   if (els.fabRoot) els.fabRoot.hidden = viewName !== "tasks";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function updateNavHighlight(viewName) {
-  const isMaster = MASTER_VIEWS.includes(viewName);
-
-  document.querySelectorAll(".app-nav__btn[data-view], .bottom-nav__btn[data-view]").forEach((btn) => {
+  document.querySelectorAll(".sidebar__item[data-view]").forEach((btn) => {
     const isActive = btn.dataset.view === viewName;
-    btn.classList.toggle("app-nav__btn--active", btn.classList.contains("app-nav__btn") && isActive);
-    btn.classList.toggle("bottom-nav__btn--active", btn.classList.contains("bottom-nav__btn") && isActive);
+    btn.classList.toggle("sidebar__item--active", isActive);
     if (isActive) btn.setAttribute("aria-current", "page");
     else btn.removeAttribute("aria-current");
   });
 
-  document.querySelectorAll('[data-nav-action="master-menu"]').forEach((btn) => {
-    btn.classList.toggle("app-nav__btn--active", btn.classList.contains("app-nav__btn") && isMaster);
-    btn.classList.toggle("bottom-nav__btn--active", btn.classList.contains("bottom-nav__btn") && isMaster);
-    if (isMaster) btn.setAttribute("aria-current", "page");
-    else btn.removeAttribute("aria-current");
-  });
-
-  document.querySelectorAll(".app-nav__dropdown-item").forEach((btn) => {
-    btn.classList.toggle("app-nav__dropdown-item--active", btn.dataset.view === viewName);
+  els.dashboardFilterCards.forEach((card) => {
+    const isActive = taskQuickFilter === card.dataset.dashboardFilter;
+    card.classList.toggle("stat-card--active", isActive);
+    card.setAttribute("aria-pressed", String(isActive));
   });
 }
 
-function openMasterSheet() {
-  if (!els.masterSheet) return;
-  els.masterSheet.hidden = false;
+function toggleSidebar() {
+  if (!els.sidebar) return;
+  const isOpen = els.sidebar.classList.toggle("sidebar--open");
+  if (els.sidebarBackdrop) els.sidebarBackdrop.hidden = !isOpen;
+  els.sidebarToggleBtn?.setAttribute("aria-expanded", String(isOpen));
 }
 
-function closeMasterSheet() {
-  if (!els.masterSheet) return;
-  els.masterSheet.hidden = true;
+function closeSidebar() {
+  if (!els.sidebar) return;
+  els.sidebar.classList.remove("sidebar--open");
+  if (els.sidebarBackdrop) els.sidebarBackdrop.hidden = true;
+  els.sidebarToggleBtn?.setAttribute("aria-expanded", "false");
 }
 
-function closeMasterMenuDropdown() {
-  if (!els.masterMenuDropdown || !els.masterMenuBtn) return;
-  els.masterMenuDropdown.hidden = true;
-  els.masterMenuBtn.setAttribute("aria-expanded", "false");
-}
+function openMasterSheet() {}
+
+function closeMasterSheet() {}
+
+function closeMasterMenuDropdown() {}
 
 function toggleFabMenu() {
   if (!els.fabMenu || !els.fabToggleBtn) return;
@@ -2304,7 +2367,9 @@ function openAddTaskModal(presetKey = null) {
   els.taskForm.reset();
   if (preset) {
     els.task.value = preset.task;
-    els.priority.value = preset.priority;
+    addTaskPresetPriority = preset.priority;
+  } else {
+    addTaskPresetPriority = "Medium";
   }
   els.dueDate.value = toDateString(getToday());
   refreshTaskStudySiteSelects();
@@ -2319,9 +2384,10 @@ function closeAddTaskModal() {
 }
 
 function handleNavAction(action) {
-  if (action === "settings") openSettingsModal();
-  if (action === "master-menu") openMasterSheet();
-  if (action === "close-master") closeMasterSheet();
+  if (action === "settings") {
+    closeSidebar();
+    openSettingsModal();
+  }
 }
 
 function handleFabAction(action) {
@@ -2343,6 +2409,232 @@ function handleQuickFilterClick(filter) {
   if (taskQuickFilter) {
     showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter]} · ${getFilteredTasks().length}건`);
   }
+}
+
+function handleQuickAddInput(inputEl) {
+  if (!inputEl) return;
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  const newTask = {
+    id: generateId(),
+    study: "",
+    site: "",
+    task: text,
+    dueDate: "",
+    status: DEFAULT_STATUS,
+    priority: "Medium",
+    inbox: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  TaskStore.add(newTask);
+  inputEl.value = "";
+  renderAll();
+  showToast(`Inbox · ${text}`);
+}
+
+function setTaskViewMode(mode, options = {}) {
+  taskViewMode = mode === "list" ? "list" : "card";
+  if (options.persist !== false) {
+    UiSettingsStore.setTaskViewMode(taskViewMode);
+  }
+  applyTaskViewModeUi();
+  renderTaskList();
+}
+
+function applyTaskViewModeUi() {
+  els.taskViewCardBtn?.classList.toggle("view-toggle__btn--active", taskViewMode === "card");
+  els.taskViewListBtn?.classList.toggle("view-toggle__btn--active", taskViewMode === "list");
+}
+
+function updateInboxBadge() {
+  const count = tasks.filter(isInboxTask).length;
+  if (els.inboxNavBadge) {
+    els.inboxNavBadge.hidden = count === 0;
+    els.inboxNavBadge.textContent = String(count);
+  }
+  if (els.inboxCount) {
+    els.inboxCount.textContent = `${count}건`;
+  }
+}
+
+function renderTodayWorkspace() {
+  const activeTasks = tasks.filter((t) => isActive(t) && !isInboxTask(t));
+  const todayStr = toDateString(getToday());
+
+  if (els.todaySummaryCount) {
+    els.todaySummaryCount.textContent = activeTasks.filter((t) => t.dueDate === todayStr).length;
+  }
+  if (els.d1SummaryCount) {
+    els.d1SummaryCount.textContent = activeTasks.filter((t) => daysUntilDue(t.dueDate) === 1).length;
+  }
+  if (els.overdueSummaryCount) {
+    els.overdueSummaryCount.textContent = activeTasks.filter((t) => daysUntilDue(t.dueDate) < 0).length;
+  }
+
+  if (els.recentTasksList) {
+    const recent = [...tasks]
+      .filter((t) => !isInboxTask(t))
+      .sort((a, b) => {
+        const aTime = new Date(a.updatedAt || a.createdAt).getTime();
+        const bTime = new Date(b.updatedAt || b.createdAt).getTime();
+        return bTime - aTime;
+      })
+      .slice(0, 5);
+
+    els.recentTasksList.innerHTML = recent.length
+      ? recent.map((t) => renderPreviewTaskItem(t)).join("")
+      : '<p class="workspace-preview__empty">최근 업무가 없습니다.</p>';
+
+    bindPreviewTaskClicks(els.recentTasksList);
+  }
+
+  if (els.weekPreviewList) {
+    const weekTasks = activeTasks
+      .filter((t) => t.dueDate && isDueThisWeek(t.dueDate))
+      .sort(compareTasks)
+      .slice(0, 8);
+
+    els.weekPreviewList.innerHTML = weekTasks.length
+      ? weekTasks.map((t) => renderPreviewTaskItem(t, { showDue: true })).join("")
+      : '<p class="workspace-preview__empty">이번 주 일정이 없습니다.</p>';
+
+    bindPreviewTaskClicks(els.weekPreviewList);
+  }
+}
+
+function renderPreviewTaskItem(task, options = {}) {
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "";
+  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
+  const meta = [task.study || "Study 미정", task.site ? getStandardSiteName(task.site) : "Site 미정"]
+    .filter(Boolean)
+    .join(" · ");
+
+  return `
+    <button type="button" class="preview-task" data-edit="${escapeAttr(task.id)}">
+      <span class="preview-task__title">${escapeHtml(task.task)}</span>
+      <span class="preview-task__meta">${escapeHtml(meta)}</span>
+      ${options.showDue ? `<span class="preview-task__due ${dueClass}">${escapeHtml(dueLabel)}</span>` : ""}
+    </button>
+  `;
+}
+
+function bindPreviewTaskClicks(container) {
+  container?.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => openEditModal(btn.dataset.edit));
+  });
+}
+
+function getInboxTasks() {
+  return tasks.filter(isInboxTask).sort((a, b) => {
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    return bTime - aTime;
+  });
+}
+
+function renderInboxList() {
+  if (!els.inboxTaskList) return;
+  updateInboxBadge();
+  const inboxTasks = getInboxTasks();
+
+  if (!inboxTasks.length) {
+    els.inboxTaskList.innerHTML =
+      '<p class="task-card-list__empty">Inbox가 비어 있습니다. Quick Add로 업무를 캡처하세요.</p>';
+    return;
+  }
+
+  els.inboxTaskList.innerHTML = inboxTasks
+    .map((task) =>
+      renderTaskCard({
+        task,
+        isSubtask: false,
+      })
+    )
+    .join("");
+
+  bindTaskListActions(els.inboxTaskList);
+  bindStatusDropdowns(els.inboxTaskList);
+}
+
+function getWeekRangeWithOffset(offset = 0) {
+  const { start, end } = getWeekRange();
+  if (offset) {
+    start.setDate(start.getDate() + offset * 7);
+    end.setDate(end.getDate() + offset * 7);
+  }
+  return { start, end };
+}
+
+function renderCalendarView() {
+  if (!els.calendarWeekGrid) return;
+
+  const { start, end } = getWeekRangeWithOffset(calendarWeekOffset);
+  const todayStr = toDateString(getToday());
+  const dayLabels = ["월", "화", "수", "목", "금", "토", "일"];
+
+  if (els.calendarWeekLabel) {
+    const labelStart = `${start.getMonth() + 1}/${start.getDate()}`;
+    const labelEnd = `${end.getMonth() + 1}/${end.getDate()}`;
+    els.calendarWeekLabel.textContent =
+      calendarWeekOffset === 0 ? "이번 주" : `${labelStart} – ${labelEnd}`;
+  }
+
+  const columns = [];
+  for (let i = 0; i < 7; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    const dateStr = toDateString(day);
+    const dayTasks = tasks
+      .filter((t) => !isInboxTask(t) && t.dueDate === dateStr)
+      .sort(compareTasks);
+
+    columns.push(`
+      <div class="calendar-day${dateStr === todayStr ? " calendar-day--today" : ""}">
+        <header class="calendar-day__header">
+          <span class="calendar-day__name">${dayLabels[i]}</span>
+          <span class="calendar-day__date">${day.getDate()}</span>
+        </header>
+        <div class="calendar-day__tasks">
+          ${
+            dayTasks.length
+              ? dayTasks
+                  .map((task) => {
+                    const synced = task.calendarSync?.eventId ? " calendar-task--synced" : "";
+                    return `
+                      <button type="button" class="calendar-task${synced}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(task.task)}">
+                        <span class="calendar-task__name">${escapeHtml(task.task)}</span>
+                        <span class="calendar-task__meta">${escapeHtml(task.study || "—")}</span>
+                        ${task.calendarSync?.eventId ? '<span class="calendar-task__sync" title="Google Calendar 연동">📅</span>' : ""}
+                      </button>
+                    `;
+                  })
+                  .join("")
+              : '<p class="calendar-day__empty">—</p>'
+          }
+        </div>
+      </div>
+    `);
+  }
+
+  els.calendarWeekGrid.innerHTML = columns.join("");
+  bindPreviewTaskClicks(els.calendarWeekGrid);
+}
+
+function bindTaskListActions(container) {
+  container?.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditModal(btn.dataset.edit);
+    });
+  });
+  container?.querySelectorAll("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteTask(btn.dataset.delete);
+    });
+  });
 }
 
 function populateStudySelect(selectEl, selectedValue = "") {
@@ -3903,8 +4195,14 @@ function isValidTask(item) {
     typeof item.site === "string" &&
     typeof item.task === "string" &&
     typeof item.dueDate === "string" &&
-    typeof item.status === "string"
+    typeof item.status === "string" &&
+    item.task.trim().length > 0
   );
+}
+
+function isInboxTask(task) {
+  if (!task) return false;
+  return !task.study?.trim() && !task.site?.trim() && !task.dueDate?.trim();
 }
 
 function normalizeTask(item) {
@@ -3954,6 +4252,10 @@ function normalizeTask(item) {
   const calendarSync = normalizeCalendarSync(item.calendarSync, item);
   if (calendarSync) {
     normalized.calendarSync = calendarSync;
+  }
+
+  if (item.inbox) {
+    normalized.inbox = true;
   }
 
   return normalized;
@@ -4092,6 +4394,7 @@ function getToday() {
 }
 
 function daysUntilDue(dueDateStr) {
+  if (!dueDateStr) return Infinity;
   const today = getToday();
   const due = parseDate(dueDateStr);
   return Math.round((due - today) / (1000 * 60 * 60 * 24));
@@ -4118,9 +4421,10 @@ const UiSettingsStore = {
       return {
         size,
         taskSiteInfoExpanded: Boolean(parsed.taskSiteInfoExpanded),
+        taskViewMode: parsed.taskViewMode === "list" ? "list" : "card",
       };
     } catch {
-      return { size: "normal", taskSiteInfoExpanded: false };
+      return { size: "normal", taskSiteInfoExpanded: false, taskViewMode: "card" };
     }
   },
 
@@ -4150,6 +4454,14 @@ const UiSettingsStore = {
 
   getScaleValue(size = this.getSize()) {
     return UI_SCALE_PRESETS[size] ?? 1;
+  },
+
+  getTaskViewMode() {
+    return this.load().taskViewMode === "list" ? "list" : "card";
+  },
+
+  setTaskViewMode(mode) {
+    this.save({ taskViewMode: mode === "list" ? "list" : "card" });
   },
 };
 
@@ -4476,6 +4788,7 @@ function handleGoogleDisconnect() {
 
 function getDueUrgency(dueDateStr, status) {
   if (status === "Completed" || status === "Cancelled") return "completed";
+  if (!dueDateStr) return "normal";
   const diff = daysUntilDue(dueDateStr);
   if (diff < 0) return "overdue";
   if (diff <= URGENT_DAYS) return "urgent";
@@ -4957,33 +5270,43 @@ async function initMobileAccessBanner() {
 function handleAddTask(e) {
   e.preventDefault();
   const form = new FormData(els.taskForm);
-  const study = form.get("study")?.trim();
-  const site = form.get("site")?.trim();
-  if (!validateStudySiteSelection(study, site)) return;
+  const study = form.get("study")?.trim() || "";
+  const site = form.get("site")?.trim() || "";
+  const taskName = form.get("task")?.trim();
+  const dueDate = form.get("dueDate") || "";
 
-  const standardSite = getStandardSiteName(site);
-  const taskName = form.get("task").trim();
-  const dueDate = form.get("dueDate");
-  const priority = form.get("priority");
+  if (!taskName) {
+    alert("Task를 입력해 주세요.");
+    return;
+  }
+
+  if (study || site) {
+    if (!validateStudySiteSelection(study, site)) return;
+  }
 
   const newTask = {
     id: generateId(),
     study,
-    site: standardSite,
+    site: site ? getStandardSiteName(site) : "",
     task: taskName,
     dueDate,
     status: DEFAULT_STATUS,
-    priority,
+    priority: addTaskPresetPriority || "Medium",
     createdAt: new Date().toISOString(),
   };
 
+  if (!study && !site && !dueDate) {
+    newTask.inbox = true;
+  }
+
   TaskStore.add(newTask);
 
-  if (window.CalendarSyncManager) {
+  if (window.CalendarSyncManager && newTask.dueDate) {
     CalendarSyncManager.onTaskCreated(newTask.id);
   }
 
   els.taskForm.reset();
+  addTaskPresetPriority = "Medium";
   refreshTaskStudySiteSelects();
   updateSiteInfoDisplays();
   closeAddTaskModal();
@@ -5006,11 +5329,13 @@ function handleEditTask(e) {
 
   const editStudy = document.getElementById("editStudy").value.trim();
   const editSite = document.getElementById("editSite").value.trim();
-  if (!validateStudySiteSelection(editStudy, editSite, existing)) return;
+  if (editStudy || editSite) {
+    if (!validateStudySiteSelection(editStudy, editSite, existing)) return;
+  }
 
   const updatePayload = {
     study: editStudy,
-    site: getStandardSiteName(editSite),
+    site: editSite ? getStandardSiteName(editSite) : "",
     task: newTaskName,
     dueDate: newDueDate,
     status: newStatus,
@@ -5182,8 +5507,7 @@ function closeAllStatusDropdowns() {
   });
 }
 
-function bindStatusDropdowns() {
-  const container = els.taskCardList;
+function bindStatusDropdowns(container = els.taskCardList) {
   if (!container) return;
 
   container.querySelectorAll("[data-status-trigger]").forEach((btn) => {
@@ -5256,7 +5580,9 @@ function compareTasks(a, b) {
   const aCritical = a.priority === "Critical" ? 0 : 1;
   const bCritical = b.priority === "Critical" ? 0 : 1;
   if (aCritical !== bCritical) return aCritical - bCritical;
-  return parseDate(a.dueDate) - parseDate(b.dueDate);
+  const aDue = a.dueDate ? parseDate(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const bDue = b.dueDate ? parseDate(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  return aDue - bDue;
 }
 function getWeekRange() {
   const today = getToday();
@@ -5380,7 +5706,7 @@ function getFilteredTasks() {
   const statusFilter = els.filterStatus.value;
   const search = els.searchInput.value.trim().toLowerCase();
 
-  let filtered = [...tasks];
+  let filtered = tasks.filter((t) => !isInboxTask(t));
 
   if (studyFilter !== "all") {
     filtered = filtered.filter((t) => t.study === studyFilter);
@@ -5517,6 +5843,7 @@ function renderTaskList() {
   const filtered = getFilteredTasks();
   updateTasksHomeHeader(filtered.length);
   updateQuickFilterUi();
+  updateInboxBadge();
 
   filtered.sort(compareTasks);
   const expanded = expandFilteredWithHierarchy(filtered);
@@ -5525,33 +5852,37 @@ function renderTaskList() {
   if (!els.taskCardList) return;
 
   if (hierarchicalRows.length === 0) {
-    els.taskCardList.innerHTML =
-      '<p class="task-card-list__empty">표시할 업무가 없습니다. + 버튼으로 업무를 추가하세요.</p>';
+    const emptyHtml =
+      '<p class="task-card-list__empty">표시할 업무가 없습니다. Quick Add 또는 + 버튼으로 추가하세요.</p>';
+    els.taskCardList.innerHTML = emptyHtml;
+    if (els.taskTableBody) els.taskTableBody.innerHTML = "";
     return;
   }
 
+  if (taskViewMode === "list" && els.taskTableWrap && els.taskTableBody) {
+    els.taskCardList.hidden = true;
+    els.taskTableWrap.hidden = false;
+    els.taskTableBody.innerHTML = hierarchicalRows.map(renderTableRow).join("");
+    bindTaskListActions(els.taskTableWrap);
+    bindStatusDropdowns(els.taskTableWrap);
+    return;
+  }
+
+  if (els.taskTableWrap) els.taskTableWrap.hidden = true;
+  els.taskCardList.hidden = false;
   els.taskCardList.innerHTML = hierarchicalRows.map(renderTaskCard).join("");
-  els.taskCardList.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openEditModal(btn.dataset.edit);
-    });
-  });
-  els.taskCardList.querySelectorAll("[data-delete]").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      deleteTask(btn.dataset.delete);
-    });
-  });
-  bindStatusDropdowns();
+  bindTaskListActions(els.taskCardList);
+  bindStatusDropdowns(els.taskCardList);
 }
 
 function renderTaskCard({ task, isSubtask }) {
-  const urgency = getDueUrgency(task.dueDate, task.status);
-  const dueClass = getDueDateDisplayClass(task.dueDate, task.status);
-  const dueLabel = formatDueLabel(task.dueDate);
+  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
+  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
   const urgencyClass =
     urgency === "overdue" ? "task-card--overdue" : urgency === "urgent" ? "task-card--urgent" : "";
+  const studyLabel = task.study?.trim() || "Study 미정";
+  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
 
   return `
     <article class="task-card ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}" data-task-id="${escapeAttr(task.id)}">
@@ -5561,7 +5892,7 @@ function renderTaskCard({ task, isSubtask }) {
       </div>
       <button type="button" class="task-card__body" data-edit="${escapeAttr(task.id)}">
         <h3 class="task-card__title">${escapeHtml(task.task)}</h3>
-        <p class="task-card__meta">${escapeHtml(task.study)} · ${escapeHtml(getStandardSiteName(task.site))}</p>
+        <p class="task-card__meta">${escapeHtml(studyLabel)} · ${escapeHtml(siteLabel)}</p>
       </button>
       <div class="task-card__row task-card__row--bottom">
         <span class="task-card__due ${dueClass}">${escapeHtml(dueLabel)}</span>
@@ -5576,7 +5907,7 @@ function renderTable() {
 }
 
 function renderTableRow({ task, isSubtask, isLastSubtask }) {
-  const urgency = getDueUrgency(task.dueDate, task.status);
+  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "normal";
   const rowClass = [
     urgency === "overdue" ? "row--overdue" : urgency === "urgent" ? "row--urgent" : "",
     isSubtask ? "row--subtask" : "row--parent",
@@ -5584,33 +5915,24 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const dueClass = getDueDateDisplayClass(task.dueDate, task.status);
-  const dueLabel = formatDueLabel(task.dueDate);
-  const treePrefix = isSubtask
-    ? `<span class="subtask-tree">${isLastSubtask ? "└─" : "├─"}</span>`
-    : "";
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
+  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
+  const studyLabel = task.study?.trim() || "—";
+  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
 
   return `
-    <tr class="${rowClass}">
-      <td>${escapeHtml(task.study)}</td>
-      <td>${escapeHtml(getStandardSiteName(task.site))}</td>
+    <tr class="${rowClass}" data-task-id="${escapeAttr(task.id)}">
+      <td class="task-list-check" aria-hidden="true">○</td>
       <td>
-        <div class="task-cell ${isSubtask ? "task-cell--subtask" : "task-cell--parent"}">
-          ${treePrefix}
-          <div class="task-cell__content">
-            <span class="task-cell__name">${escapeHtml(task.task)}</span>
-            ${renderTaskBadges(task)}
-            ${renderSourceVisitHtml(task)}
-          </div>
-        </div>
+        <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
       </td>
-      <td><span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span></td>
+      <td>${escapeHtml(studyLabel)}</td>
+      <td>${escapeHtml(siteLabel)}</td>
       <td><span class="${dueClass}">${escapeHtml(dueLabel)}</span></td>
+      <td><span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span></td>
       <td class="status-cell">${renderInlineStatusDropdown(task)}</td>
       <td class="actions-cell">
-        <button type="button" class="btn btn--calendar" data-google-calendar="${task.id}">📅 Google Calendar 추가</button>
-        <button type="button" class="btn btn--edit" data-edit="${task.id}">수정</button>
-        <button type="button" class="btn btn--danger" data-delete="${task.id}">삭제</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-delete="${escapeAttr(task.id)}">삭제</button>
       </td>
     </tr>
   `;
@@ -5618,9 +5940,13 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
 
 function renderAll() {
   renderDashboard();
+  renderTodayWorkspace();
   updateStudyFilterOptions();
   refreshTaskStudySiteSelects();
   renderTaskList();
+  updateInboxBadge();
+  if (els.viewInbox && !els.viewInbox.hidden) renderInboxList();
+  if (els.viewCalendar && !els.viewCalendar.hidden) renderCalendarView();
 }
 
 function escapeHtml(str) {
