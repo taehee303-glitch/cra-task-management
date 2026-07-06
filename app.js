@@ -117,16 +117,26 @@ const WORKFLOW_VISIT_RULES = [
   },
 ];
 let tasks = [];
-let dashboardCardFilter = null;
+let taskQuickFilter = "today";
 let toastHideTimer = null;
 let toastRemoveTimer = null;
 
-const DASHBOARD_FILTER_LABELS = {
-  all: "전체 업무",
-  completed: "완료된 업무",
-  overdue: "지연 업무",
-  week: "이번 주 마감",
+const TASK_QUICK_FILTER_LABELS = {
+  today: "오늘",
+  d1: "D-1",
+  overdue: "지연",
+  week: "이번 주",
+  all: "전체",
+  completed: "완료",
 };
+
+const VISIT_TASK_PRESETS = {
+  mv: { task: "Monitoring Visit", priority: "High", title: "MV 방문" },
+  siv: { task: "Site Initiation Visit", priority: "High", title: "SIV" },
+  cov: { task: "Close-out Visit", priority: "High", title: "COV" },
+};
+
+const MASTER_VIEWS = ["study-master", "site-master", "system-master"];
 const els = {
   todayLabel: document.getElementById("todayLabel"),
   statTotal: document.getElementById("statTotal"),
@@ -141,9 +151,24 @@ const els = {
   site: document.getElementById("site"),
   resetFormBtn: document.getElementById("resetFormBtn"),
   viewTasks: document.getElementById("viewTasks"),
+  viewDashboard: document.getElementById("viewDashboard"),
   viewStudyMaster: document.getElementById("viewStudyMaster"),
   viewSystemMaster: document.getElementById("viewSystemMaster"),
+  viewSiteMaster: document.getElementById("viewSiteMaster"),
   navButtons: document.querySelectorAll("[data-view]"),
+  taskCardList: document.getElementById("taskCardList"),
+  taskQuickFilterBtns: document.querySelectorAll("[data-quick-filter]"),
+  tasksHomeSubtitle: document.getElementById("tasksHomeSubtitle"),
+  tasksHomeCount: document.getElementById("tasksHomeCount"),
+  addTaskModal: document.getElementById("addTaskModal"),
+  closeAddTaskModalBtn: document.getElementById("closeAddTaskModalBtn"),
+  addTaskModalTitle: document.getElementById("addTaskModalTitle"),
+  masterSheet: document.getElementById("masterSheet"),
+  masterMenuBtn: document.getElementById("masterMenuBtn"),
+  masterMenuDropdown: document.getElementById("masterMenuDropdown"),
+  fabToggleBtn: document.getElementById("fabToggleBtn"),
+  fabMenu: document.getElementById("fabMenu"),
+  fabRoot: document.getElementById("fabRoot"),
   studyMasterList: document.getElementById("studyMasterList"),
   studyMasterEmpty: document.getElementById("studyMasterEmpty"),
   studyMasterForm: document.getElementById("studyMasterForm"),
@@ -184,7 +209,6 @@ const els = {
   editSiteInfoPanel: document.getElementById("editSiteInfoPanel"),
   editSiteInfoContent: document.getElementById("editSiteInfoContent"),
   editSiteInfoToggleBtn: document.getElementById("editSiteInfoToggleBtn"),
-  viewSiteMaster: document.getElementById("viewSiteMaster"),
   siteMasterList: document.getElementById("siteMasterList"),
   siteMasterSearch: document.getElementById("siteMasterSearch"),
   siteMasterEmpty: document.getElementById("siteMasterEmpty"),
@@ -198,7 +222,7 @@ const els = {
   siteSystemForm: document.getElementById("siteSystemForm"),
   closeSiteSystemModalBtn: document.getElementById("closeSiteSystemModalBtn"),
   cancelSiteSystemBtn: document.getElementById("cancelSiteSystemBtn"),
-  taskTableBody: document.getElementById("taskTableBody"),
+  taskTableBody: document.getElementById("taskCardList"),
   filterStudy: document.getElementById("filterStudy"),
   filterStatus: document.getElementById("filterStatus"),
   searchInput: document.getElementById("searchInput"),
@@ -232,11 +256,6 @@ const els = {
   uiScaleSelect: document.getElementById("uiScaleSelect"),
   taskListSection: document.getElementById("taskListSection"),
   dashboardFilterCards: document.querySelectorAll("[data-dashboard-filter]"),
-  dashboardFilterBar: document.getElementById("dashboardFilterBar"),
-  dashboardFilterLabel: document.getElementById("dashboardFilterLabel"),
-  dashboardFilterCount: document.getElementById("dashboardFilterCount"),
-  dashboardFilterChip: document.getElementById("dashboardFilterChip"),
-  clearDashboardFilterBtn: document.getElementById("clearDashboardFilterBtn"),
   toastContainer: document.getElementById("toastContainer"),
   cloudSyncStatus: document.getElementById("cloudSyncStatus"),
   cloudSignInBtn: document.getElementById("cloudSignInBtn"),
@@ -505,7 +524,48 @@ async function bootstrapApp() {
   document.getElementById("editSite").addEventListener("change", updateEditSiteInfoDisplay);
   els.editSiteInfoToggleBtn.addEventListener("click", toggleEditSiteInfo);
   els.navButtons.forEach((btn) => {
-    btn.addEventListener("click", () => switchView(btn.dataset.view));
+    btn.addEventListener("click", () => {
+      closeMasterSheet();
+      closeMasterMenuDropdown();
+      switchView(btn.dataset.view);
+    });
+  });
+  document.querySelectorAll("[data-nav-action]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handleNavAction(btn.dataset.navAction);
+    });
+  });
+  els.masterMenuBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!els.masterMenuDropdown) return;
+    const willOpen = els.masterMenuDropdown.hidden;
+    els.masterMenuDropdown.hidden = !willOpen;
+    els.masterMenuBtn.setAttribute("aria-expanded", String(willOpen));
+  });
+  els.masterSheet?.addEventListener("click", (event) => {
+    if (event.target === els.masterSheet) closeMasterSheet();
+  });
+  els.fabToggleBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleFabMenu();
+  });
+  document.querySelectorAll("[data-fab-action]").forEach((btn) => {
+    btn.addEventListener("click", () => handleFabAction(btn.dataset.fabAction));
+  });
+  els.fabMenu?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  document.addEventListener("click", () => {
+    closeFabMenu();
+    closeMasterMenuDropdown();
+  });
+  els.taskQuickFilterBtns.forEach((btn) => {
+    btn.addEventListener("click", () => handleQuickFilterClick(btn.dataset.quickFilter));
+  });
+  els.closeAddTaskModalBtn?.addEventListener("click", closeAddTaskModal);
+  els.addTaskModal?.addEventListener("click", (event) => {
+    if (event.target === els.addTaskModal) closeAddTaskModal();
   });
   els.newStudyBtn.addEventListener("click", () => openNewStudyForm());
   els.studyMasterForm.addEventListener("submit", handleStudyMasterSubmit);
@@ -554,14 +614,13 @@ async function bootstrapApp() {
   els.siteSystemModal.addEventListener("click", (e) => {
     if (e.target === els.siteSystemModal) closeSiteSystemModal();
   });
-  els.filterStudy.addEventListener("change", renderTable);
-  els.filterStatus.addEventListener("change", renderTable);
+  els.filterStudy.addEventListener("change", renderTaskList);
+  els.filterStatus.addEventListener("change", renderTaskList);
   document.addEventListener("click", closeAllStatusDropdowns);
   els.dashboardFilterCards.forEach((card) => {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
-  els.clearDashboardFilterBtn?.addEventListener("click", clearDashboardCardFilter);
-  els.searchInput.addEventListener("input", renderTable);
+  els.searchInput.addEventListener("input", renderTaskList);
   els.exportCsvBtn.addEventListener("click", exportTasksToCsv);
   els.importCsvBtn.addEventListener("click", () => els.importCsvInput.click());
   els.importCsvInput.addEventListener("change", handleCsvImport);
@@ -2163,24 +2222,127 @@ function migrateMasterStructureV2() {
 
 function switchView(viewName) {
   els.viewTasks.hidden = viewName !== "tasks";
+  els.viewDashboard.hidden = viewName !== "dashboard";
   els.viewStudyMaster.hidden = viewName !== "study-master";
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
-  els.navButtons.forEach((btn) => {
-    const isActive = btn.dataset.view === viewName;
-    btn.classList.toggle("app-nav__btn--active", btn.classList.contains("app-nav__btn") && isActive);
-    btn.classList.toggle("bottom-nav__btn--active", btn.classList.contains("bottom-nav__btn") && isActive);
-    if (isActive) {
-      btn.setAttribute("aria-current", "page");
-    } else {
-      btn.removeAttribute("aria-current");
-    }
-  });
+
+  closeFabMenu();
+  closeMasterSheet();
+  closeMasterMenuDropdown();
+  updateNavHighlight(viewName);
+
   if (viewName === "study-master") renderStudyMaster();
   if (viewName === "system-master") renderSystemMaster();
   if (viewName === "site-master") renderSiteMaster();
+  if (viewName === "dashboard") renderDashboard();
   if (viewName === "tasks") refreshTaskStudySiteSelects();
+  if (els.fabRoot) els.fabRoot.hidden = viewName !== "tasks";
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function updateNavHighlight(viewName) {
+  const isMaster = MASTER_VIEWS.includes(viewName);
+
+  document.querySelectorAll(".app-nav__btn[data-view], .bottom-nav__btn[data-view]").forEach((btn) => {
+    const isActive = btn.dataset.view === viewName;
+    btn.classList.toggle("app-nav__btn--active", btn.classList.contains("app-nav__btn") && isActive);
+    btn.classList.toggle("bottom-nav__btn--active", btn.classList.contains("bottom-nav__btn") && isActive);
+    if (isActive) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
+  });
+
+  document.querySelectorAll('[data-nav-action="master-menu"]').forEach((btn) => {
+    btn.classList.toggle("app-nav__btn--active", btn.classList.contains("app-nav__btn") && isMaster);
+    btn.classList.toggle("bottom-nav__btn--active", btn.classList.contains("bottom-nav__btn") && isMaster);
+    if (isMaster) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
+  });
+
+  document.querySelectorAll(".app-nav__dropdown-item").forEach((btn) => {
+    btn.classList.toggle("app-nav__dropdown-item--active", btn.dataset.view === viewName);
+  });
+}
+
+function openMasterSheet() {
+  if (!els.masterSheet) return;
+  els.masterSheet.hidden = false;
+}
+
+function closeMasterSheet() {
+  if (!els.masterSheet) return;
+  els.masterSheet.hidden = true;
+}
+
+function closeMasterMenuDropdown() {
+  if (!els.masterMenuDropdown || !els.masterMenuBtn) return;
+  els.masterMenuDropdown.hidden = true;
+  els.masterMenuBtn.setAttribute("aria-expanded", "false");
+}
+
+function toggleFabMenu() {
+  if (!els.fabMenu || !els.fabToggleBtn) return;
+  const willOpen = els.fabMenu.hidden;
+  els.fabMenu.hidden = !willOpen;
+  els.fabToggleBtn.setAttribute("aria-expanded", String(willOpen));
+  els.fabToggleBtn.classList.toggle("fab--open", willOpen);
+}
+
+function closeFabMenu() {
+  if (!els.fabMenu || !els.fabToggleBtn) return;
+  els.fabMenu.hidden = true;
+  els.fabToggleBtn.setAttribute("aria-expanded", "false");
+  els.fabToggleBtn.classList.remove("fab--open");
+}
+
+function openAddTaskModal(presetKey = null) {
+  closeFabMenu();
+  const preset = presetKey ? VISIT_TASK_PRESETS[presetKey] : null;
+  if (els.addTaskModalTitle) {
+    els.addTaskModalTitle.textContent = preset?.title || "새 업무";
+  }
+  els.taskForm.reset();
+  if (preset) {
+    els.task.value = preset.task;
+    els.priority.value = preset.priority;
+  }
+  els.dueDate.value = toDateString(getToday());
+  refreshTaskStudySiteSelects();
+  updateSiteInfoDisplays();
+  if (els.addTaskModal) els.addTaskModal.hidden = false;
+}
+
+function closeAddTaskModal() {
+  if (!els.addTaskModal) return;
+  els.addTaskModal.hidden = true;
+  closeFabMenu();
+}
+
+function handleNavAction(action) {
+  if (action === "settings") openSettingsModal();
+  if (action === "master-menu") openMasterSheet();
+  if (action === "close-master") closeMasterSheet();
+}
+
+function handleFabAction(action) {
+  if (action === "task") {
+    openAddTaskModal();
+    return;
+  }
+  if (VISIT_TASK_PRESETS[action]) {
+    openAddTaskModal(action);
+  }
+}
+
+function handleQuickFilterClick(filter) {
+  if (!filter) return;
+  const wasActive = taskQuickFilter === filter;
+  taskQuickFilter = wasActive ? null : filter;
+  updateQuickFilterUi();
+  renderTaskList();
+  if (taskQuickFilter) {
+    showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter]} · ${getFilteredTasks().length}건`);
+  }
 }
 
 function populateStudySelect(selectEl, selectedValue = "") {
@@ -4824,6 +4986,7 @@ function handleAddTask(e) {
   els.taskForm.reset();
   refreshTaskStudySiteSelects();
   updateSiteInfoDisplays();
+  closeAddTaskModal();
   renderAll();
 }
 
@@ -5020,7 +5183,10 @@ function closeAllStatusDropdowns() {
 }
 
 function bindStatusDropdowns() {
-  els.taskTableBody.querySelectorAll("[data-status-trigger]").forEach((btn) => {
+  const container = els.taskCardList;
+  if (!container) return;
+
+  container.querySelectorAll("[data-status-trigger]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = btn.closest(".status-dropdown")?.querySelector(".status-dropdown__menu");
@@ -5035,7 +5201,7 @@ function bindStatusDropdowns() {
     });
   });
 
-  els.taskTableBody.querySelectorAll("[data-status-option]").forEach((btn) => {
+  container.querySelectorAll("[data-status-option]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       applyTaskStatusChange(btn.dataset.taskId, btn.dataset.status);
@@ -5123,58 +5289,62 @@ function getDashboardStats() {
   return { total, completed, overdue, weekDue, completionRate };
 }
 
-function matchesDashboardCardFilter(task) {
-  if (!dashboardCardFilter || dashboardCardFilter === "all") return true;
+function matchesTaskQuickFilter(task) {
+  if (!taskQuickFilter) {
+    return isActive(task);
+  }
 
-  if (dashboardCardFilter === "completed") {
+  if (taskQuickFilter === "all") return true;
+
+  if (taskQuickFilter === "today") {
+    return isActive(task) && task.dueDate === toDateString(getToday());
+  }
+
+  if (taskQuickFilter === "d1") {
+    return isActive(task) && daysUntilDue(task.dueDate) === 1;
+  }
+
+  if (taskQuickFilter === "completed") {
     return task.status === "Completed";
   }
 
-  if (dashboardCardFilter === "overdue") {
+  if (taskQuickFilter === "overdue") {
     return isActive(task) && daysUntilDue(task.dueDate) < 0;
   }
 
-  if (dashboardCardFilter === "week") {
+  if (taskQuickFilter === "week") {
     return isActive(task) && isDueThisWeek(task.dueDate);
   }
 
   return true;
 }
 
+function updateQuickFilterUi() {
+  els.taskQuickFilterBtns.forEach((btn) => {
+    const isActive = taskQuickFilter === btn.dataset.quickFilter;
+    btn.classList.toggle("quick-filter__btn--active", isActive);
+    btn.setAttribute("aria-selected", String(isActive));
+  });
+
+  if (els.tasksHomeSubtitle) {
+    els.tasksHomeSubtitle.textContent = taskQuickFilter
+      ? TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "My Tasks"
+      : "진행 중인 업무";
+  }
+}
+
+function updateTasksHomeHeader(count) {
+  if (!els.tasksHomeCount) return;
+  els.tasksHomeCount.hidden = false;
+  els.tasksHomeCount.textContent = `${count}건`;
+}
+
 function updateDashboardCardFilterUi() {
   els.dashboardFilterCards.forEach((card) => {
-    const isActive = dashboardCardFilter === card.dataset.dashboardFilter;
+    const isActive = taskQuickFilter === card.dataset.dashboardFilter;
     card.classList.toggle("stat-card--active", isActive);
     card.setAttribute("aria-pressed", String(isActive));
   });
-
-  if (els.dashboardFilterChip) {
-    els.dashboardFilterChip.className = `dashboard-filter-bar__chip dashboard-filter-bar__chip--${dashboardCardFilter || "none"}`;
-  }
-}
-
-function updateDashboardFilterBar(filteredCount) {
-  if (!els.dashboardFilterBar) return;
-
-  if (!dashboardCardFilter) {
-    els.dashboardFilterBar.hidden = true;
-    return;
-  }
-
-  els.dashboardFilterBar.hidden = false;
-  if (els.dashboardFilterLabel) {
-    els.dashboardFilterLabel.textContent = DASHBOARD_FILTER_LABELS[dashboardCardFilter] || dashboardCardFilter;
-  }
-  if (els.dashboardFilterCount) {
-    els.dashboardFilterCount.textContent = `${filteredCount}건 표시`;
-  }
-}
-
-function clearDashboardCardFilter() {
-  if (!dashboardCardFilter) return;
-  dashboardCardFilter = null;
-  updateDashboardCardFilterUi();
-  renderTable();
 }
 
 function showToast(message) {
@@ -5197,18 +5367,12 @@ function showToast(message) {
 function handleDashboardCardFilterClick(filter) {
   if (!filter) return;
 
-  const wasActive = dashboardCardFilter === filter;
-  dashboardCardFilter = wasActive ? null : filter;
+  taskQuickFilter = filter;
+  updateQuickFilterUi();
   updateDashboardCardFilterUi();
-  renderTable();
-  scrollToTaskList();
-
-  if (dashboardCardFilter) {
-    const count = getFilteredTasks().length;
-    showToast(`${DASHBOARD_FILTER_LABELS[dashboardCardFilter]} 필터 적용 (${count}건)`);
-  } else if (wasActive) {
-    showToast("필터가 해제되었습니다.");
-  }
+  switchView("tasks");
+  renderTaskList();
+  showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter] || filter} · ${getFilteredTasks().length}건`);
 }
 
 function getFilteredTasks() {
@@ -5238,8 +5402,10 @@ function getFilteredTasks() {
     });
   }
 
-  if (dashboardCardFilter) {
-    filtered = filtered.filter(matchesDashboardCardFilter);
+  if (taskQuickFilter) {
+    filtered = filtered.filter(matchesTaskQuickFilter);
+  } else {
+    filtered = filtered.filter(isActive);
   }
 
   return filtered;
@@ -5347,34 +5513,66 @@ function updateStudyFilterOptions() {
   }
 }
 
-function renderTable() {
+function renderTaskList() {
   const filtered = getFilteredTasks();
-  updateDashboardFilterBar(filtered.length);
+  updateTasksHomeHeader(filtered.length);
+  updateQuickFilterUi();
 
   filtered.sort(compareTasks);
   const expanded = expandFilteredWithHierarchy(filtered);
   const hierarchicalRows = buildHierarchicalRows(expanded);
 
+  if (!els.taskCardList) return;
+
   if (hierarchicalRows.length === 0) {
-    els.taskTableBody.innerHTML = `
-      <tr class="empty-row">
-        <td colspan="7">표시할 업무가 없습니다.</td>
-      </tr>
-    `;
+    els.taskCardList.innerHTML =
+      '<p class="task-card-list__empty">표시할 업무가 없습니다. + 버튼으로 업무를 추가하세요.</p>';
     return;
   }
 
-  els.taskTableBody.innerHTML = hierarchicalRows.map(renderTableRow).join("");
-  els.taskTableBody.querySelectorAll("[data-google-calendar]").forEach((btn) => {
-    btn.addEventListener("click", () => openGoogleCalendarForTask(btn.dataset.googleCalendar));
+  els.taskCardList.innerHTML = hierarchicalRows.map(renderTaskCard).join("");
+  els.taskCardList.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditModal(btn.dataset.edit);
+    });
   });
-  els.taskTableBody.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.addEventListener("click", () => openEditModal(btn.dataset.edit));
-  });
-  els.taskTableBody.querySelectorAll("[data-delete]").forEach((btn) => {
-    btn.addEventListener("click", () => deleteTask(btn.dataset.delete));
+  els.taskCardList.querySelectorAll("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteTask(btn.dataset.delete);
+    });
   });
   bindStatusDropdowns();
+}
+
+function renderTaskCard({ task, isSubtask }) {
+  const urgency = getDueUrgency(task.dueDate, task.status);
+  const dueClass = getDueDateDisplayClass(task.dueDate, task.status);
+  const dueLabel = formatDueLabel(task.dueDate);
+  const urgencyClass =
+    urgency === "overdue" ? "task-card--overdue" : urgency === "urgent" ? "task-card--urgent" : "";
+
+  return `
+    <article class="task-card ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}" data-task-id="${escapeAttr(task.id)}">
+      <div class="task-card__row task-card__row--top">
+        <span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>
+        <div class="task-card__status">${renderInlineStatusDropdown(task)}</div>
+      </div>
+      <button type="button" class="task-card__body" data-edit="${escapeAttr(task.id)}">
+        <h3 class="task-card__title">${escapeHtml(task.task)}</h3>
+        <p class="task-card__meta">${escapeHtml(task.study)} · ${escapeHtml(getStandardSiteName(task.site))}</p>
+      </button>
+      <div class="task-card__row task-card__row--bottom">
+        <span class="task-card__due ${dueClass}">${escapeHtml(dueLabel)}</span>
+        <button type="button" class="task-card__delete btn btn--ghost btn--sm" data-delete="${escapeAttr(task.id)}">삭제</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderTable() {
+  renderTaskList();
 }
 
 function renderTableRow({ task, isSubtask, isLastSubtask }) {
@@ -5422,7 +5620,7 @@ function renderAll() {
   renderDashboard();
   updateStudyFilterOptions();
   refreshTaskStudySiteSelects();
-  renderTable();
+  renderTaskList();
 }
 
 function escapeHtml(str) {

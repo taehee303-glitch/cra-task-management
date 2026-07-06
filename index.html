@@ -71,54 +71,89 @@
       <nav class="app-nav app-nav--header" aria-label="상단 메뉴">
         <button type="button" class="app-nav__btn app-nav__btn--active" data-view="tasks" aria-current="page">
           <span class="app-nav__icon" aria-hidden="true">📋</span>
-          <span class="app-nav__label">업무 관리</span>
+          <span class="app-nav__label">업무</span>
         </button>
-        <button type="button" class="app-nav__btn" data-view="study-master">
-          <span class="app-nav__icon" aria-hidden="true">📁</span>
-          <span class="app-nav__label">Study Master</span>
+        <div class="app-nav__group">
+          <button type="button" class="app-nav__btn" data-nav-action="master-menu" aria-haspopup="true" aria-expanded="false" id="masterMenuBtn">
+            <span class="app-nav__icon" aria-hidden="true">📁</span>
+            <span class="app-nav__label">Master</span>
+          </button>
+          <div class="app-nav__dropdown" id="masterMenuDropdown" hidden>
+            <button type="button" class="app-nav__dropdown-item" data-view="study-master">Study Master</button>
+            <button type="button" class="app-nav__dropdown-item" data-view="site-master">Site Master</button>
+            <button type="button" class="app-nav__dropdown-item" data-view="system-master">System Master</button>
+          </div>
+        </div>
+        <button type="button" class="app-nav__btn" data-view="dashboard">
+          <span class="app-nav__icon" aria-hidden="true">📊</span>
+          <span class="app-nav__label">Dashboard</span>
         </button>
-        <button type="button" class="app-nav__btn" data-view="system-master">
+        <button type="button" class="app-nav__btn" data-nav-action="settings">
           <span class="app-nav__icon" aria-hidden="true">⚙️</span>
-          <span class="app-nav__label">System Master</span>
-        </button>
-        <button type="button" class="app-nav__btn" data-view="site-master">
-          <span class="app-nav__icon" aria-hidden="true">🏥</span>
-          <span class="app-nav__label">Site Master</span>
+          <span class="app-nav__label">Settings</span>
         </button>
       </nav>
     </header>
 
     <main class="main">
-      <!-- Tasks View -->
+      <!-- Tasks View (Home) -->
       <div id="viewTasks" class="view-panel">
-        <section class="dashboard">
-          <h2 class="section-title">대시보드</h2>
-
-          <section class="quick-nav" aria-label="빠른 이동">
-            <div class="quick-nav__grid">
-              <button type="button" class="quick-nav__item" data-view="study-master">
-                <span class="quick-nav__icon" aria-hidden="true">📁</span>
-                <span class="quick-nav__text">
-                  <strong>Study Master</strong>
-                  <small>Study · Site 연결</small>
-                </span>
-              </button>
-              <button type="button" class="quick-nav__item" data-view="system-master">
-                <span class="quick-nav__icon" aria-hidden="true">⚙️</span>
-                <span class="quick-nav__text">
-                  <strong>System Master</strong>
-                  <small>시스템 정보 관리</small>
-                </span>
-              </button>
-              <button type="button" class="quick-nav__item" data-view="site-master">
-                <span class="quick-nav__icon" aria-hidden="true">🏥</span>
-                <span class="quick-nav__text">
-                  <strong>Site Master</strong>
-                  <small>Site · IRB 정보</small>
-                </span>
-              </button>
+        <section class="tasks-home" id="taskListSection">
+          <header class="tasks-home__header">
+            <div>
+              <h2 class="tasks-home__title">My Tasks</h2>
+              <p class="tasks-home__subtitle" id="tasksHomeSubtitle">오늘</p>
             </div>
-          </section>
+            <div class="tasks-home__tools">
+              <button type="button" class="btn btn--ghost btn--sm" id="exportCsvBtn">CSV</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="importCsvBtn">가져오기</button>
+              <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
+            </div>
+          </header>
+
+          <div class="quick-filter" role="tablist" aria-label="업무 빠른 필터">
+            <button type="button" class="quick-filter__btn quick-filter__btn--active" data-quick-filter="today" role="tab" aria-selected="true">오늘</button>
+            <button type="button" class="quick-filter__btn" data-quick-filter="d1" role="tab">D-1</button>
+            <button type="button" class="quick-filter__btn" data-quick-filter="overdue" role="tab">지연</button>
+            <button type="button" class="quick-filter__btn" data-quick-filter="week" role="tab">이번 주</button>
+            <button type="button" class="quick-filter__btn" data-quick-filter="all" role="tab">전체</button>
+          </div>
+
+          <div class="tasks-toolbar">
+            <select id="filterStudy" class="tasks-toolbar__select" aria-label="Study 필터">
+              <option value="all">전체 Study</option>
+            </select>
+            <select id="filterStatus" class="tasks-toolbar__select" aria-label="Status 필터">
+              <option value="all">Active</option>
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="On Hold">On Hold</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <input type="search" id="searchInput" class="tasks-toolbar__search" placeholder="검색..." aria-label="업무 검색" />
+          </div>
+
+          <p class="tasks-home__count" id="tasksHomeCount" hidden></p>
+
+          <div id="taskCardList" class="task-card-list" aria-live="polite"></div>
+        </section>
+
+        <div class="fab-root" id="fabRoot">
+          <div class="fab-menu" id="fabMenu" hidden>
+            <button type="button" class="fab-menu__item" data-fab-action="task"><span>📝</span> 새 업무</button>
+            <button type="button" class="fab-menu__item" data-fab-action="mv"><span>🏥</span> MV 방문</button>
+            <button type="button" class="fab-menu__item" data-fab-action="siv"><span>🚀</span> SIV</button>
+            <button type="button" class="fab-menu__item" data-fab-action="cov"><span>✅</span> COV</button>
+          </div>
+          <button type="button" class="fab" id="fabToggleBtn" aria-label="업무 추가" aria-expanded="false">+</button>
+        </div>
+      </div>
+
+      <!-- Dashboard View -->
+      <div id="viewDashboard" class="view-panel" hidden>
+        <section class="dashboard">
+          <h2 class="section-title">Dashboard</h2>
 
           <section class="attention-panel">
             <div class="attention-panel__header">
@@ -201,115 +236,6 @@
             <div class="progress-bar">
               <div class="progress-bar__fill" id="progressFill" style="width: 0%"></div>
             </div>
-          </div>
-        </section>
-
-        <section class="form-section">
-          <h2 class="section-title">업무 등록</h2>
-          <form id="taskForm" class="task-form">
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="study">Study</label>
-                <select id="study" name="study" required>
-                  <option value="">Study 선택</option>
-                </select>
-                <p class="form-hint">새로운 Study는 Study Master에서, 새로운 Site는 Site Master에서 관리하세요.</p>
-              </div>
-              <div class="form-group">
-                <label for="site">Site</label>
-                <select id="site" name="site" required disabled>
-                  <option value="">Site 선택</option>
-                </select>
-                <p class="form-hint" id="siteMasterHint" hidden>연결된 Site가 없습니다. Study Master에서 Site를 연결하세요.</p>
-              </div>
-              <div class="form-group form-group--wide task-site-info-toggle-wrap">
-                <button type="button" class="btn btn--ghost site-info-toggle" id="siteInfoToggleBtn" hidden aria-expanded="false">
-                  📋 Site 정보 보기
-                </button>
-              </div>
-              <div id="siteInfoPanel" class="site-info-panel form-group--wide" hidden>
-                <h4 class="site-info-panel__title">Site / IRB 정보</h4>
-                <dl class="site-info-panel__grid" id="siteInfoContent"></dl>
-              </div>
-              <div class="form-group form-group--wide">
-                <label for="task">Task</label>
-                <input type="text" id="task" name="task" placeholder="예: MV - Site 101 방문, SDV, EDC 쿼리 확인" required />
-              </div>
-              <div class="form-group">
-                <label for="dueDate">Due Date</label>
-                <input type="date" id="dueDate" name="dueDate" required />
-              </div>
-              <div class="form-group">
-                <label for="priority">Priority</label>
-                <select id="priority" name="priority" required>
-                  <option value="Critical">Critical</option>
-                  <option value="High">High</option>
-                  <option value="Medium" selected>Medium</option>
-                  <option value="Low">Low</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn--primary">업무 추가</button>
-              <button type="button" class="btn btn--ghost" id="resetFormBtn">초기화</button>
-            </div>
-          </form>
-        </section>
-
-        <section class="list-section" id="taskListSection">
-          <div class="list-header">
-            <h2 class="section-title">전체 업무 목록</h2>
-            <div class="list-header__actions">
-              <div class="csv-actions">
-                <button type="button" class="btn btn--ghost" id="exportCsvBtn">CSV 내보내기</button>
-                <button type="button" class="btn btn--ghost" id="importCsvBtn">CSV 가져오기</button>
-                <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
-              </div>
-              <div class="list-filters">
-                <select id="filterStudy">
-                  <option value="all">전체 Study</option>
-                </select>
-                <select id="filterStatus">
-                  <option value="all">전체 Status</option>
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-                <input type="text" id="searchInput" placeholder="Study, Site, Task 검색..." />
-              </div>
-            </div>
-          </div>
-          <div id="dashboardFilterBar" class="dashboard-filter-bar" hidden>
-            <div class="dashboard-filter-bar__content">
-              <span class="dashboard-filter-bar__label">현재 필터:</span>
-              <span class="dashboard-filter-bar__chip" id="dashboardFilterChip">
-                <span id="dashboardFilterLabel">지연 업무</span>
-                <button type="button" class="dashboard-filter-bar__clear" id="clearDashboardFilterBtn" aria-label="필터 해제">✕</button>
-              </span>
-              <span class="dashboard-filter-bar__count" id="dashboardFilterCount"></span>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="task-table">
-              <thead>
-                <tr>
-                  <th>Study</th>
-                  <th>Site</th>
-                  <th>Task</th>
-                  <th>Priority</th>
-                  <th>Due Date</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="taskTableBody">
-                <tr class="empty-row">
-                  <td colspan="7">등록된 업무가 없습니다. 위 폼에서 업무를 추가하세요.</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </section>
       </div>
@@ -685,19 +611,88 @@
         <span class="bottom-nav__icon" aria-hidden="true">📋</span>
         <span class="bottom-nav__label">업무</span>
       </button>
-      <button type="button" class="bottom-nav__btn" data-view="study-master">
+      <button type="button" class="bottom-nav__btn" data-nav-action="master-menu" aria-haspopup="dialog">
         <span class="bottom-nav__icon" aria-hidden="true">📁</span>
-        <span class="bottom-nav__label">Study</span>
+        <span class="bottom-nav__label">Master</span>
       </button>
-      <button type="button" class="bottom-nav__btn" data-view="system-master">
+      <button type="button" class="bottom-nav__btn" data-view="dashboard">
+        <span class="bottom-nav__icon" aria-hidden="true">📊</span>
+        <span class="bottom-nav__label">Dashboard</span>
+      </button>
+      <button type="button" class="bottom-nav__btn" data-nav-action="settings">
         <span class="bottom-nav__icon" aria-hidden="true">⚙️</span>
-        <span class="bottom-nav__label">System</span>
-      </button>
-      <button type="button" class="bottom-nav__btn" data-view="site-master">
-        <span class="bottom-nav__icon" aria-hidden="true">🏥</span>
-        <span class="bottom-nav__label">Site</span>
+        <span class="bottom-nav__label">Settings</span>
       </button>
     </nav>
+  </div>
+
+  <!-- Add Task Modal -->
+  <div class="modal-overlay" id="addTaskModal" hidden>
+    <div class="modal modal--sheet">
+      <div class="modal-header">
+        <h3 id="addTaskModalTitle">새 업무</h3>
+        <button type="button" class="modal-close" id="closeAddTaskModalBtn">&times;</button>
+      </div>
+      <form id="taskForm" class="task-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="study">Study</label>
+            <select id="study" name="study" required>
+              <option value="">Study 선택</option>
+            </select>
+            <p class="form-hint">Study/Site는 Master Data에서 관리합니다.</p>
+          </div>
+          <div class="form-group">
+            <label for="site">Site</label>
+            <select id="site" name="site" required disabled>
+              <option value="">Site 선택</option>
+            </select>
+            <p class="form-hint" id="siteMasterHint" hidden>연결된 Site가 없습니다.</p>
+          </div>
+          <div class="form-group form-group--wide task-site-info-toggle-wrap">
+            <button type="button" class="btn btn--ghost site-info-toggle" id="siteInfoToggleBtn" hidden aria-expanded="false">
+              📋 Site 정보 보기
+            </button>
+          </div>
+          <div id="siteInfoPanel" class="site-info-panel form-group--wide" hidden>
+            <h4 class="site-info-panel__title">Site / IRB 정보</h4>
+            <dl class="site-info-panel__grid" id="siteInfoContent"></dl>
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="task">Task</label>
+            <input type="text" id="task" name="task" placeholder="예: SDV, EDC 쿼리 확인" required />
+          </div>
+          <div class="form-group">
+            <label for="dueDate">Due Date</label>
+            <input type="date" id="dueDate" name="dueDate" required />
+          </div>
+          <div class="form-group">
+            <label for="priority">Priority</label>
+            <select id="priority" name="priority" required>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">업무 추가</button>
+          <button type="button" class="btn btn--ghost" id="resetFormBtn">초기화</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Master Data Sheet -->
+  <div class="modal-overlay modal-overlay--sheet" id="masterSheet" hidden>
+    <div class="action-sheet">
+      <h3 class="action-sheet__title">Master Data</h3>
+      <button type="button" class="action-sheet__item" data-view="study-master">📁 Study Master</button>
+      <button type="button" class="action-sheet__item" data-view="site-master">🏥 Site Master</button>
+      <button type="button" class="action-sheet__item" data-view="system-master">⚙️ System Master</button>
+      <button type="button" class="action-sheet__item action-sheet__item--cancel" data-nav-action="close-master">취소</button>
+    </div>
   </div>
 
   <!-- Edit Task Modal -->
