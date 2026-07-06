@@ -3246,7 +3246,92 @@ select:disabled {
     max(calc(20px * var(--ui-scale)), env(safe-area-inset-left));
 }
 
-/* Today workspace */
+/* Tasks workspace — filter + list inline */
+.tasks-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--ui-scale));
+  min-height: 0;
+}
+
+.tasks-workspace__sticky {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: #f8fafc;
+  padding-bottom: calc(8px * var(--ui-scale));
+  margin:
+    calc(-16px * var(--ui-scale))
+    calc(-20px * var(--ui-scale))
+    0;
+  padding:
+    calc(16px * var(--ui-scale))
+    max(calc(20px * var(--ui-scale)), env(safe-area-inset-right))
+    calc(8px * var(--ui-scale))
+    max(calc(20px * var(--ui-scale)), env(safe-area-inset-left));
+  border-bottom: 1px solid var(--border);
+}
+
+.tasks-workspace__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--ui-scale));
+  margin-top: calc(6px * var(--ui-scale));
+}
+
+.tasks-workspace__label {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8px * var(--ui-scale));
+  min-width: 0;
+}
+
+.tasks-workspace__filter {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.tasks-workspace__count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tasks-toolbar--compact {
+  margin-top: calc(4px * var(--ui-scale));
+  gap: calc(6px * var(--ui-scale));
+}
+
+.tasks-toolbar--compact .tasks-toolbar__search,
+.tasks-toolbar--compact .tasks-toolbar__select {
+  min-height: calc(34px * var(--ui-scale));
+  font-size: 0.85rem;
+}
+
+.task-card-list--inline {
+  padding-bottom: calc(16px * var(--ui-scale));
+  min-height: calc(120px * var(--ui-scale));
+}
+
+.task-table-wrap--inline {
+  margin-bottom: calc(8px * var(--ui-scale));
+}
+
+.tasks-workspace__secondary {
+  margin-top: calc(12px * var(--ui-scale));
+  padding-top: calc(12px * var(--ui-scale));
+  border-top: 1px solid var(--border);
+}
+
+.tasks-workspace__secondary .workspace-preview:first-child {
+  margin-top: 0;
+}
+
+/* Today workspace (legacy) */
 .today-workspace {
   margin-bottom: calc(16px * var(--ui-scale));
   padding-bottom: calc(14px * var(--ui-scale));
@@ -3257,7 +3342,7 @@ select:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: calc(6px * var(--ui-scale));
-  margin-bottom: calc(10px * var(--ui-scale));
+  margin-bottom: calc(8px * var(--ui-scale));
 }
 
 .task-filter__btn {
@@ -3299,7 +3384,7 @@ select:disabled {
 }
 
 .quick-add--compact {
-  margin-bottom: calc(10px * var(--ui-scale));
+  margin-bottom: calc(6px * var(--ui-scale));
 }
 
 .quick-add--compact .quick-add__input {

@@ -2420,7 +2420,16 @@ function handleQuickFilterClick(filter) {
   taskQuickFilter = filter;
   updateQuickFilterUi();
   renderTaskList();
+  scrollFilteredTasksIntoView();
   showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter]} · ${getFilteredTasks().length}건`);
+}
+
+function scrollFilteredTasksIntoView() {
+  const target = els.taskCardList?.hidden ? els.taskTableWrap : els.taskCardList;
+  if (!target) return;
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
 }
 
 function handleQuickAddInput(inputEl) {
@@ -5873,7 +5882,6 @@ function updateQuickFilterUi() {
 
 function updateTasksHomeHeader(count) {
   if (!els.tasksHomeCount) return;
-  els.tasksHomeCount.hidden = false;
   els.tasksHomeCount.textContent = `${count}건`;
 }
 
@@ -5910,6 +5918,7 @@ function handleDashboardCardFilterClick(filter) {
   updateDashboardCardFilterUi();
   switchView("tasks");
   renderTaskList();
+  scrollFilteredTasksIntoView();
   showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter] || filter} · ${getFilteredTasks().length}건`);
 }
 
@@ -5950,7 +5959,7 @@ function getFilteredTasks() {
 }
 
 function scrollToTaskList() {
-  els.taskListSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+  scrollFilteredTasksIntoView();
 }
 
 function renderDashboard() {

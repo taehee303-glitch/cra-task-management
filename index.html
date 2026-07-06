@@ -113,8 +113,9 @@
     <main class="main">
       <!-- Tasks View (Home / My Tasks) -->
       <div id="viewTasks" class="view-panel">
-        <section class="today-workspace">
-          <div class="task-filter" role="tablist" aria-label="업무 필터">
+        <section class="tasks-workspace" id="taskListSection">
+          <div class="tasks-workspace__sticky">
+            <div class="task-filter" role="tablist" aria-label="업무 필터">
             <button type="button" class="task-filter__btn" data-quick-filter="overdue" role="tab">
               🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
             </button>
@@ -140,55 +141,42 @@
               <input type="text" id="quickAddInput" class="quick-add__input" placeholder="예) CRC 전화, SDV 시작, Query 확인..." autocomplete="off" aria-label="빠른 업무 추가" />
               <button type="button" class="quick-add__btn" id="quickAddBtn" aria-label="Inbox에 추가">+</button>
             </div>
-          </div>
-
-          <section class="workspace-preview" id="openTasksSection">
-            <h3 class="workspace-preview__title">My Open Tasks</h3>
-            <div id="openTasksList" class="workspace-preview__list"></div>
-          </section>
-
-          <section class="workspace-preview" id="weekPreviewSection">
-            <h3 class="workspace-preview__title">이번 주 일정</h3>
-            <div id="weekPreviewList" class="workspace-preview__list workspace-preview__list--schedule"></div>
-          </section>
-        </section>
-
-        <section class="tasks-home" id="taskListSection">
-          <header class="tasks-home__header">
-            <div>
-              <h2 class="tasks-home__title">Task List</h2>
-              <p class="tasks-home__subtitle" id="tasksHomeSubtitle">Today</p>
             </div>
-            <div class="tasks-home__tools">
-              <div class="view-toggle" role="group" aria-label="보기 방식">
-                <button type="button" class="view-toggle__btn view-toggle__btn--active" id="taskViewCardBtn" data-view-mode="card" title="카드">▦</button>
-                <button type="button" class="view-toggle__btn" id="taskViewListBtn" data-view-mode="list" title="리스트">☰</button>
+
+            <header class="tasks-workspace__bar">
+              <div class="tasks-workspace__label">
+                <span class="tasks-workspace__filter" id="tasksHomeSubtitle">Today</span>
+                <span class="tasks-workspace__count" id="tasksHomeCount">0건</span>
               </div>
-              <button type="button" class="btn btn--ghost btn--sm" id="exportCsvBtn">CSV</button>
-              <button type="button" class="btn btn--ghost btn--sm" id="importCsvBtn">가져오기</button>
-              <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
-            </div>
-          </header>
+              <div class="tasks-home__tools">
+                <div class="view-toggle" role="group" aria-label="보기 방식">
+                  <button type="button" class="view-toggle__btn view-toggle__btn--active" id="taskViewCardBtn" data-view-mode="card" title="카드">▦</button>
+                  <button type="button" class="view-toggle__btn" id="taskViewListBtn" data-view-mode="list" title="리스트">☰</button>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm" id="exportCsvBtn">CSV</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="importCsvBtn">가져오기</button>
+                <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
+              </div>
+            </header>
 
-          <div class="tasks-toolbar">
-            <input type="search" id="searchInput" class="tasks-toolbar__search tasks-toolbar__search--wide" placeholder="검색..." aria-label="업무 검색" />
-            <select id="filterStudy" class="tasks-toolbar__select" aria-label="Study 필터">
-              <option value="all">전체 Study</option>
-            </select>
-            <select id="filterStatus" class="tasks-toolbar__select" aria-label="Status 필터">
-              <option value="all">Active</option>
-              <option value="Open">Open</option>
-              <option value="In Progress">In Progress</option>
-              <option value="On Hold">On Hold</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
+            <div class="tasks-toolbar tasks-toolbar--compact">
+              <input type="search" id="searchInput" class="tasks-toolbar__search tasks-toolbar__search--wide" placeholder="검색..." aria-label="업무 검색" />
+              <select id="filterStudy" class="tasks-toolbar__select" aria-label="Study 필터">
+                <option value="all">전체 Study</option>
+              </select>
+              <select id="filterStatus" class="tasks-toolbar__select" aria-label="Status 필터">
+                <option value="all">Active</option>
+                <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="On Hold">On Hold</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
           </div>
 
-          <p class="tasks-home__count" id="tasksHomeCount" hidden></p>
-
-          <div id="taskCardList" class="task-card-list" aria-live="polite"></div>
-          <div class="table-wrap task-table-wrap" id="taskTableWrap" hidden>
+          <div id="taskCardList" class="task-card-list task-card-list--inline" aria-live="polite"></div>
+          <div class="table-wrap task-table-wrap task-table-wrap--inline" id="taskTableWrap" hidden>
             <table class="task-table task-table--list">
               <thead>
                 <tr>
@@ -204,6 +192,18 @@
               </thead>
               <tbody id="taskTableBody"></tbody>
             </table>
+          </div>
+
+          <div class="tasks-workspace__secondary">
+            <section class="workspace-preview" id="openTasksSection">
+              <h3 class="workspace-preview__title">My Open Tasks</h3>
+              <div id="openTasksList" class="workspace-preview__list"></div>
+            </section>
+
+            <section class="workspace-preview" id="weekPreviewSection">
+              <h3 class="workspace-preview__title">이번 주 일정</h3>
+              <div id="weekPreviewList" class="workspace-preview__list workspace-preview__list--schedule"></div>
+            </section>
           </div>
         </section>
 
