@@ -317,14 +317,19 @@ const els = {
   calendarSyncStatus: document.getElementById("calendarSyncStatus"),
   calendarLastSync: document.getElementById("calendarLastSync"),
   calendarReconnectBtn: document.getElementById("calendarReconnectBtn"),
+  calendarDisconnectBtn: document.getElementById("calendarDisconnectBtn"),
   calendarSetupHint: document.getElementById("calendarSetupHint"),
-  reminderDueDateToggle: document.getElementById("reminderDueDateToggle"),
-  reminderD1Toggle: document.getElementById("reminderD1Toggle"),
+  reminderDueToggle: document.getElementById("reminderDueToggle"),
+  reminderOverdueToggle: document.getElementById("reminderOverdueToggle"),
   reminderPermissionStatus: document.getElementById("reminderPermissionStatus"),
   uiScaleSelect: document.getElementById("uiScaleSelect"),
   settingsImportBtn: document.getElementById("settingsImportBtn"),
   settingsExportBtn: document.getElementById("settingsExportBtn"),
+  settingsResetCacheBtn: document.getElementById("settingsResetCacheBtn"),
+  settingsFirebaseSyncStatus: document.getElementById("settingsFirebaseSyncStatus"),
+  settingsStorageUsage: document.getElementById("settingsStorageUsage"),
   settingsAppVersion: document.getElementById("settingsAppVersion"),
+  settingsAppBuild: document.getElementById("settingsAppBuild"),
   taskListSection: document.getElementById("taskListSection"),
   mobileDailyHome: document.getElementById("mobileDailyHome"),
   mobileTaskFeed: document.getElementById("mobileTaskFeed"),
@@ -778,11 +783,13 @@ async function bootstrapApp() {
   });
   els.calendarSyncToggle?.addEventListener("change", handleCalendarSyncToggleChange);
   els.calendarReconnectBtn?.addEventListener("click", handleCalendarReconnect);
-  els.reminderDueDateToggle?.addEventListener("change", handleReminderSettingsChange);
-  els.reminderD1Toggle?.addEventListener("change", handleReminderSettingsChange);
+  els.calendarDisconnectBtn?.addEventListener("click", handleCalendarDisconnect);
+  els.reminderDueToggle?.addEventListener("change", handleReminderSettingsChange);
+  els.reminderOverdueToggle?.addEventListener("change", handleReminderSettingsChange);
   els.uiScaleSelect?.addEventListener("change", handleUiScaleChange);
   els.settingsImportBtn?.addEventListener("click", () => els.importCsvInput?.click());
   els.settingsExportBtn?.addEventListener("click", exportTasksToCsv);
+  els.settingsResetCacheBtn?.addEventListener("click", handleResetLocalCache);
   els.settingsModal.addEventListener("click", (e) => {
     if (e.target === els.settingsModal) closeSettingsModal();
   });
@@ -5179,6 +5186,8 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.0.0";
+const APP_BUILD = "23";
+const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
   main: "Settings",
@@ -5262,7 +5271,8 @@ const ReminderSettingsStore = {
       const raw = localStorage.getItem(REMINDER_SETTINGS_KEY);
       if (!raw) {
         return {
-          dueDateReminder: true,
+          dueReminder: true,
+          overdueReminder: true,
           d1Reminder: true,
           permissionRequested: false,
           sentNotifications: {},
@@ -5271,9 +5281,13 @@ const ReminderSettingsStore = {
 
       const parsed = JSON.parse(raw);
       const legacyEnabled = parsed.enabled !== false;
+      const legacyDueDate =
+        parsed.dueDateReminder !== undefined ? Boolean(parsed.dueDateReminder) : legacyEnabled;
       return {
-        dueDateReminder:
-          parsed.dueDateReminder !== undefined ? Boolean(parsed.dueDateReminder) : legacyEnabled,
+        dueReminder:
+          parsed.dueReminder !== undefined ? Boolean(parsed.dueReminder) : legacyDueDate,
+        overdueReminder:
+          parsed.overdueReminder !== undefined ? Boolean(parsed.overdueReminder) : legacyDueDate,
         d1Reminder: parsed.d1Reminder !== undefined ? Boolean(parsed.d1Reminder) : legacyEnabled,
         permissionRequested: Boolean(parsed.permissionRequested),
         sentNotifications:
@@ -5283,7 +5297,8 @@ const ReminderSettingsStore = {
       };
     } catch {
       return {
-        dueDateReminder: true,
+        dueReminder: true,
+        overdueReminder: true,
         d1Reminder: true,
         permissionRequested: false,
         sentNotifications: {},
@@ -5296,8 +5311,12 @@ const ReminderSettingsStore = {
     notifyCloudSync("reminderSettings");
   },
 
-  isDueDateReminderEnabled() {
-    return this.load().dueDateReminder;
+  isDueReminderEnabled() {
+    return this.load().dueReminder;
+  },
+
+  isOverdueReminderEnabled() {
+    return this.load().overdueReminder;
   },
 
   isD1ReminderEnabled() {
@@ -5306,12 +5325,18 @@ const ReminderSettingsStore = {
 
   isAnyEnabled() {
     const settings = this.load();
-    return settings.dueDateReminder || settings.d1Reminder;
+    return settings.dueReminder || settings.overdueReminder || settings.d1Reminder;
   },
 
-  setDueDateReminder(enabled) {
+  setDueReminder(enabled) {
     const settings = this.load();
-    settings.dueDateReminder = enabled;
+    settings.dueReminder = enabled;
+    this.save(settings);
+  },
+
+  setOverdueReminder(enabled) {
+    const settings = this.load();
+    settings.overdueReminder = enabled;
     this.save(settings);
   },
 
@@ -5323,7 +5348,8 @@ const ReminderSettingsStore = {
 
   isReminderTypeEnabled(reminderType) {
     if (reminderType === "d-1") return this.isD1ReminderEnabled();
-    if (reminderType === "d-0" || reminderType === "overdue") return this.isDueDateReminderEnabled();
+    if (reminderType === "d-0") return this.isDueReminderEnabled();
+    if (reminderType === "overdue") return this.isOverdueReminderEnabled();
     return false;
   },
 
@@ -5496,11 +5522,20 @@ function formatSettingsDateTime(isoString) {
   if (!isoString) return "—";
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) return "—";
+
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+
+  if (isToday) return `Today ${hh}:${mm}`;
+
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
   return `${y}-${m}-${d} ${hh}:${mm}`;
 }
 
@@ -5529,9 +5564,6 @@ function openSettingsPanel(panel = "main") {
     }
   });
 
-  if (els.settingsModal) {
-    els.settingsModal.classList.toggle("settings-modal-overlay--detail", panel !== "main");
-  }
   if (els.settingsBackBtn) els.settingsBackBtn.hidden = panel === "main";
   if (els.settingsTitle) {
     els.settingsTitle.textContent = SETTINGS_PANEL_TITLES[panel] || SETTINGS_PANEL_TITLES.main;
@@ -5545,9 +5577,8 @@ function openSettingsPanel(panel = "main") {
   if (panel === "appearance" && els.uiScaleSelect) {
     els.uiScaleSelect.value = UiSettingsStore.getSize();
   }
-  if (panel === "about" && els.settingsAppVersion) {
-    els.settingsAppVersion.textContent = APP_VERSION;
-  }
+  if (panel === "data") updateDataSettingsUi();
+  if (panel === "about") updateAboutSettingsUi();
 }
 
 function updateCalendarSyncUi() {
@@ -5567,8 +5598,8 @@ function updateCalendarSyncUi() {
   if (els.calendarSyncStatus) {
     els.calendarSyncStatus.textContent = connected ? "Connected" : "Not Connected";
     els.calendarSyncStatus.className = connected
-      ? "settings-meta__value settings-meta__value--ok"
-      : "settings-meta__value";
+      ? "settings-meta-row__value settings-meta-row__value--ok"
+      : "settings-meta-row__value";
   }
 
   if (els.calendarLastSync) {
@@ -5577,6 +5608,10 @@ function updateCalendarSyncUi() {
 
   if (els.calendarReconnectBtn) {
     els.calendarReconnectBtn.hidden = connected || onFileProtocol || !configured;
+  }
+
+  if (els.calendarDisconnectBtn) {
+    els.calendarDisconnectBtn.hidden = !connected || onFileProtocol;
   }
 
   if (els.calendarSetupHint) {
@@ -5673,12 +5708,21 @@ async function handleCalendarReconnect() {
   }
 }
 
+async function handleCalendarDisconnect() {
+  if (!window.CalendarSyncManager) return;
+  if (!confirm("Google Calendar 연결을 해제할까요?")) return;
+
+  CalendarSyncManager.setCalendarSyncEnabled(false);
+  CalendarSyncManager.disconnect();
+  updateCalendarSyncUi();
+}
+
 function updateNotificationSettingsUi() {
-  if (els.reminderDueDateToggle) {
-    els.reminderDueDateToggle.checked = ReminderSettingsStore.isDueDateReminderEnabled();
+  if (els.reminderDueToggle) {
+    els.reminderDueToggle.checked = ReminderSettingsStore.isDueReminderEnabled();
   }
-  if (els.reminderD1Toggle) {
-    els.reminderD1Toggle.checked = ReminderSettingsStore.isD1ReminderEnabled();
+  if (els.reminderOverdueToggle) {
+    els.reminderOverdueToggle.checked = ReminderSettingsStore.isOverdueReminderEnabled();
   }
   if (els.reminderPermissionStatus) {
     els.reminderPermissionStatus.textContent = getReminderPermissionLabel();
@@ -5686,8 +5730,8 @@ function updateNotificationSettingsUi() {
 }
 
 async function handleReminderSettingsChange() {
-  ReminderSettingsStore.setDueDateReminder(Boolean(els.reminderDueDateToggle?.checked));
-  ReminderSettingsStore.setD1Reminder(Boolean(els.reminderD1Toggle?.checked));
+  ReminderSettingsStore.setDueReminder(Boolean(els.reminderDueToggle?.checked));
+  ReminderSettingsStore.setOverdueReminder(Boolean(els.reminderOverdueToggle?.checked));
 
   if (ReminderSettingsStore.isAnyEnabled()) {
     await requestReminderPermission();
@@ -5697,6 +5741,64 @@ async function handleReminderSettingsChange() {
   updateReminderStatusBadge();
   if (els.reminderPermissionStatus) {
     els.reminderPermissionStatus.textContent = getReminderPermissionLabel();
+  }
+}
+
+function estimateLocalStorageUsage() {
+  let bytes = 0;
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    const value = localStorage.getItem(key) || "";
+    bytes += (key.length + value.length) * 2;
+  }
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function updateDataSettingsUi() {
+  if (els.settingsFirebaseSyncStatus) {
+    if (!window.CloudSyncManager || !CloudSyncManager.isConfigured()) {
+      els.settingsFirebaseSyncStatus.textContent = "Not configured";
+      els.settingsFirebaseSyncStatus.className = "settings-meta-row__value";
+    } else if (CloudSyncManager.isSignedIn()) {
+      els.settingsFirebaseSyncStatus.textContent = "Connected";
+      els.settingsFirebaseSyncStatus.className =
+        "settings-meta-row__value settings-meta-row__value--ok";
+    } else {
+      els.settingsFirebaseSyncStatus.textContent = "Local only";
+      els.settingsFirebaseSyncStatus.className = "settings-meta-row__value";
+    }
+  }
+
+  if (els.settingsStorageUsage) {
+    els.settingsStorageUsage.textContent = estimateLocalStorageUsage();
+  }
+}
+
+function updateAboutSettingsUi() {
+  if (els.settingsAppVersion) els.settingsAppVersion.textContent = APP_VERSION;
+  if (els.settingsAppBuild) els.settingsAppBuild.textContent = APP_BUILD;
+}
+
+async function handleResetLocalCache() {
+  if (!confirm("로컬 캐시를 초기화할까요? 앱이 새로고침됩니다.")) return;
+
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter((key) => key.startsWith("cra-task-manager-")).map((key) => caches.delete(key))
+      );
+    }
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+    location.reload();
+  } catch (err) {
+    alert(`캐시 초기화에 실패했습니다.\n\n${err.message || err}`);
   }
 }
 
@@ -5713,11 +5815,10 @@ function openSettingsModal(panel = "main") {
     updateCalendarSyncUi();
   }
   updateNotificationSettingsUi();
+  updateDataSettingsUi();
+  updateAboutSettingsUi();
   if (els.uiScaleSelect) {
     els.uiScaleSelect.value = UiSettingsStore.getSize();
-  }
-  if (els.settingsAppVersion) {
-    els.settingsAppVersion.textContent = APP_VERSION;
   }
   els.settingsModal.hidden = false;
   lockSettingsBodyScroll();

@@ -1146,12 +1146,16 @@ select:disabled {
 .modal--settings {
   display: flex;
   flex-direction: column;
-  width: min(480px, 100%);
-  max-height: min(90vh, 720px);
-  min-height: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  min-height: 100dvh;
   padding: 0;
   overflow: hidden;
   background: var(--surface);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .settings-header {
@@ -1195,12 +1199,15 @@ select:disabled {
   padding: calc(8px * var(--ui-scale)) calc(14px * var(--ui-scale)) calc(16px * var(--ui-scale));
 }
 
-/* Settings modal overlay — fixed layer above app chrome */
+/* Settings modal overlay — fullscreen on mobile, centered dialog on desktop */
 .settings-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 500;
   display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
   background: rgba(15, 23, 42, 0.55);
   overflow: hidden;
   overscroll-behavior: none;
@@ -1220,24 +1227,6 @@ body.body--settings-open {
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
-  .settings-modal-overlay:not([hidden]) {
-    align-items: flex-end;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .settings-modal-overlay .modal--settings {
-    width: 100%;
-    max-width: none;
-    max-height: min(88dvh, 720px);
-    min-height: unset;
-    margin: 0;
-    border-radius: calc(16px * var(--ui-scale)) calc(16px * var(--ui-scale)) 0 0;
-    box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.18);
-  }
-}
-
 @media (min-width: 769px) {
   .settings-modal-overlay:not([hidden]) {
     align-items: center;
@@ -1247,63 +1236,20 @@ body.body--settings-open {
 
   .settings-modal-overlay .modal--settings {
     width: min(480px, 100%);
+    height: auto;
     max-height: min(85vh, 720px);
+    min-height: unset;
     border-radius: var(--radius);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
   }
 }
 
-.settings-panel-view[hidden] {
+.settings-screen[hidden] {
   display: none !important;
 }
 
-.settings-panel-view:not([hidden]) {
+.settings-screen:not([hidden]) {
   display: block;
-}
-
-.settings-stack {
-  position: relative;
-  min-height: 0;
-}
-
-.settings-menu--grouped {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: calc(12px * var(--ui-scale));
-  overflow: hidden;
-}
-
-.settings-menu--grouped .settings-menu__item {
-  padding-left: calc(14px * var(--ui-scale));
-  padding-right: calc(14px * var(--ui-scale));
-}
-
-.settings-menu--grouped .settings-menu__item:last-child {
-  border-bottom: none;
-}
-
-.settings-modal-overlay--detail .settings-menu {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .settings-modal-overlay--detail:not([hidden]) {
-    align-items: stretch;
-    padding: 0;
-  }
-
-  .settings-modal-overlay--detail .modal--settings {
-    width: 100%;
-    max-width: none;
-    max-height: none;
-    height: 100%;
-    min-height: 100dvh;
-    border-radius: 0;
-    box-shadow: none;
-  }
-}
-
-.settings-panel-view {
   animation: settings-panel-in 0.18s ease-out;
 }
 
@@ -1318,9 +1264,118 @@ body.body--settings-open {
   }
 }
 
+.settings-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(12px * var(--ui-scale));
+  overflow: hidden;
+  margin-bottom: calc(12px * var(--ui-scale));
+}
+
+.settings-group .settings-row,
+.settings-group .settings-meta-row {
+  padding-left: calc(14px * var(--ui-scale));
+  padding-right: calc(14px * var(--ui-scale));
+}
+
+.settings-group--actions {
+  padding: 0;
+}
+
+.settings-group--actions .settings-action-btn:first-child {
+  border-top: none;
+}
+
+.settings-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(14px * var(--ui-scale)) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-meta-row:last-child {
+  border-bottom: none;
+}
+
+.settings-meta-row__label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-meta-row__value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.settings-meta-row__value--ok {
+  color: #059669;
+}
+
+.settings-about-hero {
+  text-align: center;
+  padding: calc(20px * var(--ui-scale)) calc(12px * var(--ui-scale)) calc(16px * var(--ui-scale));
+}
+
+.settings-about-hero strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 4px;
+}
+
+.settings-about-hero p {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.settings-select {
+  width: 100%;
+  padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--ui-scale));
+  background: #fff;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.settings-row--value {
+  align-items: center;
+}
+
+.settings-row__value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.settings-screen-hint,
+.settings-setup-hint {
+  margin-top: calc(8px * var(--ui-scale));
+}
+
+.settings-action-btn--danger {
+  color: #dc2626;
+}
+
+.settings-action-btn--link {
+  display: block;
+  text-decoration: none;
+  color: var(--primary);
+}
+
 .settings-menu {
   display: flex;
   flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(12px * var(--ui-scale));
+  overflow: hidden;
 }
 
 .settings-menu__item {
@@ -1329,7 +1384,7 @@ body.body--settings-open {
   align-items: center;
   gap: calc(12px * var(--ui-scale));
   width: 100%;
-  padding: calc(14px * var(--ui-scale)) calc(4px * var(--ui-scale));
+  padding: calc(14px * var(--ui-scale));
   border: none;
   border-bottom: 1px solid var(--border);
   background: transparent;
@@ -1365,6 +1420,12 @@ body.body--settings-open {
   display: flex;
   flex-direction: column;
   gap: calc(4px * var(--ui-scale));
+}
+
+.settings-group .settings-row {
+  padding-top: calc(14px * var(--ui-scale));
+  padding-bottom: calc(14px * var(--ui-scale));
+  margin: 0;
 }
 
 .settings-row {
@@ -1447,9 +1508,9 @@ body.body--settings-open {
 .settings-action-btn {
   display: block;
   width: 100%;
-  padding: calc(14px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  padding: calc(14px * var(--ui-scale)) calc(14px * var(--ui-scale));
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: transparent;
   text-align: left;
   font: inherit;

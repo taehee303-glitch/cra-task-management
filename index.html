@@ -1192,109 +1192,123 @@
     </div>
   </div>
 
-  <!-- Settings -->
+  <!-- Settings (Fullscreen) -->
   <div class="settings-modal-overlay" id="settingsModal" hidden>
     <div class="modal modal--settings">
       <header class="settings-header">
-        <button type="button" class="settings-header__back" id="settingsBackBtn" hidden aria-label="뒤로">←</button>
+        <button type="button" class="settings-header__back" id="settingsBackBtn" hidden aria-label="뒤로">← Back</button>
         <h3 class="settings-header__title" id="settingsTitle">Settings</h3>
         <button type="button" class="modal-close settings-header__close" id="closeSettingsModalBtn" aria-label="닫기">&times;</button>
       </header>
 
       <div class="settings-body">
-        <div class="settings-stack">
-        <!-- Main menu -->
-        <div id="settingsPanelMain" class="settings-panel-view">
-          <nav class="settings-menu settings-menu--grouped" aria-label="설정 메뉴">
+        <!-- Main: menu only -->
+        <div id="settingsPanelMain" class="settings-screen" data-settings-screen="main">
+          <nav class="settings-menu" aria-label="설정 메뉴">
             <button type="button" class="settings-menu__item" data-settings-panel="calendar">
               <span class="settings-menu__icon" aria-hidden="true">📅</span>
               <span class="settings-menu__label">Google Calendar</span>
-              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+              <span class="settings-menu__chevron" aria-hidden="true">&gt;</span>
             </button>
             <button type="button" class="settings-menu__item" data-settings-panel="notification">
               <span class="settings-menu__icon" aria-hidden="true">🔔</span>
               <span class="settings-menu__label">Notification</span>
-              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+              <span class="settings-menu__chevron" aria-hidden="true">&gt;</span>
             </button>
             <button type="button" class="settings-menu__item" data-settings-panel="appearance">
               <span class="settings-menu__icon" aria-hidden="true">🎨</span>
               <span class="settings-menu__label">Appearance</span>
-              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+              <span class="settings-menu__chevron" aria-hidden="true">&gt;</span>
             </button>
             <button type="button" class="settings-menu__item" data-settings-panel="data">
               <span class="settings-menu__icon" aria-hidden="true">💾</span>
               <span class="settings-menu__label">Data</span>
-              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+              <span class="settings-menu__chevron" aria-hidden="true">&gt;</span>
             </button>
             <button type="button" class="settings-menu__item" data-settings-panel="about">
               <span class="settings-menu__icon" aria-hidden="true">ℹ️</span>
               <span class="settings-menu__label">About</span>
-              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+              <span class="settings-menu__chevron" aria-hidden="true">&gt;</span>
             </button>
           </nav>
         </div>
 
-        <!-- Google Calendar -->
-        <div id="settingsPanelCalendar" class="settings-panel-view" hidden>
-          <div class="settings-section">
+        <!-- Google Calendar Screen -->
+        <div id="settingsPanelCalendar" class="settings-screen" data-settings-screen="calendar" hidden>
+          <div class="settings-group">
             <div class="settings-row settings-row--toggle">
-              <div class="settings-row__body">
-                <strong class="settings-row__title">Calendar Sync</strong>
-                <p class="settings-row__hint">Task Due Date를 Google Calendar에 자동 반영합니다.</p>
-              </div>
+              <span class="settings-row__title">Calendar Sync</span>
               <label class="toggle-switch">
                 <input type="checkbox" id="calendarSyncToggle" />
                 <span class="toggle-switch__slider" aria-hidden="true"></span>
               </label>
             </div>
-            <dl class="settings-meta">
-              <div class="settings-meta__row">
-                <dt>Status</dt>
-                <dd id="calendarSyncStatus">Not Connected</dd>
-              </div>
-              <div class="settings-meta__row">
-                <dt>Last Sync</dt>
-                <dd id="calendarLastSync">—</dd>
-              </div>
-            </dl>
-            <button type="button" class="btn btn--ghost btn--sm settings-reconnect-btn" id="calendarReconnectBtn" hidden>Reconnect</button>
-            <p class="form-hint settings-setup-hint" id="calendarSetupHint" hidden></p>
           </div>
+          <div class="settings-group">
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Status</span>
+              <span class="settings-meta-row__value" id="calendarSyncStatus">Not Connected</span>
+            </div>
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Last Sync</span>
+              <span class="settings-meta-row__value" id="calendarLastSync">—</span>
+            </div>
+          </div>
+          <div class="settings-group settings-group--actions">
+            <button type="button" class="settings-action-btn" id="calendarReconnectBtn" hidden>Reconnect</button>
+            <button type="button" class="settings-action-btn settings-action-btn--danger" id="calendarDisconnectBtn" hidden>Disconnect</button>
+          </div>
+          <p class="form-hint settings-setup-hint" id="calendarSetupHint" hidden></p>
         </div>
 
-        <!-- Notification -->
-        <div id="settingsPanelNotification" class="settings-panel-view" hidden>
-          <div class="settings-section">
+        <!-- Notification Screen -->
+        <div id="settingsPanelNotification" class="settings-screen" data-settings-screen="notification" hidden>
+          <div class="settings-group">
             <div class="settings-row settings-row--toggle">
-              <div class="settings-row__body">
-                <strong class="settings-row__title">Due Reminder</strong>
-                <p class="settings-row__hint">마감일·지연 업무 알림</p>
-              </div>
+              <span class="settings-row__title">Due Reminder</span>
               <label class="toggle-switch">
-                <input type="checkbox" id="reminderDueDateToggle" />
+                <input type="checkbox" id="reminderDueToggle" />
                 <span class="toggle-switch__slider" aria-hidden="true"></span>
               </label>
             </div>
             <div class="settings-row settings-row--toggle">
-              <div class="settings-row__body">
-                <strong class="settings-row__title">D-1 Reminder</strong>
-                <p class="settings-row__hint">마감 하루 전 알림</p>
-              </div>
+              <span class="settings-row__title">Overdue Reminder</span>
               <label class="toggle-switch">
-                <input type="checkbox" id="reminderD1Toggle" />
+                <input type="checkbox" id="reminderOverdueToggle" />
                 <span class="toggle-switch__slider" aria-hidden="true"></span>
               </label>
             </div>
-            <p class="form-hint" id="reminderPermissionStatus"></p>
           </div>
+          <div class="settings-group">
+            <div class="settings-row settings-row--value">
+              <span class="settings-row__title">Reminder Time</span>
+              <span class="settings-row__value" id="reminderTimeDisplay">09:00</span>
+            </div>
+            <div class="settings-row settings-row--value">
+              <span class="settings-row__title">Reminder Frequency</span>
+              <span class="settings-row__value">Daily</span>
+            </div>
+          </div>
+          <p class="form-hint settings-screen-hint" id="reminderPermissionStatus"></p>
         </div>
 
-        <!-- Appearance -->
-        <div id="settingsPanelAppearance" class="settings-panel-view" hidden>
-          <div class="settings-section">
+        <!-- Appearance Screen -->
+        <div id="settingsPanelAppearance" class="settings-screen" data-settings-screen="appearance" hidden>
+          <div class="settings-group">
             <div class="settings-row settings-row--stacked">
-              <label class="settings-row__title" for="uiScaleSelect">UI Size</label>
-              <select id="uiScaleSelect" class="ui-scale-select" aria-label="UI 크기">
+              <label class="settings-row__title" for="settingsThemeSelect">Theme</label>
+              <select id="settingsThemeSelect" class="settings-select" disabled aria-label="Theme">
+                <option value="light" selected>Light</option>
+                <option value="dark">Dark</option>
+                <option value="auto">Auto</option>
+              </select>
+              <p class="settings-row__hint">Dark / Auto는 추후 제공</p>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-row settings-row--stacked">
+              <label class="settings-row__title" for="uiScaleSelect">Font Size</label>
+              <select id="uiScaleSelect" class="settings-select" aria-label="Font Size">
                 <option value="xsmall">80%</option>
                 <option value="small">90%</option>
                 <option value="normal">100%</option>
@@ -1302,45 +1316,63 @@
                 <option value="xlarge">120%</option>
               </select>
             </div>
-            <div class="settings-row settings-row--disabled">
-              <div class="settings-row__body">
-                <strong class="settings-row__title">Theme</strong>
-                <p class="settings-row__hint">추후 제공</p>
-              </div>
+            <div class="settings-row settings-row--toggle settings-row--disabled">
+              <span class="settings-row__title">Compact Mode</span>
+              <label class="toggle-switch">
+                <input type="checkbox" disabled />
+                <span class="toggle-switch__slider" aria-hidden="true"></span>
+              </label>
             </div>
           </div>
         </div>
 
-        <!-- Data -->
-        <div id="settingsPanelData" class="settings-panel-view" hidden>
-          <div class="settings-section">
-            <button type="button" class="settings-action-btn" id="settingsImportBtn">Import</button>
-            <button type="button" class="settings-action-btn" id="settingsExportBtn">Export</button>
-            <div class="settings-row settings-row--disabled">
-              <div class="settings-row__body">
-                <strong class="settings-row__title">Backup</strong>
-                <p class="settings-row__hint">추후 제공</p>
-              </div>
+        <!-- Data Screen -->
+        <div id="settingsPanelData" class="settings-screen" data-settings-screen="data" hidden>
+          <div class="settings-group">
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Firebase Sync Status</span>
+              <span class="settings-meta-row__value" id="settingsFirebaseSyncStatus">—</span>
             </div>
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Storage Usage</span>
+              <span class="settings-meta-row__value" id="settingsStorageUsage">—</span>
+            </div>
+          </div>
+          <div class="settings-group settings-group--actions">
+            <button type="button" class="settings-action-btn" id="settingsExportBtn">Export CSV</button>
+            <button type="button" class="settings-action-btn" id="settingsImportBtn">Import CSV</button>
+            <button type="button" class="settings-action-btn settings-action-btn--danger" id="settingsResetCacheBtn">Reset Local Cache</button>
           </div>
         </div>
 
-        <!-- About -->
-        <div id="settingsPanelAbout" class="settings-panel-view" hidden>
-          <div class="settings-section">
-            <dl class="settings-meta">
-              <div class="settings-meta__row">
-                <dt>Version</dt>
-                <dd id="settingsAppVersion">—</dd>
-              </div>
-            </dl>
-            <div class="settings-about">
-              <strong>CRA Workspace</strong>
-              <p>Clinical Research Associate Task Manager</p>
-              <p class="settings-about__desc">병원 현장에서 오늘 해야 할 업무를 빠르게 확인하고 완료하는 생산성 앱입니다.</p>
+        <!-- About Screen -->
+        <div id="settingsPanelAbout" class="settings-screen" data-settings-screen="about" hidden>
+          <div class="settings-about-hero">
+            <strong>CRA Workspace</strong>
+            <p>Clinical Research Associate Task Manager</p>
+          </div>
+          <div class="settings-group">
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Version</span>
+              <span class="settings-meta-row__value" id="settingsAppVersion">—</span>
+            </div>
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Build</span>
+              <span class="settings-meta-row__value" id="settingsAppBuild">—</span>
+            </div>
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">Firebase Version</span>
+              <span class="settings-meta-row__value">10.14.1</span>
+            </div>
+            <div class="settings-meta-row">
+              <span class="settings-meta-row__label">License</span>
+              <span class="settings-meta-row__value">MIT</span>
             </div>
           </div>
-        </div>
+          <div class="settings-group settings-group--actions">
+            <a class="settings-action-btn settings-action-btn--link" id="settingsGithubLink" href="https://github.com/taehee303-glitch/cra-task-management" target="_blank" rel="noopener noreferrer">Github</a>
+            <a class="settings-action-btn settings-action-btn--link" id="settingsContactLink" href="mailto:taehee303@gmail.com">Contact</a>
+          </div>
         </div>
       </div>
     </div>
