@@ -148,25 +148,28 @@ const VIEW_TITLES = {
   inbox: "Inbox",
   calendar: "Calendar",
   dashboard: "Dashboard",
+  reference: "Reference",
   "study-master": "Study",
   "site-master": "Site",
   "system-master": "System",
 };
 
-const DAILY_PRIMARY_VIEWS = ["tasks", "inbox", "calendar", "dashboard"];
+const DAILY_PRIMARY_VIEWS = ["tasks", "inbox", "calendar", "reference"];
 const MASTER_VIEWS = ["study-master", "site-master", "system-master"];
 const MOBILE_BREAKPOINT = window.matchMedia("(max-width: 768px)");
 
-const MOBILE_FEED_TITLES = {
-  overdue: "Overdue",
-  today: "오늘 해야 하는 Task",
-  d1: "D-1",
-  open: "Open",
-  completed: "Completed",
+const MOBILE_FILTER_LABELS = {
+  overdue: "🔥 Overdue",
+  today: "📅 Today",
+  d1: "⏰ D-1",
+  open: "📂 Open",
+  completed: "✅ Completed",
 };
 
+const PRIORITY_SORT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
 let currentViewName = "tasks";
-let mobileDailyFilter = "today";
+let mobileDailyFilter = null;
 
 let addTaskPresetPriority = "Medium";
 const els = {
@@ -186,6 +189,7 @@ const els = {
   viewInbox: document.getElementById("viewInbox"),
   viewCalendar: document.getElementById("viewCalendar"),
   viewDashboard: document.getElementById("viewDashboard"),
+  viewReference: document.getElementById("viewReference"),
   viewStudyMaster: document.getElementById("viewStudyMaster"),
   viewSystemMaster: document.getElementById("viewSystemMaster"),
   viewSiteMaster: document.getElementById("viewSiteMaster"),
@@ -313,13 +317,23 @@ const els = {
   taskListSection: document.getElementById("taskListSection"),
   mobileDailyHome: document.getElementById("mobileDailyHome"),
   mobileTaskFeed: document.getElementById("mobileTaskFeed"),
-  mobileWeekPreviewList: document.getElementById("mobileWeekPreviewList"),
+  mobileUpcomingList: document.getElementById("mobileUpcomingList"),
   mobileRecentCompletedList: document.getElementById("mobileRecentCompletedList"),
-  mobileFeedTitle: document.getElementById("mobileFeedTitle"),
-  mobileQuickAddInput: document.getElementById("mobileQuickAddInput"),
-  mobileQuickAddBtn: document.getElementById("mobileQuickAddBtn"),
+  mobileFilteredSection: document.getElementById("mobileFilteredSection"),
+  mobileFilteredList: document.getElementById("mobileFilteredList"),
+  mobileFilteredTitle: document.getElementById("mobileFilteredTitle"),
+  mobileTodayActionSection: document.getElementById("mobileTodayActionSection"),
+  referenceSearchInput: document.getElementById("referenceSearchInput"),
+  referenceSearchResults: document.getElementById("referenceSearchResults"),
+  referenceMainContent: document.getElementById("referenceMainContent"),
+  referenceStudyList: document.getElementById("referenceStudyList"),
+  referenceSiteList: document.getElementById("referenceSiteList"),
+  referenceSystemList: document.getElementById("referenceSystemList"),
+  referenceGoogleCalendarBtn: document.getElementById("referenceGoogleCalendarBtn"),
+  referenceCloudSyncBtn: document.getElementById("referenceCloudSyncBtn"),
+  referenceCloudSyncLabel: document.getElementById("referenceCloudSyncLabel"),
+  addTaskPriority: document.getElementById("addTaskPriority"),
   bottomNav: document.getElementById("bottomNav"),
-  bottomNavMoreBtn: document.getElementById("bottomNavMoreBtn"),
   masterSheet: document.getElementById("masterSheet"),
   bottomNavBtns: document.querySelectorAll(".bottom-nav [data-view]"),
   mobileFilterBtns: document.querySelectorAll("[data-mobile-filter]"),
@@ -467,6 +481,7 @@ function initCloudSyncUi() {
       refreshAfterCloudSync();
     }
     wasSignedIn = signedIn;
+    updateReferenceCloudSyncLabel();
   };
 
   CloudSyncManager.setUiCallback(updateCloudSyncUi);
@@ -615,17 +630,9 @@ async function bootstrapApp() {
       handleQuickAddInput(els.quickAddInput);
     }
   });
-  els.mobileQuickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.mobileQuickAddInput));
-  els.mobileQuickAddInput?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      handleQuickAddInput(els.mobileQuickAddInput);
-    }
-  });
   els.mobileFilterBtns.forEach((btn) => {
     btn.addEventListener("click", () => handleMobileFilterClick(btn.dataset.mobileFilter));
   });
-  els.bottomNavMoreBtn?.addEventListener("click", openMasterSheet);
   els.masterSheet?.addEventListener("click", (event) => {
     if (event.target === els.masterSheet) closeMasterSheet();
   });
@@ -667,6 +674,10 @@ async function bootstrapApp() {
   });
   els.fabToggleBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
+    if (isDailyMode()) {
+      openAddTaskModal();
+      return;
+    }
     toggleFabMenu();
   });
   document.querySelectorAll("[data-fab-action]").forEach((btn) => {
@@ -756,6 +767,14 @@ async function bootstrapApp() {
   els.googleDisconnectBtn.addEventListener("click", handleGoogleDisconnect);
   els.settingsModal.addEventListener("click", (e) => {
     if (e.target === els.settingsModal) closeSettingsModal();
+  });
+  els.referenceSearchInput?.addEventListener("input", handleReferenceSearchInput);
+  els.referenceGoogleCalendarBtn?.addEventListener("click", () => {
+    openSettingsModal();
+  });
+  els.referenceCloudSyncBtn?.addEventListener("click", handleReferenceCloudSyncClick);
+  document.querySelectorAll(".reference-section__more[data-view]").forEach((btn) => {
+    btn.addEventListener("click", () => switchView(btn.dataset.view));
   });
 
   window.addEventListener("storage", handleStorageSync);
@@ -2364,7 +2383,13 @@ function applyAppMode() {
   document.body.classList.toggle("app-mode-management", !daily);
   if (els.bottomNav) els.bottomNav.hidden = !daily;
   if (els.sidebarToggleBtn) {
-    els.sidebarToggleBtn.setAttribute("aria-label", daily ? "More 메뉴" : "메뉴 열기");
+    els.sidebarToggleBtn.hidden = daily;
+  }
+  if (daily && currentViewName === "dashboard") {
+    switchView("tasks");
+  }
+  if (!daily && currentViewName === "reference") {
+    switchView("tasks");
   }
 }
 
@@ -2423,11 +2448,9 @@ function syncMasterMobileDetail(viewName) {
 
 function handleMobileFilterClick(filter) {
   if (!filter) return;
-  mobileDailyFilter = filter;
-  taskQuickFilter = filter;
+  mobileDailyFilter = mobileDailyFilter === filter ? null : filter;
   updateMobileFilterUi();
-  updateQuickFilterUi();
-  renderMobileTaskFeed();
+  renderMobileDailyHome();
 }
 
 function updateMobileFilterUi() {
@@ -2436,17 +2459,101 @@ function updateMobileFilterUi() {
     btn.classList.toggle("task-filter__btn--active", isActive);
     btn.setAttribute("aria-selected", String(isActive));
   });
-  if (els.mobileFeedTitle) {
-    els.mobileFeedTitle.textContent = MOBILE_FEED_TITLES[mobileDailyFilter] || "Task";
+  if (els.mobileFilteredSection) {
+    els.mobileFilteredSection.hidden = !mobileDailyFilter;
+  }
+  if (els.mobileTodayActionSection) {
+    els.mobileTodayActionSection.hidden = Boolean(mobileDailyFilter);
+  }
+  if (els.mobileFilteredTitle && mobileDailyFilter) {
+    els.mobileFilteredTitle.textContent = MOBILE_FILTER_LABELS[mobileDailyFilter] || "필터";
   }
 }
 
-function getMobileFilteredTasks() {
+function getMobileChipFilteredTasks() {
+  if (!mobileDailyFilter) return [];
   const prev = taskQuickFilter;
   taskQuickFilter = mobileDailyFilter;
   const filtered = getFilteredTasks().filter((t) => !isInboxTask(t));
   taskQuickFilter = prev;
-  return filtered;
+  return filtered.sort(compareTasksByPriorityThenDue);
+}
+
+function isHighPriorityTask(task) {
+  return task.priority === "Critical" || task.priority === "High";
+}
+
+function compareTasksByPriorityThenDue(a, b) {
+  const aPriority = PRIORITY_SORT_ORDER[a.priority] ?? 2;
+  const bPriority = PRIORITY_SORT_ORDER[b.priority] ?? 2;
+  if (aPriority !== bPriority) return aPriority - bPriority;
+  const aDue = a.dueDate ? parseDate(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const bDue = b.dueDate ? parseDate(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  return aDue - bDue;
+}
+
+function getTodayActionTasks() {
+  const todayStr = toDateString(getToday());
+  return tasks
+    .filter((t) => {
+      if (isInboxTask(t) || !isActive(t)) return false;
+      if (t.dueDate && daysUntilDue(t.dueDate) < 0) return true;
+      if (t.dueDate === todayStr) return true;
+      if (t.dueDate && daysUntilDue(t.dueDate) === 1) return true;
+      if (isHighPriorityTask(t)) return true;
+      return false;
+    })
+    .sort(compareTasksByPriorityThenDue);
+}
+
+function isDueNextWeek(dueDateStr) {
+  const due = parseDate(dueDateStr);
+  const { end } = getWeekRange();
+  const nextWeekStart = new Date(end);
+  nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+  nextWeekStart.setHours(0, 0, 0, 0);
+  const nextWeekEnd = new Date(nextWeekStart);
+  nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+  nextWeekEnd.setHours(23, 59, 59, 999);
+  return due >= nextWeekStart && due <= nextWeekEnd;
+}
+
+function getUpcomingTaskGroups() {
+  const groups = {
+    tomorrow: [],
+    d2: [],
+    thisWeek: [],
+    nextWeek: [],
+  };
+
+  tasks.forEach((t) => {
+    if (isInboxTask(t) || !isActive(t) || !t.dueDate) return;
+    const diff = daysUntilDue(t.dueDate);
+    if (diff <= 0) return;
+    if (diff === 1) {
+      groups.tomorrow.push(t);
+    } else if (diff === 2) {
+      groups.d2.push(t);
+    } else if (isDueThisWeek(t.dueDate)) {
+      groups.thisWeek.push(t);
+    } else if (isDueNextWeek(t.dueDate)) {
+      groups.nextWeek.push(t);
+    }
+  });
+
+  Object.keys(groups).forEach((key) => {
+    groups[key].sort(compareTasksByPriorityThenDue);
+  });
+  return groups;
+}
+
+function renderMobileFilteredList() {
+  if (!els.mobileFilteredList) return;
+  const filtered = getMobileChipFilteredTasks();
+  els.mobileFilteredList.innerHTML = filtered.length
+    ? filtered.map((t) => renderMobileTaskCard(t)).join("")
+    : '<p class="mobile-daily__empty">표시할 업무가 없습니다.</p>';
+  bindMobileTaskFeedClicks(els.mobileFilteredList);
 }
 
 function renderMobileTaskCard(task) {
@@ -2475,46 +2582,40 @@ function bindMobileTaskFeedClicks(container) {
 
 function renderMobileTaskFeed() {
   if (!els.mobileTaskFeed) return;
-  const filtered = getMobileFilteredTasks().sort(compareTasks);
-  els.mobileTaskFeed.innerHTML = filtered.length
-    ? filtered.map((t) => renderMobileTaskCard(t)).join("")
-    : '<p class="mobile-daily__empty">표시할 업무가 없습니다.</p>';
+  const actionTasks = getTodayActionTasks();
+  els.mobileTaskFeed.innerHTML = actionTasks.length
+    ? actionTasks.map((t) => renderMobileTaskCard(t)).join("")
+    : '<p class="mobile-daily__empty">오늘 처리할 업무가 없습니다.</p>';
   bindMobileTaskFeedClicks(els.mobileTaskFeed);
 }
 
-function renderMobileWeekPreview() {
-  if (!els.mobileWeekPreviewList) return;
-  const todayStr = toDateString(getToday());
-  const futureWeekTasks = tasks
-    .filter(
-      (t) =>
-        !isInboxTask(t) &&
-        isActive(t) &&
-        t.dueDate &&
-        t.dueDate >= todayStr &&
-        isDueThisWeek(t.dueDate)
-    )
-    .sort(compareTasks);
+function renderMobileUpcoming() {
+  if (!els.mobileUpcomingList) return;
+  const groups = getUpcomingTaskGroups();
+  const sections = [
+    { key: "tomorrow", label: "Tomorrow" },
+    { key: "d2", label: "D+2" },
+    { key: "thisWeek", label: "이번 주" },
+    { key: "nextWeek", label: "다음 주" },
+  ];
 
-  if (!futureWeekTasks.length) {
-    els.mobileWeekPreviewList.innerHTML =
-      '<p class="workspace-preview__empty">오늘 이후 이번 주 일정이 없습니다.</p>';
-    return;
-  }
-
-  let lastDate = "";
-  els.mobileWeekPreviewList.innerHTML = futureWeekTasks
-    .map((task) => {
-      let dateHeader = "";
-      if (task.dueDate !== lastDate) {
-        lastDate = task.dueDate;
-        const d = parseDate(task.dueDate);
-        dateHeader = `<div class="schedule-date">${d.getMonth() + 1}/${d.getDate()}</div>`;
-      }
-      return `${dateHeader}${renderScheduleItem(task)}`;
+  const html = sections
+    .filter(({ key }) => groups[key].length > 0)
+    .map(({ key, label }) => {
+      const items = groups[key].map((t) => renderMobileTaskCard(t)).join("");
+      return `
+        <div class="mobile-upcoming__group">
+          <h4 class="mobile-upcoming__label">${escapeHtml(label)}</h4>
+          <div class="mobile-task-feed">${items}</div>
+        </div>
+      `;
     })
     .join("");
-  bindPreviewTaskClicks(els.mobileWeekPreviewList);
+
+  els.mobileUpcomingList.innerHTML = html
+    ? html
+    : '<p class="mobile-daily__empty">곧 마감되는 업무가 없습니다.</p>';
+  bindMobileTaskFeedClicks(els.mobileUpcomingList);
 }
 
 function renderMobileRecentCompleted() {
@@ -2534,21 +2635,235 @@ function renderMobileRecentCompleted() {
   bindMobileTaskFeedClicks(els.mobileRecentCompletedList);
 }
 
+function renderReferenceCard(type, id, title, meta, emoji) {
+  return `
+    <button type="button" class="reference-card" data-ref-type="${escapeAttr(type)}" data-ref-id="${escapeAttr(id)}">
+      <span class="reference-card__icon" aria-hidden="true">${emoji}</span>
+      <span class="reference-card__body">
+        <span class="reference-card__title">${escapeHtml(title)}</span>
+        <span class="reference-card__meta">${escapeHtml(meta)}</span>
+      </span>
+    </button>
+  `;
+}
+
+function bindReferenceCardClicks(container) {
+  container?.querySelectorAll("[data-ref-type]").forEach((btn) => {
+    btn.addEventListener("click", () => openReferenceItem(btn.dataset.refType, btn.dataset.refId));
+  });
+}
+
+function openReferenceItem(type, id) {
+  if (type === "study") {
+    selectedStudyMasterId = id;
+    switchView("study-master");
+    selectStudyMaster(id);
+    return;
+  }
+  if (type === "site") {
+    selectedSiteMasterId = id;
+    switchView("site-master");
+    selectSiteMasterEntry(id);
+    return;
+  }
+  if (type === "system") {
+    selectedSystemMasterId = id;
+    switchView("system-master");
+    selectSystemMaster(id);
+  }
+}
+
+function searchReferenceItems(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const results = [];
+
+  StudyMasterStore.getAll().forEach((study) => {
+    const haystack = [study.studyName, study.protocolNumber, study.sponsor]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (haystack.includes(q)) {
+      results.push({
+        type: "study",
+        id: study.id,
+        title: study.studyName || study.protocolNumber,
+        meta: study.protocolNumber || "",
+        emoji: "📚",
+      });
+    }
+  });
+
+  SiteMasterStore.getAll().forEach((site) => {
+    const haystack = [
+      site.standardName,
+      site.siteNumber,
+      ...(site.aliases || []),
+      site.piName,
+      site.crcName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (haystack.includes(q)) {
+      results.push({
+        type: "site",
+        id: site.id,
+        title: site.standardName || site.siteNumber || "Site",
+        meta: site.siteNumber || "",
+        emoji: "🏥",
+      });
+    }
+  });
+
+  SystemMasterStore.getAll().forEach((system) => {
+    const haystack = [system.systemName, system.systemType].filter(Boolean).join(" ").toLowerCase();
+    if (haystack.includes(q)) {
+      results.push({
+        type: "system",
+        id: system.id,
+        title: system.systemName,
+        meta: system.systemType || "",
+        emoji: "🖥️",
+      });
+    }
+  });
+
+  return results.slice(0, 24);
+}
+
+function handleReferenceSearchInput() {
+  const query = els.referenceSearchInput?.value || "";
+  const hasQuery = query.trim().length > 0;
+  if (els.referenceMainContent) els.referenceMainContent.hidden = hasQuery;
+  if (!els.referenceSearchResults) return;
+
+  els.referenceSearchResults.hidden = !hasQuery;
+  if (!hasQuery) {
+    els.referenceSearchResults.innerHTML = "";
+    return;
+  }
+
+  const results = searchReferenceItems(query);
+  els.referenceSearchResults.innerHTML = results.length
+    ? results.map((r) => renderReferenceCard(r.type, r.id, r.title, r.meta, r.emoji)).join("")
+    : '<p class="reference-search__empty">검색 결과가 없습니다.</p>';
+  bindReferenceCardClicks(els.referenceSearchResults);
+}
+
+function updateReferenceCloudSyncLabel() {
+  if (!els.referenceCloudSyncLabel) return;
+  if (!window.CloudSyncManager) {
+    els.referenceCloudSyncLabel.textContent = "Cloud Sync";
+    return;
+  }
+  if (CloudSyncManager.isSignedIn()) {
+    const statusText = els.cloudSyncStatus?.textContent || "연동됨";
+    const short = statusText.replace(/^클라우드 ·\s*/, "").replace(/동기화 중…/, "동기화").split("@")[0];
+    els.referenceCloudSyncLabel.textContent = `Cloud · ${short}`;
+  } else {
+    els.referenceCloudSyncLabel.textContent = "Cloud Sync";
+  }
+}
+
+function handleReferenceCloudSyncClick() {
+  if (window.CloudSyncManager?.isSignedIn?.()) {
+    els.cloudSignOutBtn?.click();
+    return;
+  }
+  els.cloudSignInBtn?.click();
+}
+
+function renderReferenceLists() {
+  const studies = StudyMasterStore.getAll().slice(0, 5);
+  const sites = SiteMasterStore.getAll().slice(0, 5);
+  const systems = SystemMasterStore.getAll().slice(0, 5);
+
+  if (els.referenceStudyList) {
+    els.referenceStudyList.innerHTML = studies.length
+      ? studies
+          .map((study) =>
+            renderReferenceCard(
+              "study",
+              study.id,
+              study.studyName || study.protocolNumber,
+              `${study.protocolNumber || ""} · Site ${(study.siteIds || []).length}곳`,
+              "📚"
+            )
+          )
+          .join("")
+      : '<p class="reference-card-list__empty">등록된 Study가 없습니다.</p>';
+    bindReferenceCardClicks(els.referenceStudyList);
+  }
+
+  if (els.referenceSiteList) {
+    els.referenceSiteList.innerHTML = sites.length
+      ? sites
+          .map((site) =>
+            renderReferenceCard(
+              "site",
+              site.id,
+              site.standardName || site.siteNumber || "Site",
+              site.siteNumber || "",
+              "🏥"
+            )
+          )
+          .join("")
+      : '<p class="reference-card-list__empty">등록된 Site가 없습니다.</p>';
+    bindReferenceCardClicks(els.referenceSiteList);
+  }
+
+  if (els.referenceSystemList) {
+    els.referenceSystemList.innerHTML = systems.length
+      ? systems
+          .map((system) =>
+            renderReferenceCard(
+              "system",
+              system.id,
+              system.systemName,
+              system.systemType || "",
+              "🖥️"
+            )
+          )
+          .join("")
+      : '<p class="reference-card-list__empty">등록된 System이 없습니다.</p>';
+    bindReferenceCardClicks(els.referenceSystemList);
+  }
+}
+
+function renderReferenceView() {
+  if (!els.viewReference || els.viewReference.hidden) return;
+  renderReferenceLists();
+  updateReferenceCloudSyncLabel();
+  if (els.referenceSearchInput?.value.trim()) {
+    handleReferenceSearchInput();
+  }
+}
+
 function renderMobileDailyHome() {
   if (!isDailyMode()) return;
   updateTaskFilterCounts();
   updateMobileFilterUi();
+  renderMobileFilteredList();
   renderMobileTaskFeed();
-  renderMobileWeekPreview();
+  renderMobileUpcoming();
   renderMobileRecentCompleted();
 }
 
 function switchView(viewName) {
+  if (isDailyMode() && viewName === "dashboard") {
+    viewName = "tasks";
+  }
+  if (!isDailyMode() && viewName === "reference") {
+    viewName = "tasks";
+  }
+
   currentViewName = viewName;
   els.viewTasks.hidden = viewName !== "tasks";
   els.viewInbox.hidden = viewName !== "inbox";
   els.viewCalendar.hidden = viewName !== "calendar";
   els.viewDashboard.hidden = viewName !== "dashboard";
+  if (els.viewReference) els.viewReference.hidden = viewName !== "reference";
   els.viewStudyMaster.hidden = viewName !== "study-master";
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
@@ -2578,6 +2893,7 @@ function switchView(viewName) {
   if (viewName === "dashboard") renderDashboard();
   if (viewName === "calendar") renderCalendarView();
   if (viewName === "inbox") renderInboxList();
+  if (viewName === "reference") renderReferenceView();
   if (viewName === "tasks") {
     refreshTaskStudySiteSelects();
     if (isDailyMode()) {
@@ -2587,9 +2903,7 @@ function switchView(viewName) {
       renderTaskList();
     }
   }
-  const showFab = isDailyMode()
-    ? DAILY_PRIMARY_VIEWS.slice(0, 2).includes(viewName)
-    : viewName === "tasks";
+  const showFab = isDailyMode() ? DAILY_PRIMARY_VIEWS.includes(viewName) : viewName === "tasks";
   if (els.fabRoot) els.fabRoot.hidden = !showFab;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -2618,10 +2932,7 @@ function updateNavHighlight(viewName) {
 
 function toggleSidebar() {
   if (!els.sidebar) return;
-  if (isDailyMode()) {
-    openMasterSheet();
-    return;
-  }
+  if (isDailyMode()) return;
   const isOpen = els.sidebar.classList.toggle("sidebar--open");
   if (els.sidebarBackdrop) els.sidebarBackdrop.hidden = !isOpen;
   els.sidebarToggleBtn?.setAttribute("aria-expanded", String(isOpen));
@@ -2654,15 +2965,16 @@ function closeFabMenu() {
 function openAddTaskModal(presetKey = null) {
   closeFabMenu();
   const preset = presetKey ? VISIT_TASK_PRESETS[presetKey] : null;
+  const defaultTitle = isDailyMode() && !preset ? "새 업무 등록" : preset?.title || "새 업무";
   if (els.addTaskModalTitle) {
-    els.addTaskModalTitle.textContent = preset?.title || "새 업무";
+    els.addTaskModalTitle.textContent = defaultTitle;
   }
   els.taskForm.reset();
+  const priority = preset?.priority || "Medium";
+  addTaskPresetPriority = priority;
+  if (els.addTaskPriority) els.addTaskPriority.value = priority;
   if (preset) {
     els.task.value = preset.task;
-    addTaskPresetPriority = preset.priority;
-  } else {
-    addTaskPresetPriority = "Medium";
   }
   els.dueDate.value = toDateString(getToday());
   refreshTaskStudySiteSelects();
@@ -5732,6 +6044,8 @@ function handleAddTask(e) {
     return;
   }
 
+  const priority = form.get("priority")?.trim() || addTaskPresetPriority || "Medium";
+
   if (study || site) {
     if (!validateStudySiteSelection(study, site)) return;
   }
@@ -5743,7 +6057,7 @@ function handleAddTask(e) {
     task: taskName,
     dueDate,
     status: DEFAULT_STATUS,
-    priority: addTaskPresetPriority || "Medium",
+    priority,
     createdAt: new Date().toISOString(),
   };
 
@@ -5759,6 +6073,7 @@ function handleAddTask(e) {
 
   els.taskForm.reset();
   addTaskPresetPriority = "Medium";
+  if (els.addTaskPriority) els.addTaskPriority.value = "Medium";
   refreshTaskStudySiteSelects();
   updateSiteInfoDisplays();
   closeAddTaskModal();
@@ -6488,6 +6803,7 @@ function renderAll() {
   updateInboxBadge();
   if (els.viewInbox && !els.viewInbox.hidden) renderInboxList();
   if (els.viewCalendar && !els.viewCalendar.hidden) renderCalendarView();
+  if (els.viewReference && !els.viewReference.hidden) renderReferenceView();
 }
 
 function escapeHtml(str) {
