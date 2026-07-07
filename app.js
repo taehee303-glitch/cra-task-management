@@ -5181,12 +5181,12 @@ function isActive(task) {
 const APP_VERSION = "1.0.0";
 
 const SETTINGS_PANEL_TITLES = {
-  main: "⚙️ Settings",
-  calendar: "📅 Google Calendar",
-  notification: "🔔 Notification",
-  appearance: "🎨 Appearance",
-  data: "💾 Data",
-  about: "ℹ️ About",
+  main: "Settings",
+  calendar: "Google Calendar",
+  notification: "Notification",
+  appearance: "Appearance",
+  data: "Data",
+  about: "About",
 };
 
 let currentSettingsPanel = "main";
@@ -5518,14 +5518,28 @@ function getSettingsPanelElement(panel) {
 
 function openSettingsPanel(panel = "main") {
   currentSettingsPanel = panel;
-  ["main", "calendar", "notification", "appearance", "data", "about"].forEach((key) => {
+  const panelKeys = ["main", "calendar", "notification", "appearance", "data", "about"];
+  panelKeys.forEach((key) => {
     const el = getSettingsPanelElement(key);
-    if (el) el.hidden = key !== panel;
+    if (!el) return;
+    if (key === panel) {
+      el.removeAttribute("hidden");
+    } else {
+      el.setAttribute("hidden", "");
+    }
   });
+
+  if (els.settingsModal) {
+    els.settingsModal.classList.toggle("settings-modal-overlay--detail", panel !== "main");
+  }
   if (els.settingsBackBtn) els.settingsBackBtn.hidden = panel === "main";
   if (els.settingsTitle) {
     els.settingsTitle.textContent = SETTINGS_PANEL_TITLES[panel] || SETTINGS_PANEL_TITLES.main;
   }
+  if (els.settingsModal?.querySelector(".settings-body")) {
+    els.settingsModal.querySelector(".settings-body").scrollTop = 0;
+  }
+
   if (panel === "calendar") updateCalendarSyncUi();
   if (panel === "notification") updateNotificationSettingsUi();
   if (panel === "appearance" && els.uiScaleSelect) {

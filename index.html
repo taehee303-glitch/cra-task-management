@@ -1197,14 +1197,15 @@
     <div class="modal modal--settings">
       <header class="settings-header">
         <button type="button" class="settings-header__back" id="settingsBackBtn" hidden aria-label="뒤로">←</button>
-        <h3 class="settings-header__title" id="settingsTitle">⚙️ Settings</h3>
+        <h3 class="settings-header__title" id="settingsTitle">Settings</h3>
         <button type="button" class="modal-close settings-header__close" id="closeSettingsModalBtn" aria-label="닫기">&times;</button>
       </header>
 
       <div class="settings-body">
+        <div class="settings-stack">
         <!-- Main menu -->
         <div id="settingsPanelMain" class="settings-panel-view">
-          <nav class="settings-menu" aria-label="설정 메뉴">
+          <nav class="settings-menu settings-menu--grouped" aria-label="설정 메뉴">
             <button type="button" class="settings-menu__item" data-settings-panel="calendar">
               <span class="settings-menu__icon" aria-hidden="true">📅</span>
               <span class="settings-menu__label">Google Calendar</span>
@@ -1266,7 +1267,7 @@
           <div class="settings-section">
             <div class="settings-row settings-row--toggle">
               <div class="settings-row__body">
-                <strong class="settings-row__title">Due Date Reminder</strong>
+                <strong class="settings-row__title">Due Reminder</strong>
                 <p class="settings-row__hint">마감일·지연 업무 알림</p>
               </div>
               <label class="toggle-switch">
@@ -1339,6 +1340,7 @@
               <p class="settings-about__desc">병원 현장에서 오늘 해야 할 업무를 빠르게 확인하고 완료하는 생산성 앱입니다.</p>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
