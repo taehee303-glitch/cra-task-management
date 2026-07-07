@@ -56,38 +56,39 @@
         <span class="sidebar__brand-text">CRA Workspace</span>
       </div>
       <nav class="sidebar__nav" aria-label="메인 메뉴">
-        <button type="button" class="sidebar__item sidebar__item--active" data-view="tasks" aria-current="page">
+        <button type="button" class="sidebar__item sidebar__item--active sidebar__item--primary" data-view="tasks" aria-current="page">
           <span class="sidebar__icon" aria-hidden="true">📋</span>
           <span class="sidebar__label">My Tasks</span>
         </button>
-        <button type="button" class="sidebar__item" data-view="inbox">
+        <button type="button" class="sidebar__item sidebar__item--primary" data-view="inbox">
           <span class="sidebar__icon" aria-hidden="true">📥</span>
           <span class="sidebar__label">Inbox</span>
           <span class="sidebar__badge" id="inboxNavBadge" hidden>0</span>
         </button>
-        <button type="button" class="sidebar__item" data-view="calendar">
+        <button type="button" class="sidebar__item sidebar__item--primary" data-view="calendar">
           <span class="sidebar__icon" aria-hidden="true">📅</span>
           <span class="sidebar__label">Calendar</span>
         </button>
-        <button type="button" class="sidebar__item" data-view="dashboard">
+        <button type="button" class="sidebar__item sidebar__item--primary" data-view="dashboard">
           <span class="sidebar__icon" aria-hidden="true">📊</span>
           <span class="sidebar__label">Dashboard</span>
         </button>
-        <div class="sidebar__divider" role="separator"></div>
-        <button type="button" class="sidebar__item" data-view="study-master">
+        <div class="sidebar__divider sidebar__divider--secondary" role="separator"></div>
+        <p class="sidebar__section-label">Master Data</p>
+        <button type="button" class="sidebar__item sidebar__item--secondary" data-view="study-master">
           <span class="sidebar__icon" aria-hidden="true">📚</span>
           <span class="sidebar__label">Study</span>
         </button>
-        <button type="button" class="sidebar__item" data-view="site-master">
+        <button type="button" class="sidebar__item sidebar__item--secondary" data-view="site-master">
           <span class="sidebar__icon" aria-hidden="true">🏥</span>
           <span class="sidebar__label">Site</span>
         </button>
-        <button type="button" class="sidebar__item" data-view="system-master">
+        <button type="button" class="sidebar__item sidebar__item--secondary" data-view="system-master">
           <span class="sidebar__icon" aria-hidden="true">🖥️</span>
           <span class="sidebar__label">System</span>
         </button>
         <div class="sidebar__divider" role="separator"></div>
-        <button type="button" class="sidebar__item" data-nav-action="settings">
+        <button type="button" class="sidebar__item sidebar__item--settings" data-nav-action="settings">
           <span class="sidebar__icon" aria-hidden="true">⚙️</span>
           <span class="sidebar__label">Settings</span>
         </button>
@@ -113,7 +114,54 @@
     <main class="main">
       <!-- Tasks View (Home / My Tasks) -->
       <div id="viewTasks" class="view-panel">
-        <section class="tasks-workspace" id="taskListSection">
+        <!-- Mobile Daily Workspace (Today home) -->
+        <section class="mobile-daily" id="mobileDailyHome" aria-label="Today">
+          <div class="mobile-daily__summary">
+            <h2 class="mobile-daily__heading">Today's Summary</h2>
+            <div class="task-filter task-filter--mobile" role="tablist" aria-label="오늘 업무 요약">
+              <button type="button" class="task-filter__btn" data-mobile-filter="overdue" role="tab">
+                🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
+              </button>
+              <button type="button" class="task-filter__btn task-filter__btn--active" data-mobile-filter="today" role="tab" aria-selected="true">
+                📅 Today <span class="task-filter__count" data-count-filter="today">0</span>
+              </button>
+              <button type="button" class="task-filter__btn" data-mobile-filter="d1" role="tab">
+                ⚠ D-1 <span class="task-filter__count" data-count-filter="d1">0</span>
+              </button>
+              <button type="button" class="task-filter__btn" data-mobile-filter="open" role="tab">
+                ○ Open <span class="task-filter__count" data-count-filter="open">0</span>
+              </button>
+              <button type="button" class="task-filter__btn" data-mobile-filter="completed" role="tab">
+                ✓ Completed <span class="task-filter__count" data-count-filter="completed">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="quick-add quick-add--compact quick-add--mobile">
+            <div class="quick-add__row">
+              <input type="text" id="mobileQuickAddInput" class="quick-add__input" placeholder="예) CRC 전화, SDV 시작, Query 확인..." autocomplete="off" aria-label="빠른 업무 추가" />
+              <button type="button" class="quick-add__btn" id="mobileQuickAddBtn" aria-label="Inbox에 추가">+</button>
+            </div>
+          </div>
+
+          <section class="mobile-daily__section">
+            <h3 class="mobile-daily__section-title" id="mobileFeedTitle">오늘 해야 하는 Task</h3>
+            <div id="mobileTaskFeed" class="mobile-task-feed" aria-live="polite"></div>
+          </section>
+
+          <section class="mobile-daily__section">
+            <h3 class="mobile-daily__section-title">이번 주 일정</h3>
+            <div id="mobileWeekPreviewList" class="workspace-preview__list workspace-preview__list--schedule"></div>
+          </section>
+
+          <section class="mobile-daily__section">
+            <h3 class="mobile-daily__section-title">최근 완료 업무</h3>
+            <div id="mobileRecentCompletedList" class="mobile-task-feed"></div>
+          </section>
+        </section>
+
+        <!-- PC Management Workspace -->
+        <section class="tasks-workspace tasks-workspace--pc" id="taskListSection">
           <div class="tasks-workspace__sticky">
             <div class="task-filter" role="tablist" aria-label="업무 필터">
             <button type="button" class="task-filter__btn" data-quick-filter="overdue" role="tab">
@@ -368,7 +416,12 @@
       <!-- Study Master View -->
       <div id="viewStudyMaster" class="view-panel" hidden>
         <section class="study-master-section">
-          <h2 class="section-title">Study</h2>
+          <div class="master-mobile-bar" id="studyMasterMobileBar" hidden>
+            <button type="button" class="master-mobile-bar__back" data-master-back="study-master">← 목록</button>
+            <span class="master-mobile-bar__title" id="studyMasterMobileTitle">Study</span>
+            <button type="button" class="master-mobile-bar__edit" data-master-edit="study-master">수정</button>
+          </div>
+          <h2 class="section-title section-title--pc">Study</h2>
           <div class="study-master">
             <aside class="study-master__sidebar">
               <div class="study-master__sidebar-header">
@@ -531,8 +584,13 @@
       <!-- System Master View -->
       <div id="viewSystemMaster" class="view-panel" hidden>
         <section class="study-master-section">
-          <h2 class="section-title">System</h2>
-          <p class="section-desc">CTMS, EDC, IWRS 등 공통 System 정보를 등록하고 여러 Study에서 재사용합니다.</p>
+          <div class="master-mobile-bar" id="systemMasterMobileBar" hidden>
+            <button type="button" class="master-mobile-bar__back" data-master-back="system-master">← 목록</button>
+            <span class="master-mobile-bar__title" id="systemMasterMobileTitle">System</span>
+            <button type="button" class="master-mobile-bar__edit" data-master-edit="system-master">수정</button>
+          </div>
+          <h2 class="section-title section-title--pc">System</h2>
+          <p class="section-desc section-desc--pc">CTMS, EDC, IWRS 등 공통 System 정보를 등록하고 여러 Study에서 재사용합니다.</p>
           <div class="study-master">
             <aside class="study-master__sidebar">
               <div class="study-master__sidebar-header">
@@ -592,8 +650,13 @@
       <!-- Site Master View -->
       <div id="viewSiteMaster" class="view-panel" hidden>
         <section class="study-master-section">
-          <h2 class="section-title">Site</h2>
-          <p class="section-desc">Site 정보, IRB Portal, 병원명 별칭(Alias)을 통합 관리합니다.</p>
+          <div class="master-mobile-bar" id="siteMasterMobileBar" hidden>
+            <button type="button" class="master-mobile-bar__back" data-master-back="site-master">← 목록</button>
+            <span class="master-mobile-bar__title" id="siteMasterMobileTitle">Site</span>
+            <button type="button" class="master-mobile-bar__edit" data-master-edit="site-master">수정</button>
+          </div>
+          <h2 class="section-title section-title--pc">Site</h2>
+          <p class="section-desc section-desc--pc">Site 정보, IRB Portal, 병원명 별칭(Alias)을 통합 관리합니다.</p>
           <div class="study-master">
             <aside class="study-master__sidebar">
               <div class="study-master__sidebar-header">
@@ -730,6 +793,29 @@
         </section>
       </div>
     </main>
+
+      <nav class="bottom-nav" id="bottomNav" aria-label="Daily 메뉴">
+        <button type="button" class="bottom-nav__btn bottom-nav__btn--active" data-view="tasks" aria-current="page">
+          <span class="bottom-nav__icon" aria-hidden="true">📋</span>
+          <span class="bottom-nav__label">Today</span>
+        </button>
+        <button type="button" class="bottom-nav__btn" data-view="inbox">
+          <span class="bottom-nav__icon" aria-hidden="true">📥</span>
+          <span class="bottom-nav__label">Inbox</span>
+        </button>
+        <button type="button" class="bottom-nav__btn" data-view="calendar">
+          <span class="bottom-nav__icon" aria-hidden="true">📅</span>
+          <span class="bottom-nav__label">Calendar</span>
+        </button>
+        <button type="button" class="bottom-nav__btn" data-view="dashboard">
+          <span class="bottom-nav__icon" aria-hidden="true">📊</span>
+          <span class="bottom-nav__label">Dashboard</span>
+        </button>
+        <button type="button" class="bottom-nav__btn" id="bottomNavMoreBtn" aria-label="More 메뉴">
+          <span class="bottom-nav__icon" aria-hidden="true">⋯</span>
+          <span class="bottom-nav__label">More</span>
+        </button>
+      </nav>
     </div>
   </div>
 
@@ -784,11 +870,12 @@
   <!-- Master Data Sheet -->
   <div class="modal-overlay modal-overlay--sheet" id="masterSheet" hidden>
     <div class="action-sheet">
-      <h3 class="action-sheet__title">Master Data</h3>
-      <button type="button" class="action-sheet__item" data-view="study-master">📁 Study Master</button>
-      <button type="button" class="action-sheet__item" data-view="site-master">🏥 Site Master</button>
-      <button type="button" class="action-sheet__item" data-view="system-master">⚙️ System Master</button>
-      <button type="button" class="action-sheet__item action-sheet__item--cancel" data-nav-action="close-master">취소</button>
+      <h3 class="action-sheet__title">More</h3>
+      <button type="button" class="action-sheet__item" data-view="study-master">📚 Study</button>
+      <button type="button" class="action-sheet__item" data-view="site-master">🏥 Site</button>
+      <button type="button" class="action-sheet__item" data-view="system-master">🖥️ System</button>
+      <button type="button" class="action-sheet__item" data-nav-action="settings">⚙️ Settings</button>
+      <button type="button" class="action-sheet__item action-sheet__item--cancel" data-nav-action="close-master">닫기</button>
     </div>
   </div>
 

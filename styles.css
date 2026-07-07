@@ -4111,7 +4111,301 @@ select:disabled {
     bottom: max(calc(20px * var(--ui-scale)), env(safe-area-inset-bottom));
   }
 
+  .app-mode-daily .fab-root {
+    bottom: max(calc(76px * var(--ui-scale)), calc(64px + env(safe-area-inset-bottom)));
+  }
+
+  .app-mode-daily .workspace__body .main {
+    padding-bottom: max(calc(80px * var(--ui-scale)), calc(68px + env(safe-area-inset-bottom)));
+  }
+
+  .app-mode-daily .topbar {
+    padding-top: max(calc(8px * var(--ui-scale)), env(safe-area-inset-top));
+    padding-bottom: calc(8px * var(--ui-scale));
+    min-height: calc(44px * var(--ui-scale));
+  }
+
+  .app-mode-daily .topbar__title {
+    font-size: 1.05rem;
+  }
+
   .toast-container {
     bottom: max(calc(20px * var(--ui-scale)), env(safe-area-inset-bottom));
   }
+
+  .app-mode-daily .toast-container {
+    bottom: max(calc(76px * var(--ui-scale)), calc(64px + env(safe-area-inset-bottom)));
+  }
+}
+
+/* ── PC Management vs Mobile Daily modes ── */
+
+.mobile-daily {
+  display: none;
+}
+
+.tasks-workspace--pc {
+  display: block;
+}
+
+.app-mode-daily .mobile-daily {
+  display: block;
+}
+
+.app-mode-daily .tasks-workspace--pc {
+  display: none;
+}
+
+.app-mode-daily .sidebar {
+  display: none;
+}
+
+.app-mode-daily .sidebar-backdrop {
+  display: none !important;
+}
+
+.app-mode-daily .topbar__menu {
+  display: inline-flex;
+}
+
+.sidebar__section-label {
+  padding: calc(4px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Mobile Daily home */
+.mobile-daily__heading {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: calc(6px * var(--ui-scale));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mobile-daily__summary {
+  margin-bottom: calc(8px * var(--ui-scale));
+}
+
+.task-filter--mobile {
+  margin-bottom: 0;
+}
+
+.mobile-daily__section {
+  margin-bottom: calc(12px * var(--ui-scale));
+}
+
+.mobile-daily__section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: calc(6px * var(--ui-scale));
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mobile-daily__empty {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  padding: calc(6px * var(--ui-scale)) 0;
+}
+
+.mobile-task-feed {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--ui-scale));
+}
+
+.mobile-task-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(8px * var(--ui-scale));
+  width: 100%;
+  min-height: calc(52px * var(--ui-scale));
+  padding: calc(6px * var(--ui-scale)) calc(8px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--ui-scale));
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mobile-task-card:active {
+  background: #f8fafc;
+}
+
+.mobile-task-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(1px * var(--ui-scale));
+}
+
+.mobile-task-card__title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-task-card__meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-task-card__due {
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.quick-add--mobile {
+  margin-bottom: calc(10px * var(--ui-scale));
+}
+
+.quick-add--mobile .quick-add__input {
+  min-height: calc(36px * var(--ui-scale));
+}
+
+.quick-add--mobile .quick-add__btn {
+  width: calc(36px * var(--ui-scale));
+  height: calc(36px * var(--ui-scale));
+}
+
+/* Master mobile: list → detail → edit */
+.master-mobile-bar {
+  display: none;
+  align-items: center;
+  gap: calc(8px * var(--ui-scale));
+  padding: calc(8px * var(--ui-scale)) 0 calc(10px * var(--ui-scale));
+  border-bottom: 1px solid var(--border);
+  margin-bottom: calc(8px * var(--ui-scale));
+}
+
+.master-mobile-bar__back,
+.master-mobile-bar__edit {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--primary);
+  padding: calc(6px * var(--ui-scale));
+}
+
+.master-mobile-bar__title {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-mode-daily .master-mobile-bar:not([hidden]) {
+  display: flex;
+}
+
+.app-mode-daily .section-title--pc,
+.app-mode-daily .section-desc--pc {
+  display: none;
+}
+
+.app-mode-daily .study-master__sidebar-header .btn,
+.app-mode-daily .system-master__sidebar-header .btn,
+.app-mode-daily .site-master__sidebar-header .btn {
+  display: none;
+}
+
+.app-mode-daily .study-master,
+.app-mode-daily .site-master-layout .study-master {
+  grid-template-columns: 1fr;
+}
+
+.app-mode-daily .study-master__content {
+  display: none;
+}
+
+.app-mode-daily .master-mobile-detail-open .study-master__content {
+  display: block;
+}
+
+.app-mode-daily #viewStudyMaster.master-mobile-detail-open .study-master__content,
+.app-mode-daily #viewSiteMaster.master-mobile-detail-open .study-master__content,
+.app-mode-daily #viewSystemMaster.master-mobile-detail-open .study-master__content {
+  position: fixed;
+  inset: 0;
+  z-index: 460;
+  background: #fff;
+  overflow-y: auto;
+  padding:
+    max(calc(12px * var(--ui-scale)), env(safe-area-inset-top))
+    max(calc(16px * var(--ui-scale)), env(safe-area-inset-right))
+    max(calc(80px * var(--ui-scale)), calc(68px + env(safe-area-inset-bottom)))
+    max(calc(16px * var(--ui-scale)), env(safe-area-inset-left));
+}
+
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content input,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content textarea,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content select,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content .form-actions,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content .btn--danger,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content .sites-panel__header .btn,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content .systems-panel__header .btn {
+  display: none;
+}
+
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content input,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content textarea,
+.app-mode-daily .master-mobile-detail-open:not(.master-mobile-edit-open) .study-master__content select {
+  display: block;
+  pointer-events: none;
+  border-color: transparent;
+  background: #f8fafc;
+  padding-left: 0;
+}
+
+.app-mode-daily .master-mobile-edit-open .study-master__sidebar-header .btn {
+  display: inline-flex;
+}
+
+.app-mode-daily .master-mobile-edit-open .study-master__content .form-actions,
+.app-mode-daily .master-mobile-edit-open .study-master__content .btn--danger {
+  display: flex;
+}
+
+/* Mobile fullscreen dialogs */
+.app-mode-daily .modal-overlay:not([hidden]) .modal,
+.app-mode-daily .modal-overlay:not([hidden]) .modal--sheet {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+}
+
+.app-mode-daily .inbox-view__header,
+.app-mode-daily .calendar-view__header,
+.app-mode-daily .dashboard-view__header {
+  padding-top: 0;
+}
+
+.app-mode-management .bottom-nav {
+  display: none !important;
 }

@@ -153,6 +153,21 @@ const VIEW_TITLES = {
   "system-master": "System",
 };
 
+const DAILY_PRIMARY_VIEWS = ["tasks", "inbox", "calendar", "dashboard"];
+const MASTER_VIEWS = ["study-master", "site-master", "system-master"];
+const MOBILE_BREAKPOINT = window.matchMedia("(max-width: 768px)");
+
+const MOBILE_FEED_TITLES = {
+  overdue: "Overdue",
+  today: "오늘 해야 하는 Task",
+  d1: "D-1",
+  open: "Open",
+  completed: "Completed",
+};
+
+let currentViewName = "tasks";
+let mobileDailyFilter = "today";
+
 let addTaskPresetPriority = "Medium";
 const els = {
   todayLabel: document.getElementById("todayLabel"),
@@ -296,6 +311,18 @@ const els = {
   googleAccountStatus: document.getElementById("googleAccountStatus"),
   uiScaleSelect: document.getElementById("uiScaleSelect"),
   taskListSection: document.getElementById("taskListSection"),
+  mobileDailyHome: document.getElementById("mobileDailyHome"),
+  mobileTaskFeed: document.getElementById("mobileTaskFeed"),
+  mobileWeekPreviewList: document.getElementById("mobileWeekPreviewList"),
+  mobileRecentCompletedList: document.getElementById("mobileRecentCompletedList"),
+  mobileFeedTitle: document.getElementById("mobileFeedTitle"),
+  mobileQuickAddInput: document.getElementById("mobileQuickAddInput"),
+  mobileQuickAddBtn: document.getElementById("mobileQuickAddBtn"),
+  bottomNav: document.getElementById("bottomNav"),
+  bottomNavMoreBtn: document.getElementById("bottomNavMoreBtn"),
+  masterSheet: document.getElementById("masterSheet"),
+  bottomNavBtns: document.querySelectorAll(".bottom-nav [data-view]"),
+  mobileFilterBtns: document.querySelectorAll("[data-mobile-filter]"),
   dashboardFilterCards: document.querySelectorAll("[data-dashboard-filter]"),
   toastContainer: document.getElementById("toastContainer"),
   cloudSyncStatus: document.getElementById("cloudSyncStatus"),
@@ -569,6 +596,7 @@ async function bootstrapApp() {
   els.navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       closeSidebar();
+      closeMasterSheet();
       switchView(btn.dataset.view);
     });
   });
@@ -586,6 +614,26 @@ async function bootstrapApp() {
       event.preventDefault();
       handleQuickAddInput(els.quickAddInput);
     }
+  });
+  els.mobileQuickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.mobileQuickAddInput));
+  els.mobileQuickAddInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleQuickAddInput(els.mobileQuickAddInput);
+    }
+  });
+  els.mobileFilterBtns.forEach((btn) => {
+    btn.addEventListener("click", () => handleMobileFilterClick(btn.dataset.mobileFilter));
+  });
+  els.bottomNavMoreBtn?.addEventListener("click", openMasterSheet);
+  els.masterSheet?.addEventListener("click", (event) => {
+    if (event.target === els.masterSheet) closeMasterSheet();
+  });
+  document.querySelectorAll("[data-master-back]").forEach((btn) => {
+    btn.addEventListener("click", () => closeMasterMobileDetail(btn.dataset.masterBack));
+  });
+  document.querySelectorAll("[data-master-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => openMasterMobileEdit(btn.dataset.masterEdit));
   });
   els.inboxQuickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.inboxQuickAddInput));
   els.inboxQuickAddInput?.addEventListener("keydown", (event) => {
@@ -711,6 +759,13 @@ async function bootstrapApp() {
   });
 
   window.addEventListener("storage", handleStorageSync);
+
+  initAppMode();
+  MOBILE_BREAKPOINT.addEventListener("change", () => {
+    applyAppMode();
+    switchView(currentViewName);
+    renderAll();
+  });
 }
 
 function isWebCryptoAvailable() {
@@ -2290,7 +2345,206 @@ function migrateMasterStructureV2() {
   if (siteChanged) SiteMasterStore.persist();
 }
 
+function isDailyMode() {
+  return MOBILE_BREAKPOINT.matches;
+}
+
+function getViewTitle(viewName) {
+  if (isDailyMode() && viewName === "tasks") return "Today";
+  return VIEW_TITLES[viewName] || "CRA Workspace";
+}
+
+function initAppMode() {
+  applyAppMode();
+}
+
+function applyAppMode() {
+  const daily = isDailyMode();
+  document.body.classList.toggle("app-mode-daily", daily);
+  document.body.classList.toggle("app-mode-management", !daily);
+  if (els.bottomNav) els.bottomNav.hidden = !daily;
+  if (els.sidebarToggleBtn) {
+    els.sidebarToggleBtn.setAttribute("aria-label", daily ? "More 메뉴" : "메뉴 열기");
+  }
+}
+
+function openMasterSheet() {
+  if (els.masterSheet) els.masterSheet.hidden = false;
+}
+
+function closeMasterSheet() {
+  if (els.masterSheet) els.masterSheet.hidden = true;
+}
+
+function getMasterViewPanel(viewName) {
+  if (viewName === "study-master") return els.viewStudyMaster;
+  if (viewName === "site-master") return els.viewSiteMaster;
+  if (viewName === "system-master") return els.viewSystemMaster;
+  return null;
+}
+
+function setMasterMobileDetail(viewName, isOpen, editMode = false) {
+  if (!isDailyMode()) return;
+  const panel = getMasterViewPanel(viewName);
+  panel?.classList.toggle("master-mobile-detail-open", isOpen);
+  panel?.classList.toggle("master-mobile-edit-open", editMode);
+  const barId =
+    viewName === "study-master"
+      ? "studyMasterMobileBar"
+      : viewName === "site-master"
+        ? "siteMasterMobileBar"
+        : "systemMasterMobileBar";
+  const bar = document.getElementById(barId);
+  if (bar) bar.hidden = !isOpen;
+}
+
+function closeMasterMobileDetail(viewName) {
+  setMasterMobileDetail(viewName, false, false);
+  if (viewName === "study-master") selectedStudyMasterId = null;
+  if (viewName === "site-master") selectedSiteMasterId = null;
+  if (viewName === "system-master") selectedSystemMasterId = null;
+  if (viewName === "study-master") renderStudyMaster();
+  if (viewName === "site-master") renderSiteMaster();
+  if (viewName === "system-master") renderSystemMaster();
+}
+
+function openMasterMobileEdit(viewName) {
+  setMasterMobileDetail(viewName, true, true);
+}
+
+function syncMasterMobileDetail(viewName) {
+  if (!isDailyMode() || currentViewName !== viewName) return;
+  const hasSelection =
+    (viewName === "study-master" && selectedStudyMasterId) ||
+    (viewName === "site-master" && selectedSiteMasterId) ||
+    (viewName === "system-master" && selectedSystemMasterId);
+  if (hasSelection) setMasterMobileDetail(viewName, true, false);
+}
+
+function handleMobileFilterClick(filter) {
+  if (!filter) return;
+  mobileDailyFilter = filter;
+  taskQuickFilter = filter;
+  updateMobileFilterUi();
+  updateQuickFilterUi();
+  renderMobileTaskFeed();
+}
+
+function updateMobileFilterUi() {
+  els.mobileFilterBtns.forEach((btn) => {
+    const isActive = mobileDailyFilter === btn.dataset.mobileFilter;
+    btn.classList.toggle("task-filter__btn--active", isActive);
+    btn.setAttribute("aria-selected", String(isActive));
+  });
+  if (els.mobileFeedTitle) {
+    els.mobileFeedTitle.textContent = MOBILE_FEED_TITLES[mobileDailyFilter] || "Task";
+  }
+}
+
+function getMobileFilteredTasks() {
+  const prev = taskQuickFilter;
+  taskQuickFilter = mobileDailyFilter;
+  const filtered = getFilteredTasks().filter((t) => !isInboxTask(t));
+  taskQuickFilter = prev;
+  return filtered;
+}
+
+function renderMobileTaskCard(task) {
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
+  const dueText = task.dueDate ? formatDueDisplay(task) : "Due 미정";
+  const studyLabel = task.study?.trim() || "—";
+  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
+
+  return `
+    <button type="button" class="mobile-task-card" data-edit="${escapeAttr(task.id)}">
+      <span class="priority-badge priority-badge--${priorityClass(task.priority)} priority-badge--xs">${escapeHtml(task.priority)}</span>
+      <span class="mobile-task-card__body">
+        <span class="mobile-task-card__title">${escapeHtml(task.task)}</span>
+        <span class="mobile-task-card__meta">${escapeHtml(studyLabel)} · ${escapeHtml(siteLabel)}</span>
+      </span>
+      <span class="mobile-task-card__due ${dueClass}">${escapeHtml(dueText)}</span>
+    </button>
+  `;
+}
+
+function bindMobileTaskFeedClicks(container) {
+  container?.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => openEditModal(btn.dataset.edit));
+  });
+}
+
+function renderMobileTaskFeed() {
+  if (!els.mobileTaskFeed) return;
+  const filtered = getMobileFilteredTasks().sort(compareTasks);
+  els.mobileTaskFeed.innerHTML = filtered.length
+    ? filtered.map((t) => renderMobileTaskCard(t)).join("")
+    : '<p class="mobile-daily__empty">표시할 업무가 없습니다.</p>';
+  bindMobileTaskFeedClicks(els.mobileTaskFeed);
+}
+
+function renderMobileWeekPreview() {
+  if (!els.mobileWeekPreviewList) return;
+  const todayStr = toDateString(getToday());
+  const futureWeekTasks = tasks
+    .filter(
+      (t) =>
+        !isInboxTask(t) &&
+        isActive(t) &&
+        t.dueDate &&
+        t.dueDate >= todayStr &&
+        isDueThisWeek(t.dueDate)
+    )
+    .sort(compareTasks);
+
+  if (!futureWeekTasks.length) {
+    els.mobileWeekPreviewList.innerHTML =
+      '<p class="workspace-preview__empty">오늘 이후 이번 주 일정이 없습니다.</p>';
+    return;
+  }
+
+  let lastDate = "";
+  els.mobileWeekPreviewList.innerHTML = futureWeekTasks
+    .map((task) => {
+      let dateHeader = "";
+      if (task.dueDate !== lastDate) {
+        lastDate = task.dueDate;
+        const d = parseDate(task.dueDate);
+        dateHeader = `<div class="schedule-date">${d.getMonth() + 1}/${d.getDate()}</div>`;
+      }
+      return `${dateHeader}${renderScheduleItem(task)}`;
+    })
+    .join("");
+  bindPreviewTaskClicks(els.mobileWeekPreviewList);
+}
+
+function renderMobileRecentCompleted() {
+  if (!els.mobileRecentCompletedList) return;
+  const recent = tasks
+    .filter((t) => !isInboxTask(t) && t.status === "Completed")
+    .sort((a, b) => {
+      const aTime = new Date(a.updatedAt || a.createdAt).getTime();
+      const bTime = new Date(b.updatedAt || b.createdAt).getTime();
+      return bTime - aTime;
+    })
+    .slice(0, 5);
+
+  els.mobileRecentCompletedList.innerHTML = recent.length
+    ? recent.map((t) => renderMobileTaskCard(t)).join("")
+    : '<p class="mobile-daily__empty">최근 완료 업무가 없습니다.</p>';
+  bindMobileTaskFeedClicks(els.mobileRecentCompletedList);
+}
+
+function renderMobileDailyHome() {
+  if (!isDailyMode()) return;
+  updateTaskFilterCounts();
+  updateMobileFilterUi();
+  renderMobileTaskFeed();
+  renderMobileWeekPreview();
+  renderMobileRecentCompleted();
+}
+
 function switchView(viewName) {
+  currentViewName = viewName;
   els.viewTasks.hidden = viewName !== "tasks";
   els.viewInbox.hidden = viewName !== "inbox";
   els.viewCalendar.hidden = viewName !== "calendar";
@@ -2301,25 +2555,42 @@ function switchView(viewName) {
 
   closeFabMenu();
   closeSidebar();
+  closeMasterSheet();
 
   if (els.topbarTitle) {
-    els.topbarTitle.textContent = VIEW_TITLES[viewName] || "CRA Workspace";
+    els.topbarTitle.textContent = getViewTitle(viewName);
   }
 
   updateNavHighlight(viewName);
 
-  if (viewName === "study-master") renderStudyMaster();
-  if (viewName === "system-master") renderSystemMaster();
-  if (viewName === "site-master") renderSiteMaster();
+  if (viewName === "study-master") {
+    renderStudyMaster();
+    syncMasterMobileDetail("study-master");
+  }
+  if (viewName === "system-master") {
+    renderSystemMaster();
+    syncMasterMobileDetail("system-master");
+  }
+  if (viewName === "site-master") {
+    renderSiteMaster();
+    syncMasterMobileDetail("site-master");
+  }
   if (viewName === "dashboard") renderDashboard();
   if (viewName === "calendar") renderCalendarView();
   if (viewName === "inbox") renderInboxList();
   if (viewName === "tasks") {
     refreshTaskStudySiteSelects();
-    renderTodayWorkspace();
-    renderTaskList();
+    if (isDailyMode()) {
+      renderMobileDailyHome();
+    } else {
+      renderTodayWorkspace();
+      renderTaskList();
+    }
   }
-  if (els.fabRoot) els.fabRoot.hidden = viewName !== "tasks";
+  const showFab = isDailyMode()
+    ? DAILY_PRIMARY_VIEWS.slice(0, 2).includes(viewName)
+    : viewName === "tasks";
+  if (els.fabRoot) els.fabRoot.hidden = !showFab;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -2327,6 +2598,13 @@ function updateNavHighlight(viewName) {
   document.querySelectorAll(".sidebar__item[data-view]").forEach((btn) => {
     const isActive = btn.dataset.view === viewName;
     btn.classList.toggle("sidebar__item--active", isActive);
+    if (isActive) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
+  });
+
+  els.bottomNavBtns?.forEach((btn) => {
+    const isActive = btn.dataset.view === viewName;
+    btn.classList.toggle("bottom-nav__btn--active", isActive);
     if (isActive) btn.setAttribute("aria-current", "page");
     else btn.removeAttribute("aria-current");
   });
@@ -2340,6 +2618,10 @@ function updateNavHighlight(viewName) {
 
 function toggleSidebar() {
   if (!els.sidebar) return;
+  if (isDailyMode()) {
+    openMasterSheet();
+    return;
+  }
   const isOpen = els.sidebar.classList.toggle("sidebar--open");
   if (els.sidebarBackdrop) els.sidebarBackdrop.hidden = !isOpen;
   els.sidebarToggleBtn?.setAttribute("aria-expanded", String(isOpen));
@@ -2351,10 +2633,6 @@ function closeSidebar() {
   if (els.sidebarBackdrop) els.sidebarBackdrop.hidden = true;
   els.sidebarToggleBtn?.setAttribute("aria-expanded", "false");
 }
-
-function openMasterSheet() {}
-
-function closeMasterSheet() {}
 
 function closeMasterMenuDropdown() {}
 
@@ -2401,7 +2679,12 @@ function closeAddTaskModal() {
 function handleNavAction(action) {
   if (action === "settings") {
     closeSidebar();
+    closeMasterSheet();
     openSettingsModal();
+    return;
+  }
+  if (action === "close-master") {
+    closeMasterSheet();
   }
 }
 
@@ -2601,14 +2884,20 @@ function renderInboxList() {
 
   els.inboxTaskList.innerHTML = inboxTasks
     .map((task) =>
-      renderTaskCard({
-        task,
-        isSubtask: false,
-      })
+      isDailyMode()
+        ? renderMobileTaskCard(task)
+        : renderTaskCard({
+            task,
+            isSubtask: false,
+          })
     )
     .join("");
 
-  bindTaskListActions(els.inboxTaskList);
+  if (isDailyMode()) {
+    bindMobileTaskFeedClicks(els.inboxTaskList);
+  } else {
+    bindTaskListActions(els.inboxTaskList);
+  }
 }
 
 function getWeekRangeWithOffset(offset = 0) {
@@ -3307,6 +3596,12 @@ function openNewStudyForm() {
 function selectStudyMaster(studyId) {
   selectedStudyMasterId = studyId;
   renderStudyMaster();
+  if (isDailyMode() && studyId) {
+    const study = StudyMasterStore.getAll().find((s) => s.id === studyId);
+    const titleEl = document.getElementById("studyMasterMobileTitle");
+    if (titleEl && study) titleEl.textContent = study.protocolNumber || study.studyName;
+    setMasterMobileDetail("study-master", true, false);
+  }
 }
 
 function handleStudyMasterSubmit(e) {
@@ -3636,6 +3931,12 @@ function openNewSystemMasterForm() {
 function selectSystemMaster(systemMasterId) {
   selectedSystemMasterId = systemMasterId;
   renderSystemMaster();
+  if (isDailyMode() && systemMasterId) {
+    const system = SystemMasterStore.getById(systemMasterId);
+    const titleEl = document.getElementById("systemMasterMobileTitle");
+    if (titleEl && system) titleEl.textContent = system.systemName;
+    setMasterMobileDetail("system-master", true, false);
+  }
 }
 
 function handleSystemMasterSubmit(e) {
@@ -3845,6 +4146,12 @@ async function buildSiteMasterPayload(entryId) {
 function selectSiteMasterEntry(siteId) {
   selectedSiteMasterId = siteId;
   renderSiteMaster();
+  if (isDailyMode() && siteId) {
+    const site = SiteMasterStore.getById(siteId);
+    const titleEl = document.getElementById("siteMasterMobileTitle");
+    if (titleEl && site) titleEl.textContent = site.standardName || site.siteNumber;
+    setMasterMobileDetail("site-master", true, false);
+  }
 }
 
 async function handleSiteMasterSubmit(e) {
@@ -6170,10 +6477,14 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
 
 function renderAll() {
   renderDashboard();
-  renderTodayWorkspace();
+  if (isDailyMode()) {
+    renderMobileDailyHome();
+  } else {
+    renderTodayWorkspace();
+    renderTaskList();
+  }
   updateStudyFilterOptions();
   refreshTaskStudySiteSelects();
-  renderTaskList();
   updateInboxBadge();
   if (els.viewInbox && !els.viewInbox.hidden) renderInboxList();
   if (els.viewCalendar && !els.viewCalendar.hidden) renderCalendarView();
