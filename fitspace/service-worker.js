@@ -1,6 +1,6 @@
 /* FitSpace PWA — offline cache for personal use */
 
-const CACHE = 'fitspace-v1';
+const CACHE = 'fitspace-v2';
 const ASSETS = [
   './',
   './index.html',

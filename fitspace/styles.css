@@ -5004,6 +5004,10 @@ body {
 
 /* ── PR Celebration ── */
 
+.pr-celebrate[hidden] {
+  display: none !important;
+}
+
 .pr-celebrate {
   position: fixed;
   inset: 0;
@@ -5015,6 +5019,11 @@ body {
   opacity: 0;
   transition: opacity 0.3s ease;
   padding: 20px;
+  pointer-events: none;
+}
+
+.pr-celebrate:not([hidden]) {
+  pointer-events: auto;
 }
 
 .pr-celebrate--show {
