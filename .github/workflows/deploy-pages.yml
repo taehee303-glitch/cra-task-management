@@ -1,8 +1,11 @@
-name: Deploy to GitHub Pages
+name: Deploy FitSpace to GitHub Pages
 
 on:
   push:
     branches: ["main", "master"]
+    paths:
+      - "fitspace/**"
+      - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,12 +27,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare static site
+      - name: Prepare FitSpace static site
         run: |
           mkdir -p public
-          cp index.html styles.css app.js pwa.js service-worker.js manifest.webmanifest calendar-config.js calendar-sync.js firebase-config.js firebase-sync.js 404.html privacy.html public/
-          cp -r icons public/
-          cp .nojekyll public/
+          cp -r fitspace/* public/
+          cp fitspace/.nojekyll public/.nojekyll 2>/dev/null || touch public/.nojekyll
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

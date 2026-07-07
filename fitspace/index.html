@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#22c55e" />
+  <meta name="description" content="FitSpace — AI Health Assistant. 식단, 운동, 건강 목표를 AI와 대화하며 관리하세요." />
+  <title>FitSpace — AI Health Assistant</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="FitSpace" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="8" fill="var(--accent)" />
+            <path d="M8 14h12M14 8v12" stroke="white" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <span class="sidebar__title">FitSpace</span>
+        <span class="sidebar__tagline">AI Health Assistant</span>
+      </div>
+
+      <nav class="sidebar__nav" aria-label="Main navigation">
+        <a href="#chat" class="nav-item active" data-view="chat">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5zM11 7a2 2 0 012-2h5a2 2 0 012 2v4a2 2 0 01-2 2h-1l-3 3v-3h-2a2 2 0 01-2-2V7z"/></svg>
+          AI 건강 비서
+        </a>
+        <a href="#dashboard" class="nav-item" data-view="dashboard">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/></svg>
+          홈
+        </a>
+        <a href="#meals" class="nav-item" data-view="meals">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3z"/></svg>
+          식단
+        </a>
+        <a href="#workout" class="nav-item" data-view="workout">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h3a1 1 0 110 2H6a1 1 0 110-2h3V6.477L6.237 7.606l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+          Workout
+        </a>
+        <a href="#growth" class="nav-item" data-view="growth">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/></svg>
+          성장
+        </a>
+        <a href="#progress" class="nav-item" data-view="progress">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+          Progress
+        </a>
+        <a href="#metrics" class="nav-item" data-view="metrics">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+          체중 관리
+        </a>
+        <a href="#calendar" class="nav-item" data-view="calendar">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+          Calendar
+        </a>
+        <a href="#shopping" class="nav-item" data-view="shopping">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3z"/></svg>
+          장보기
+        </a>
+        <a href="#settings" class="nav-item" data-view="settings">
+          <svg class="nav-item__icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+          Settings
+        </a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <div class="sidebar__user">
+          <div class="sidebar__avatar">A</div>
+          <div class="sidebar__user-info">
+            <span class="sidebar__user-name" id="userName">Alex Morgan</span>
+            <span class="sidebar__user-plan">AI Health Assistant</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile menu toggle -->
+    <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+    </button>
+
+    <!-- Main content -->
+    <main class="main">
+      <header class="page-header">
+        <div class="page-header__left">
+          <h1 class="page-title" id="pageTitle">오늘</h1>
+          <p class="page-subtitle" id="pageSubtitle">Tuesday, July 7, 2026</p>
+        </div>
+        <div class="page-header__actions" id="headerActions"></div>
+      </header>
+
+      <!-- AI Chat View (core) -->
+      <section class="view view--active" id="view-chat" data-view="chat">
+        <div class="chat-app">
+          <div class="chat-proactive" id="chatProactive"></div>
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-suggestions" id="chatSuggestions"></div>
+          <form class="chat-input-bar" id="chatForm">
+            <input type="file" id="chatPhotoInput" accept="image/*" hidden />
+            <button type="button" class="chat-input-bar__photo" id="chatPhotoBtn" aria-label="사진 업로드">📷</button>
+            <input type="text" id="chatInput" class="chat-input-bar__field" placeholder="무엇이든 물어보세요…" autocomplete="off" />
+            <button type="submit" class="btn btn--primary chat-input-bar__send">전송</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Dashboard View -->
+      <section class="view" id="view-dashboard" data-view="dashboard">
+        <div class="home home--mission">
+          <div class="home-ai-proactive card card--ai animate-in" id="homeAiProactive"></div>
+          <div class="home-gaps animate-in" id="homeGaps"></div>
+          <header class="mission-hero animate-in">
+            <time class="home-date" id="homeDate"></time>
+            <p class="home-cheer" id="homeCheer"></p>
+            <div class="mission-hero__progress">
+              <div class="mission-ring">
+                <svg viewBox="0 0 120 120">
+                  <circle class="mission-ring__bg" cx="60" cy="60" r="52" />
+                  <circle class="mission-ring__fill" id="missionRingFill" cx="60" cy="60" r="52" />
+                </svg>
+                <div class="mission-ring__center">
+                  <span class="mission-ring__pct" id="dailyProgressValue">0%</span>
+                  <span class="mission-ring__label">미션 달성</span>
+                </div>
+              </div>
+              <div class="mission-hero__detail">
+                <h2 class="mission-hero__title">오늘의 미션</h2>
+                <p class="mission-hero__sub" id="heroSub">0 / 6 완료</p>
+                <div class="mission-hero__bar">
+                  <div class="mission-hero__bar-fill" id="heroBarFill"></div>
+                </div>
+                <p class="mission-hero__hint" id="missionHint">목표가 자동으로 생성됩니다</p>
+              </div>
+            </div>
+          </header>
+
+          <div class="mission-core card animate-in" style="animation-delay: 0.05s">
+            <div class="card__header">
+              <h3 class="card__title mission-core__title">오늘의 미션</h3>
+              <span class="card__meta mission-core__meta" id="checklistProgress">0/6</span>
+            </div>
+            <ul class="mission-list" id="todayMission"></ul>
+          </div>
+
+          <div class="home-grid home-grid--secondary">
+            <div class="card home-card animate-in" style="animation-delay: 0.1s">
+              <div class="card__header">
+                <h3 class="card__title">오늘 식단</h3>
+                <button class="btn btn--ghost btn--sm" data-nav="meals">편집</button>
+              </div>
+              <div class="home-meals" id="homeMeals"></div>
+              <div class="home-meals-total" id="homeMealsTotal"></div>
+            </div>
+
+            <div class="card home-card animate-in" style="animation-delay: 0.12s">
+              <div class="card__header">
+                <h3 class="card__title">오늘 운동</h3>
+                <button class="btn btn--ghost btn--sm" data-nav="workout">시작</button>
+              </div>
+              <div id="homeWorkout"></div>
+            </div>
+          </div>
+
+          <div class="card home-card home-card--ai animate-in" style="animation-delay: 0.16s" id="homeAiCoach"></div>
+        </div>
+      </section>
+
+      <!-- Meal Planner View -->
+      <section class="view" id="view-meals" data-view="meals">
+        <div class="food-log">
+          <div class="food-log__header">
+            <div class="day-tabs food-day-tabs" id="mealDayTabs"></div>
+            <div class="food-daily" id="foodDailyTotal"></div>
+          </div>
+
+          <div class="food-sections" id="mealSlots"></div>
+
+          <!-- Quick add sheet -->
+          <div class="food-add-sheet" id="foodAddSheet" hidden>
+            <div class="food-add-sheet__head">
+              <h3 class="food-add-sheet__title" id="foodAddTitle">식단 추가</h3>
+              <button class="btn btn--ghost btn--icon food-add-close" id="foodAddClose" aria-label="닫기">✕</button>
+            </div>
+            <form class="food-add-form" id="addMealForm">
+              <input type="hidden" id="mealType" />
+              <div class="food-add-photo">
+                <input type="file" id="mealPhotoInput" accept="image/*" hidden />
+                <button type="button" class="food-add-photo__btn" id="mealPhotoBtn">
+                  <img class="food-add-photo__preview" id="mealPhotoPreview" hidden alt="" />
+                  <span class="food-add-photo__placeholder" id="mealPhotoPlaceholder">📷<br/>사진</span>
+                </button>
+              </div>
+              <input type="text" id="mealName" class="input food-add-name" placeholder="음식명" required />
+              <div class="food-add-macros">
+                <label class="food-macro-input">
+                  <span>칼로리</span>
+                  <input type="number" id="mealCalories" class="input" placeholder="0" inputmode="numeric" />
+                </label>
+                <label class="food-macro-input">
+                  <span>단백질</span>
+                  <input type="number" id="mealProtein" class="input" placeholder="0" inputmode="numeric" />
+                </label>
+                <label class="food-macro-input">
+                  <span>탄수화물</span>
+                  <input type="number" id="mealCarbs" class="input" placeholder="0" inputmode="numeric" />
+                </label>
+                <label class="food-macro-input">
+                  <span>지방</span>
+                  <input type="number" id="mealFat" class="input" placeholder="0" inputmode="numeric" />
+                </label>
+              </div>
+              <button type="submit" class="btn btn--primary btn--full food-add-submit">추가하기</button>
+            </form>
+          </div>
+          <div class="food-add-backdrop" id="foodAddBackdrop" hidden></div>
+        </div>
+      </section>
+
+      <!-- Workout View -->
+      <section class="view" id="view-workout" data-view="workout">
+        <div class="gym-app">
+          <!-- Session header (active only) -->
+          <div class="gym-bar" id="gymBar" hidden>
+            <div class="gym-bar__row">
+              <div class="gym-timer-block">
+                <span class="gym-timer-label">운동 중</span>
+                <span class="gym-timer" id="workoutTimer">00:00</span>
+              </div>
+              <button class="btn btn--primary btn--sm gym-finish-btn" id="finishWorkout">종료</button>
+            </div>
+          </div>
+
+          <!-- Rest timer -->
+          <div class="rest-banner" id="restBanner" hidden>
+            <div class="rest-banner__inner">
+              <span class="rest-banner__label">휴식</span>
+              <span class="rest-banner__time" id="restTimer">1:30</span>
+              <button class="btn btn--ghost btn--sm rest-adj" id="restMinus" aria-label="15초 감소">−15</button>
+              <span class="rest-duration" id="restDurationLabel">90초</span>
+              <button class="btn btn--ghost btn--sm rest-adj" id="restPlus" aria-label="15초 증가">+15</button>
+              <button class="btn btn--ghost btn--sm rest-skip" id="restSkip">건너뛰기</button>
+            </div>
+            <div class="rest-banner__bar"><div class="rest-banner__fill" id="restBarFill"></div></div>
+          </div>
+
+          <!-- Focus session (one exercise at a time) -->
+          <div class="gym-focus" id="gymFocus" hidden></div>
+
+          <!-- Summary (post-workout analysis) -->
+          <div class="gym-summary" id="gymSummary" hidden>
+            <div class="gym-summary__hero">
+              <span class="gym-summary__emoji">💪</span>
+              <h2 class="gym-summary__title">운동 완료!</h2>
+              <p class="gym-summary__routine" id="summaryRoutineName"></p>
+            </div>
+            <div class="gym-summary__stats" id="summaryStats"></div>
+            <div id="summaryAiCoach"></div>
+            <div class="card summary-compare-card">
+              <h3 class="card__title">계획 vs 실제</h3>
+              <div id="summaryCompare"></div>
+            </div>
+            <label class="session-note-label">
+              <span>오늘 운동 메모</span>
+              <textarea class="input" id="sessionNoteInput" rows="3" placeholder="전체 운동에 대한 메모..."></textarea>
+            </label>
+            <button class="btn btn--primary btn--full" id="summaryDone">저장하고 홈으로</button>
+          </div>
+
+          <!-- Planner & secondary tabs -->
+          <div class="gym-secondary">
+            <div class="workout-tabs gym-tabs">
+              <button class="tab-btn active" data-workout-tab="plan">계획</button>
+              <button class="tab-btn" data-workout-tab="routines">루틴</button>
+              <button class="tab-btn" data-workout-tab="growth">성장</button>
+              <button class="tab-btn" data-workout-tab="history">히스토리</button>
+            </div>
+
+            <div class="workout-panel active" id="workoutPanelPlan">
+              <div class="card card--wide" id="workoutPlannerWrap">
+                <div class="card__header">
+                  <h3 class="card__title">운동 계획</h3>
+                  <select class="gym-routine-select input" id="gymRoutineSelect" aria-label="루틴 선택"></select>
+                </div>
+                <div id="workoutPlanner"></div>
+              </div>
+            </div>
+
+            <div class="workout-panel" id="workoutPanelRoutines">
+              <div class="card">
+                <div class="card__header">
+                  <h3 class="card__title">저장된 루틴</h3>
+                  <button class="btn btn--primary btn--sm" id="createRoutineBtn">+ 새 루틴</button>
+                </div>
+                <div class="routine-list" id="routineList"></div>
+              </div>
+            </div>
+
+            <div class="workout-panel" id="workoutPanelGrowth">
+              <div class="card">
+                <div class="card__header">
+                  <h3 class="card__title">성장 요약</h3>
+                  <a href="#growth" class="btn btn--ghost btn--sm" data-nav="growth">전체 보기 →</a>
+                </div>
+                <div id="workoutGrowth"></div>
+              </div>
+            </div>
+
+            <div class="workout-panel" id="workoutPanelHistory">
+              <div class="card">
+                <h3 class="card__title">운동 기록</h3>
+                <div class="history-list" id="workoutHistory"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Growth Dashboard -->
+      <section class="view" id="view-growth" data-view="growth">
+        <div class="growth-app" id="growthDashboard"></div>
+      </section>
+
+      <!-- Progress View -->
+      <section class="view" id="view-progress" data-view="progress">
+        <div class="card card--wide card--ai ai-predictions-banner" id="progressAiPredictions"></div>
+        <div class="progress-grid">
+          <div class="card">
+            <h3 class="card__title">Weight Trend</h3>
+            <canvas id="chartWeight" height="200"></canvas>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Body Fat %</h3>
+            <canvas id="chartBodyFat" height="200"></canvas>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Muscle Mass</h3>
+            <canvas id="chartMuscle" height="200"></canvas>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Daily Calories</h3>
+            <canvas id="chartCalories" height="200"></canvas>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Protein Intake</h3>
+            <canvas id="chartProtein" height="200"></canvas>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Workout Frequency</h3>
+            <canvas id="chartWorkouts" height="200"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Body Metrics View -->
+      <section class="view" id="view-metrics" data-view="metrics">
+        <div class="inbody-log">
+          <div class="inbody-hero" id="inbodyHero"></div>
+          <div class="inbody-stats" id="inbodyStats"></div>
+
+          <div class="inbody-chart-card card">
+            <div class="inbody-chart-tabs" id="inbodyChartTabs"></div>
+            <div class="inbody-chart-wrap">
+              <canvas id="chartInbody" height="220"></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__header">
+              <h3 class="card__title">인바디 기록</h3>
+              <span class="text-muted inbody-form-date" id="inbodyFormDate"></span>
+            </div>
+            <form class="inbody-form" id="inbodyForm">
+              <div class="inbody-form-grid">
+                <label class="inbody-field">
+                  <span>체중 (kg)</span>
+                  <input type="number" id="inbodyWeight" class="input" step="0.1" inputmode="decimal" required />
+                </label>
+                <label class="inbody-field">
+                  <span>골격근량 (kg)</span>
+                  <input type="number" id="inbodyMuscle" class="input" step="0.1" inputmode="decimal" />
+                </label>
+                <label class="inbody-field">
+                  <span>체지방률 (%)</span>
+                  <input type="number" id="inbodyBodyFat" class="input" step="0.1" inputmode="decimal" />
+                </label>
+                <label class="inbody-field">
+                  <span>BMI</span>
+                  <input type="number" id="inbodyBmi" class="input" step="0.1" inputmode="decimal" placeholder="자동 계산" />
+                </label>
+                <label class="inbody-field">
+                  <span>내장지방 (레벨)</span>
+                  <input type="number" id="inbodyVisceral" class="input" step="1" inputmode="numeric" />
+                </label>
+                <label class="inbody-field">
+                  <span>기초대사량 (kcal)</span>
+                  <input type="number" id="inbodyBmr" class="input" step="1" inputmode="numeric" />
+                </label>
+              </div>
+              <button type="submit" class="btn btn--primary btn--full">저장하기</button>
+            </form>
+          </div>
+
+          <div class="card card--wide">
+            <h3 class="card__title">측정 기록</h3>
+            <div class="table-wrap">
+              <table class="table" id="metricsTable">
+                <thead>
+                  <tr>
+                    <th>날짜</th>
+                    <th>체중</th>
+                    <th>골격근</th>
+                    <th>체지방</th>
+                    <th>BMI</th>
+                    <th>내장지방</th>
+                    <th>기초대사</th>
+                  </tr>
+                </thead>
+                <tbody id="metricsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Calendar View -->
+      <section class="view" id="view-calendar" data-view="calendar">
+        <div class="calendar-layout">
+          <div class="card card--wide">
+            <div class="calendar-header">
+              <button class="btn btn--ghost btn--icon" id="calPrev" aria-label="Previous month">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              </button>
+              <h3 class="calendar-title" id="calTitle">July 2026</h3>
+              <button class="btn btn--ghost btn--icon" id="calNext" aria-label="Next month">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+              </button>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+          <aside class="calendar-sidebar">
+            <div class="card">
+              <h3 class="card__title">Legend</h3>
+              <ul class="legend-list">
+                <li><span class="legend-dot legend-dot--workout"></span> Workout</li>
+                <li><span class="legend-dot legend-dot--meal"></span> Meals Planned</li>
+                <li><span class="legend-dot legend-dot--cheat"></span> Cheat Day</li>
+                <li><span class="legend-dot legend-dot--measure"></span> Body Measurement</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card__title">Selected Day</h3>
+              <div id="calDayDetail">
+                <p class="text-muted">Select a day to view details</p>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card__title">Mark Day</h3>
+              <form class="form" id="markDayForm">
+                <div class="form-group">
+                  <label for="markDayType">Event Type</label>
+                  <select id="markDayType" class="input">
+                    <option value="cheat">Cheat Day</option>
+                    <option value="workout">Workout</option>
+                    <option value="measure">Body Measurement</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn--secondary btn--full">Mark Selected Day</button>
+              </form>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- Shopping List View -->
+      <section class="view" id="view-shopping" data-view="shopping">
+        <div class="shopping-layout">
+          <div class="card card--wide">
+            <div class="card__header">
+              <h3 class="card__title">Grocery List</h3>
+              <div class="shopping-actions">
+                <button class="btn btn--secondary btn--sm" id="regenerateList">Regenerate from Meals</button>
+                <button class="btn btn--ghost btn--sm" id="clearChecked">Clear Checked</button>
+              </div>
+            </div>
+            <p class="text-muted shopping-subtitle">Auto-generated from your planned meals this week</p>
+            <ul class="shopping-list" id="shoppingList"></ul>
+          </div>
+          <aside class="shopping-sidebar">
+            <div class="card">
+              <h3 class="card__title">Add Item</h3>
+              <form class="form" id="addShoppingForm">
+                <div class="form-group">
+                  <input type="text" id="shoppingItem" class="input" placeholder="Avocados" required />
+                </div>
+                <button type="submit" class="btn btn--primary btn--full">Add</button>
+              </form>
+            </div>
+            <div class="card">
+              <h3 class="card__title">Summary</h3>
+              <div class="shopping-summary" id="shoppingSummary"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- AI Coach View -->
+      <section class="view" id="view-ai" data-view="ai">
+        <div class="ai-hub">
+          <div class="ai-coach-hero animate-in" id="aiDailyCoach"></div>
+
+          <div class="ai-insights-grid animate-in" style="animation-delay: 0.06s" id="aiInsightsGrid"></div>
+
+          <div class="ai-two-col animate-in" style="animation-delay: 0.12s">
+            <div class="card card--ai">
+              <h3 class="card__title">📷 Meal Photo Analysis</h3>
+              <p class="text-muted ai-card-desc">Upload any meal photo for instant nutrition insights.</p>
+              <div class="photo-upload" id="aiPhotoUpload">
+                <input type="file" id="aiPhotoInput" accept="image/*" hidden />
+                <div class="photo-upload__zone" id="aiPhotoZone">
+                  <span class="photo-upload__icon">📷</span>
+                  <span class="photo-upload__text">Drop or click to analyze</span>
+                </div>
+                <div class="photo-upload__result" id="aiPhotoResult" hidden></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card__title">🍽️ Meal Recommendations</h3>
+              <div id="aiMealRecs"></div>
+            </div>
+          </div>
+
+          <div class="ai-two-col animate-in" style="animation-delay: 0.18s">
+            <div class="card">
+              <h3 class="card__title">🏋️ Smart Workout Suggestions</h3>
+              <div id="aiWorkoutRecs"></div>
+            </div>
+            <div class="card">
+              <h3 class="card__title">📈 Progress Predictions</h3>
+              <div id="aiPredictions"></div>
+            </div>
+          </div>
+
+          <div class="card card--ai ai-weekly-review animate-in" style="animation-delay: 0.24s">
+            <h3 class="card__title">📅 Weekly Review</h3>
+            <div id="aiWeeklyReview"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings View -->
+      <section class="view" id="view-settings" data-view="settings">
+        <div class="settings-layout">
+          <div class="card card--ai">
+            <h3 class="card__title">🧠 AI 기억 관리</h3>
+            <p class="text-muted" style="margin-bottom:12px;font-size:0.8125rem">AI가 기억하는 정보를 확인·수정·삭제할 수 있습니다. 동의한 정보만 저장됩니다.</p>
+            <div id="aiMemorySettings"></div>
+          </div>
+          <div class="card card--ai">
+            <h3 class="card__title">⌚ 건강 앱 연동</h3>
+            <div id="healthIntegrations"></div>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Profile</h3>
+            <form class="form" id="settingsProfileForm">
+              <div class="form-group">
+                <label for="settingsName">Display Name</label>
+                <input type="text" id="settingsName" class="input" value="Alex Morgan" />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsHeight">Height (cm)</label>
+                  <input type="number" id="settingsHeight" class="input" value="178" />
+                </div>
+                <div class="form-group">
+                  <label for="settingsAge">Age</label>
+                  <input type="number" id="settingsAge" class="input" value="28" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn--primary">Save Profile</button>
+            </form>
+          </div>
+          <div class="card card--ai">
+            <h3 class="card__title">AI 건강 프로필</h3>
+            <p class="text-muted" style="margin-bottom:12px;font-size:0.8125rem">AI가 기억하고 개인화 추천에 활용하는 정보입니다.</p>
+            <form class="form" id="settingsHealthForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hpCurrentWeight">현재 체중 (kg)</label>
+                  <input type="number" id="hpCurrentWeight" class="input" step="0.1" />
+                </div>
+                <div class="form-group">
+                  <label for="hpHousehold">함께 식사 (인원)</label>
+                  <input type="number" id="hpHousehold" class="input" min="1" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hpBudget">주간 식비 예산 (원)</label>
+                  <input type="number" id="hpBudget" class="input" step="1000" />
+                </div>
+                <div class="form-group">
+                  <label for="hpDiningOut">주간 외식 (회)</label>
+                  <input type="number" id="hpDiningOut" class="input" min="0" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="hpAllergies">알레르기 (쉼표 구분)</label>
+                <input type="text" id="hpAllergies" class="input" placeholder="견과류, 우유" />
+              </div>
+              <div class="form-group">
+                <label for="hpPreferred">선호 음식</label>
+                <input type="text" id="hpPreferred" class="input" placeholder="닭가슴살, 연어" />
+              </div>
+              <div class="form-group">
+                <label for="hpDisliked">비선호 음식</label>
+                <input type="text" id="hpDisliked" class="input" placeholder="브로콜리" />
+              </div>
+              <div class="form-group">
+                <label for="hpStaples">자주 쓰는 식재료</label>
+                <input type="text" id="hpStaples" class="input" placeholder="계란, 현미, 올리브오일" />
+              </div>
+              <button type="submit" class="btn btn--primary">프로필 저장</button>
+            </form>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Daily Goals</h3>
+            <form class="form" id="settingsGoalsForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalCalories">Calories</label>
+                  <input type="number" id="goalCalories" class="input" value="2200" />
+                </div>
+                <div class="form-group">
+                  <label for="goalProtein">Protein (g)</label>
+                  <input type="number" id="goalProtein" class="input" value="160" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalWater">물 (잔)</label>
+                  <input type="number" id="goalWater" class="input" value="8" />
+                </div>
+                <div class="form-group">
+                  <label for="goalWaterLiters">물 (L) — 미션</label>
+                  <input type="number" id="goalWaterLiters" class="input" step="0.1" value="2" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalSteps">걸음 수 — 미션</label>
+                  <input type="number" id="goalSteps" class="input" value="8000" />
+                </div>
+                <div class="form-group">
+                  <label for="goalSleepHours">수면 (시간) — 미션</label>
+                  <input type="number" id="goalSleepHours" class="input" step="0.5" value="7" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalWeight">목표 체중 (kg)</label>
+                  <input type="number" id="goalWeight" class="input" step="0.1" value="75" />
+                </div>
+                <div class="form-group">
+                  <label for="goalBodyFat">목표 체지방 (%)</label>
+                  <input type="number" id="goalBodyFat" class="input" step="0.1" value="18" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalMuscle">목표 골격근 (kg)</label>
+                  <input type="number" id="goalMuscle" class="input" step="0.1" value="36" />
+                </div>
+                <div class="form-group">
+                  <label for="goalBmi">목표 BMI</label>
+                  <input type="number" id="goalBmi" class="input" step="0.1" value="23" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalVisceral">목표 내장지방 (Lv)</label>
+                  <input type="number" id="goalVisceral" class="input" step="1" value="6" />
+                </div>
+                <div class="form-group">
+                  <label for="goalBmr">목표 기초대사 (kcal)</label>
+                  <input type="number" id="goalBmr" class="input" step="1" value="1680" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="goalWorkouts">Weekly Workouts</label>
+                  <input type="number" id="goalWorkouts" class="input" value="7" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn--primary">Save Goals</button>
+            </form>
+          </div>
+          <div class="card">
+            <h3 class="card__title">AI Settings</h3>
+            <form class="form" id="settingsAiForm">
+              <div class="form-group">
+                <label for="aiApiKey">OpenAI API Key <span class="text-muted">(optional — enables real photo analysis)</span></label>
+                <input type="password" id="aiApiKey" class="input" placeholder="sk-..." autocomplete="off" />
+              </div>
+              <p class="text-muted">Without a key, AI uses smart local analysis from your data. Keys stay in your browser only.</p>
+              <button type="submit" class="btn btn--primary">Save</button>
+            </form>
+          </div>
+          <div class="card">
+            <h3 class="card__title">Data</h3>
+            <p class="text-muted">All data is stored locally in your browser.</p>
+            <div class="settings-actions">
+              <button class="btn btn--secondary" id="exportData">Export Data</button>
+              <button class="btn btn--ghost" id="resetData">Reset All Data</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- PR celebration -->
+  <div class="pr-celebrate" id="prCelebrate" hidden>
+    <div class="pr-celebrate__confetti" id="prConfetti"></div>
+    <div class="pr-celebrate__card">
+      <div class="pr-celebrate__burst">🎉</div>
+      <h2 class="pr-celebrate__title">새로운 Personal Record!</h2>
+      <p class="pr-celebrate__type" id="prCelebrateType"></p>
+      <p class="pr-celebrate__exercise" id="prCelebrateExercise"></p>
+      <p class="pr-celebrate__value" id="prCelebrateValue"></p>
+      <p class="pr-celebrate__delta" id="prCelebrateDelta"></p>
+      <p class="pr-celebrate__congrats">축하합니다!</p>
+      <div class="pr-celebrate__ai">
+        <span class="pr-celebrate__ai-badge">✨ AI 코치</span>
+        <p id="prCelebrateAi"></p>
+      </div>
+      <button type="button" class="btn btn--primary btn--full" id="prCelebrateClose">멋져요!</button>
+    </div>
+  </div>
+
+  <!-- Mission celebration -->
+  <div class="mission-celebrate" id="missionCelebrate" hidden>
+    <div class="mission-celebrate__confetti" id="missionConfetti"></div>
+    <div class="mission-celebrate__card">
+      <div class="mission-celebrate__burst">🎉</div>
+      <h2 class="mission-celebrate__title">미션 완료!</h2>
+      <p class="mission-celebrate__sub">오늘의 미션 100% 달성</p>
+      <div class="mission-celebrate__ai">
+        <span class="mission-celebrate__ai-badge">✨ AI 코칭</span>
+        <p class="mission-celebrate__msg" id="missionCelebrateMsg"></p>
+      </div>
+      <button type="button" class="btn btn--primary btn--full" id="missionCelebrateClose">멋져요!</button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal__header">
+        <h3 class="modal__title" id="modalTitle">Modal</h3>
+        <button class="btn btn--ghost btn--icon modal__close" id="modalClose" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        </button>
+      </div>
+      <div class="modal__body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="ai.js"></script>
+  <script src="ai-memory.js"></script>
+  <script src="workout-ai.js"></script>
+  <script src="growth.js"></script>
+  <script src="workout.js"></script>
+  <script src="chat.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
