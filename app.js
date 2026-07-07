@@ -5275,7 +5275,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.0.0";
-const APP_BUILD = "24";
+const APP_BUILD = "25";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

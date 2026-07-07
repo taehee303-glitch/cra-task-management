@@ -3952,39 +3952,64 @@ body.body--settings-open {
   background: #eff6ff;
 }
 
-.app-mode-management.task-detail-open .main {
-  margin-right: min(420px, 38vw);
-  transition: margin-right 0.15s ease;
+/* PC: true split — list left, detail right inside workspace body */
+.app-mode-management.task-detail-open .workspace__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(420px, 36vw);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: stretch;
 }
 
-.app-mode-management #taskDetailPanel:not([hidden]) {
-  position: fixed;
-  z-index: 350;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(420px, 38vw);
+.app-mode-management.task-detail-open .topbar {
+  grid-column: 1 / -1;
+}
+
+.app-mode-management.task-detail-open .main {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-mode-management.task-detail-open #taskDetailPanel:not([hidden]) {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  align-self: stretch;
   border-left: 1px solid var(--border);
-  box-shadow: -4px 0 24px rgba(15, 23, 42, 0.08);
+  box-shadow: -4px 0 16px rgba(15, 23, 42, 0.06);
+  z-index: 2;
 }
 
 .app-mode-management .task-detail-panel__back {
   display: none;
 }
 
+/* Mobile: fullscreen detail, hide list behind */
 .app-mode-daily #taskDetailPanel:not([hidden]) {
   position: fixed;
   inset: 0;
   z-index: 450;
-  width: 100%;
+  width: 100vw;
   max-width: none;
   min-height: 100dvh;
+  height: 100dvh;
 }
 
 .app-mode-daily .task-detail-panel__close {
   display: none;
 }
 
+.app-mode-daily.task-detail-mobile-open .main,
+.app-mode-daily.task-detail-mobile-open .topbar,
 .app-mode-daily.task-detail-mobile-open .bottom-nav,
 .app-mode-daily.task-detail-mobile-open .fab-root {
   visibility: hidden;

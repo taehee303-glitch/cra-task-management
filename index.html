@@ -857,6 +857,101 @@
           <span class="bottom-nav__label">Reference</span>
         </button>
       </nav>
+
+      <!-- Task Detail (PC: split panel / Mobile: fullscreen) -->
+      <aside id="taskDetailPanel" class="task-detail-panel" hidden aria-label="Task detail">
+        <header class="task-detail-panel__header">
+          <button type="button" class="task-detail-panel__back" id="taskDetailBackBtn" hidden aria-label="뒤로">← Back</button>
+          <h3 class="task-detail-panel__title" id="taskDetailTitle">Task</h3>
+          <button type="button" class="task-detail-panel__close" id="closeTaskDetailBtn" aria-label="닫기">&times;</button>
+        </header>
+        <div class="task-detail-panel__scroll">
+          <form id="editForm" class="task-form task-detail-form">
+            <input type="hidden" id="editId" />
+            <div id="editSourceVisit" class="edit-source-visit" hidden></div>
+
+            <div class="form-group form-group--wide">
+              <label for="editTask">Task</label>
+              <input type="text" id="editTask" required />
+            </div>
+
+            <div class="task-detail-section">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="editStudy">Study</label>
+                  <select id="editStudy">
+                    <option value="">Study 선택 (선택)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="editSite">Site</label>
+                  <select id="editSite" disabled>
+                    <option value="">Site 선택 (선택)</option>
+                  </select>
+                  <p class="form-hint" id="editSiteMasterHint" hidden>연결된 Site가 없습니다. Study Master에서 Site를 연결하세요.</p>
+                </div>
+                <div class="form-group">
+                  <label for="editDueDate">Due Date</label>
+                  <input type="date" id="editDueDate" />
+                </div>
+                <div class="form-group">
+                  <label for="editStatus">Status</label>
+                  <select id="editStatus" required>
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="editPriority">Priority</label>
+                  <select id="editPriority" required>
+                    <option value="Critical">Critical</option>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group form-group--wide">
+                <button type="button" class="btn btn--ghost site-info-toggle" id="editSiteInfoToggleBtn" hidden aria-expanded="false">
+                  📋 Site 정보 보기
+                </button>
+              </div>
+              <div id="editSiteInfoPanel" class="site-info-panel form-group--wide" hidden>
+                <h4 class="site-info-panel__title">Site / IRB 정보</h4>
+                <dl class="site-info-panel__grid" id="editSiteInfoContent"></dl>
+              </div>
+            </div>
+
+            <div class="task-detail-section">
+              <label class="task-detail-section__title" for="editMemo">Memo</label>
+              <textarea id="editMemo" class="task-detail-memo" rows="4" placeholder="메모를 입력하세요"></textarea>
+            </div>
+
+            <div class="task-detail-section">
+              <h4 class="task-detail-section__title">Checklist</h4>
+              <ul id="taskDetailChecklist" class="task-checklist" aria-live="polite"></ul>
+              <div class="task-checklist-add">
+                <input type="text" id="taskChecklistNewInput" class="task-checklist-add__input" placeholder="항목 추가" aria-label="체크리스트 항목" />
+                <button type="button" class="btn btn--ghost btn--sm" id="taskChecklistAddBtn">추가</button>
+              </div>
+            </div>
+
+            <div class="task-detail-section">
+              <h4 class="task-detail-section__title">History</h4>
+              <ul id="taskDetailHistory" class="task-history" aria-live="polite"></ul>
+            </div>
+
+            <div class="form-actions task-detail-form__actions">
+              <button type="submit" class="btn btn--primary">저장</button>
+              <button type="button" class="btn btn--ghost" id="cancelEditBtn">닫기</button>
+              <button type="button" class="btn btn--danger btn--ghost" id="deleteTaskDetailBtn">삭제</button>
+            </div>
+          </form>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -928,101 +1023,6 @@
       <button type="button" class="action-sheet__item action-sheet__item--cancel" data-nav-action="close-master">닫기</button>
     </div>
   </div>
-
-  <!-- Task Detail (PC: right panel / Mobile: fullscreen) -->
-  <aside id="taskDetailPanel" class="task-detail-panel" hidden aria-label="Task detail">
-    <header class="task-detail-panel__header">
-      <button type="button" class="task-detail-panel__back" id="taskDetailBackBtn" hidden aria-label="뒤로">← Back</button>
-      <h3 class="task-detail-panel__title" id="taskDetailTitle">Task</h3>
-      <button type="button" class="task-detail-panel__close" id="closeTaskDetailBtn" aria-label="닫기">&times;</button>
-    </header>
-    <div class="task-detail-panel__scroll">
-      <form id="editForm" class="task-form task-detail-form">
-        <input type="hidden" id="editId" />
-        <div id="editSourceVisit" class="edit-source-visit" hidden></div>
-
-        <div class="form-group form-group--wide">
-          <label for="editTask">Task</label>
-          <input type="text" id="editTask" required />
-        </div>
-
-        <div class="task-detail-section">
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="editStudy">Study</label>
-              <select id="editStudy">
-                <option value="">Study 선택 (선택)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="editSite">Site</label>
-              <select id="editSite" disabled>
-                <option value="">Site 선택 (선택)</option>
-              </select>
-              <p class="form-hint" id="editSiteMasterHint" hidden>연결된 Site가 없습니다. Study Master에서 Site를 연결하세요.</p>
-            </div>
-            <div class="form-group">
-              <label for="editDueDate">Due Date</label>
-              <input type="date" id="editDueDate" />
-            </div>
-            <div class="form-group">
-              <label for="editStatus">Status</label>
-              <select id="editStatus" required>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="On Hold">On Hold</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="editPriority">Priority</label>
-              <select id="editPriority" required>
-                <option value="Critical">Critical</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group form-group--wide">
-            <button type="button" class="btn btn--ghost site-info-toggle" id="editSiteInfoToggleBtn" hidden aria-expanded="false">
-              📋 Site 정보 보기
-            </button>
-          </div>
-          <div id="editSiteInfoPanel" class="site-info-panel form-group--wide" hidden>
-            <h4 class="site-info-panel__title">Site / IRB 정보</h4>
-            <dl class="site-info-panel__grid" id="editSiteInfoContent"></dl>
-          </div>
-        </div>
-
-        <div class="task-detail-section">
-          <label class="task-detail-section__title" for="editMemo">Memo</label>
-          <textarea id="editMemo" class="task-detail-memo" rows="4" placeholder="메모를 입력하세요"></textarea>
-        </div>
-
-        <div class="task-detail-section">
-          <h4 class="task-detail-section__title">Checklist</h4>
-          <ul id="taskDetailChecklist" class="task-checklist" aria-live="polite"></ul>
-          <div class="task-checklist-add">
-            <input type="text" id="taskChecklistNewInput" class="task-checklist-add__input" placeholder="항목 추가" aria-label="체크리스트 항목" />
-            <button type="button" class="btn btn--ghost btn--sm" id="taskChecklistAddBtn">추가</button>
-          </div>
-        </div>
-
-        <div class="task-detail-section">
-          <h4 class="task-detail-section__title">History</h4>
-          <ul id="taskDetailHistory" class="task-history" aria-live="polite"></ul>
-        </div>
-
-        <div class="form-actions task-detail-form__actions">
-          <button type="submit" class="btn btn--primary">저장</button>
-          <button type="button" class="btn btn--ghost" id="cancelEditBtn">닫기</button>
-          <button type="button" class="btn btn--danger btn--ghost" id="deleteTaskDetailBtn">삭제</button>
-        </div>
-      </form>
-    </div>
-  </aside>
 
   <!-- Study Task Rule Modal -->
   <div class="modal-overlay" id="studyTaskRuleModal" hidden>
