@@ -354,7 +354,6 @@ const els = {
   referenceStudyList: document.getElementById("referenceStudyList"),
   referenceSiteList: document.getElementById("referenceSiteList"),
   referenceSystemList: document.getElementById("referenceSystemList"),
-  referenceGoogleCalendarBtn: document.getElementById("referenceGoogleCalendarBtn"),
   referenceCloudSyncBtn: document.getElementById("referenceCloudSyncBtn"),
   referenceCloudSyncLabel: document.getElementById("referenceCloudSyncLabel"),
   addTaskPriority: document.getElementById("addTaskPriority"),
@@ -837,7 +836,6 @@ async function bootstrapApp() {
   bindEvent(els.settingsModal, "click", (e) => {
     if (e.target === els.settingsModal) closeSettingsModal();
   });
-  bindEvent(els.referenceGoogleCalendarBtn, "click", () => openSettingsModal("calendar"));
   bindEvent(els.referenceSearchInput, "input", handleReferenceSearchInput);
   bindEvent(els.referenceCloudSyncBtn, "click", handleReferenceCloudSyncClick);
   document.querySelectorAll(".reference-section__more[data-view]").forEach((btn) => {
@@ -5299,7 +5297,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.0.0";
-const APP_BUILD = "26";
+const APP_BUILD = "27";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
