@@ -15,11 +15,15 @@ const CalendarSyncSettingsStore = {
       return {
         activeProvider: parsed.activeProvider || "google",
         googleEmail: parsed.googleEmail || "",
+        calendarSyncEnabled: Boolean(parsed.calendarSyncEnabled),
+        lastSyncAt: parsed.lastSyncAt || "",
       };
     } catch {
       return {
         activeProvider: "google",
         googleEmail: "",
+        calendarSyncEnabled: false,
+        lastSyncAt: "",
       };
     }
   },
@@ -195,7 +199,7 @@ class GoogleCalendarProvider {
 
   requireAuth() {
     if (!this.isConnected()) {
-      throw new Error("Google 계정이 연동되어 있지 않습니다. 설정에서 [Google 계정 연동]을 눌러 주세요.");
+      throw new Error("Calendar Sync가 연결되어 있지 않습니다. Settings에서 Calendar Sync를 켜 주세요.");
     }
     return this.accessToken;
   }
@@ -214,7 +218,7 @@ class GoogleCalendarProvider {
 
     if (response.status === 401) {
       this.clearToken();
-      throw new Error("Google 인증이 만료되었습니다. 설정에서 다시 [Google 계정 연동]을 눌러 주세요.");
+      throw new Error("Google 인증이 만료되었습니다. Settings에서 Reconnect를 눌러 주세요.");
     }
 
     if (response.status === 204) return null;
@@ -397,7 +401,20 @@ const CalendarSyncManager = {
   isCalendarSyncActive() {
     if (window.location.protocol === "file:") return false;
     if (!this.isConfigured()) return false;
+    if (!this.getSettings().calendarSyncEnabled) return false;
     return this.isConnected();
+  },
+
+  isCalendarSyncEnabled() {
+    return Boolean(this.getSettings().calendarSyncEnabled);
+  },
+
+  setCalendarSyncEnabled(enabled) {
+    return this.saveSettings({ calendarSyncEnabled: Boolean(enabled) });
+  },
+
+  markLastSync(isoString = new Date().toISOString()) {
+    return this.saveSettings({ lastSyncAt: isoString });
   },
 
   getStatusLabel() {
@@ -408,10 +425,9 @@ const CalendarSyncManager = {
       return "Google Client ID가 설정되지 않았습니다. calendar-config.js의 google.clientId를 입력하세요.";
     }
     if (this.isConnected()) {
-      const email = this.getSettings().googleEmail;
-      return email ? `Google 계정 연동됨 (${email})` : "Google 계정 연동됨";
+      return "Connected";
     }
-    return "Google 계정 연동이 필요합니다. [Google 계정 연동] 버튼을 눌러 주세요.";
+    return "Not Connected";
   },
 
   async connect(interactive = true) {
@@ -480,6 +496,7 @@ const CalendarSyncManager = {
     }
 
     this.helpers.updateTaskCalendarSync(taskId, calendarSync);
+    this.markLastSync(calendarSync?.lastSyncedAt || new Date().toISOString());
   },
 
   async deleteTaskCalendarEvent(taskId) {

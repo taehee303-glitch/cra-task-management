@@ -1192,53 +1192,154 @@
     </div>
   </div>
 
-  <!-- Settings Modal -->
-  <div class="modal-overlay" id="settingsModal" hidden>
-    <div class="modal">
-      <div class="modal-header">
-        <h3>설정</h3>
-        <button type="button" class="modal-close" id="closeSettingsModalBtn">&times;</button>
-      </div>
-      <div class="settings-panel">
-        <h4 class="settings-section-title">표시</h4>
-        <div class="settings-item settings-item--stacked">
-          <div class="settings-item__body">
-            <strong class="settings-item__title">UI 크기</strong>
-            <p class="form-hint">글씨, 버튼, 입력창, 테이블 등 앱 UI 크기를 조절합니다.</p>
-          </div>
-          <select id="uiScaleSelect" class="ui-scale-select" aria-label="UI 크기">
-            <option value="xsmall">매우 작게 (80%)</option>
-            <option value="small">작게 (90%)</option>
-            <option value="normal">보통 (100%)</option>
-            <option value="large">크게 (110%)</option>
-            <option value="xlarge">매우 크게 (125%)</option>
-          </select>
+  <!-- Settings -->
+  <div class="modal-overlay modal-overlay--sheet" id="settingsModal" hidden>
+    <div class="modal modal--settings">
+      <header class="settings-header">
+        <button type="button" class="settings-header__back" id="settingsBackBtn" hidden aria-label="뒤로">←</button>
+        <h3 class="settings-header__title" id="settingsTitle">⚙️ Settings</h3>
+        <button type="button" class="modal-close settings-header__close" id="closeSettingsModalBtn" aria-label="닫기">&times;</button>
+      </header>
+
+      <div class="settings-body">
+        <!-- Main menu -->
+        <div id="settingsPanelMain" class="settings-panel-view">
+          <nav class="settings-menu" aria-label="설정 메뉴">
+            <button type="button" class="settings-menu__item" data-settings-panel="calendar">
+              <span class="settings-menu__icon" aria-hidden="true">📅</span>
+              <span class="settings-menu__label">Google Calendar</span>
+              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="settings-menu__item" data-settings-panel="notification">
+              <span class="settings-menu__icon" aria-hidden="true">🔔</span>
+              <span class="settings-menu__label">Notification</span>
+              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="settings-menu__item" data-settings-panel="appearance">
+              <span class="settings-menu__icon" aria-hidden="true">🎨</span>
+              <span class="settings-menu__label">Appearance</span>
+              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="settings-menu__item" data-settings-panel="data">
+              <span class="settings-menu__icon" aria-hidden="true">💾</span>
+              <span class="settings-menu__label">Data</span>
+              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="settings-menu__item" data-settings-panel="about">
+              <span class="settings-menu__icon" aria-hidden="true">ℹ️</span>
+              <span class="settings-menu__label">About</span>
+              <span class="settings-menu__chevron" aria-hidden="true">›</span>
+            </button>
+          </nav>
         </div>
 
-        <h4 class="settings-section-title">Google Calendar</h4>
-        <p class="google-account-status google-account-status--disconnected" id="googleAccountStatus">⚪ Google 계정 미연동</p>
-        <div class="settings-google-actions">
-          <button type="button" class="btn btn--primary" id="googleConnectBtn">Google 계정 연동</button>
-          <button type="button" class="btn btn--ghost" id="googleDisconnectBtn">연동 해제</button>
-        </div>
-        <p class="form-hint settings-setup-hint" id="googleSetupHint" hidden></p>
-
-        <h4 class="settings-section-title">Desktop Reminder</h4>
-        <div class="settings-item">
-          <div class="settings-item__body">
-            <strong class="settings-item__title">Desktop Reminder</strong>
-            <p class="form-hint">D-3, D-1, D-0, 지연 업무에 대해 브라우저 데스크탑 알림을 표시합니다.</p>
+        <!-- Google Calendar -->
+        <div id="settingsPanelCalendar" class="settings-panel-view" hidden>
+          <div class="settings-section">
+            <div class="settings-row settings-row--toggle">
+              <div class="settings-row__body">
+                <strong class="settings-row__title">Calendar Sync</strong>
+                <p class="settings-row__hint">Task Due Date를 Google Calendar에 자동 반영합니다.</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="calendarSyncToggle" />
+                <span class="toggle-switch__slider" aria-hidden="true"></span>
+              </label>
+            </div>
+            <dl class="settings-meta">
+              <div class="settings-meta__row">
+                <dt>Status</dt>
+                <dd id="calendarSyncStatus">Not Connected</dd>
+              </div>
+              <div class="settings-meta__row">
+                <dt>Last Sync</dt>
+                <dd id="calendarLastSync">—</dd>
+              </div>
+            </dl>
+            <button type="button" class="btn btn--ghost btn--sm settings-reconnect-btn" id="calendarReconnectBtn" hidden>Reconnect</button>
+            <p class="form-hint settings-setup-hint" id="calendarSetupHint" hidden></p>
           </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="reminderEnabledToggle" />
-            <span class="toggle-switch__slider" aria-hidden="true"></span>
-          </label>
         </div>
-        <p class="form-hint" id="reminderPermissionStatus"></p>
-      </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn--primary" id="saveSettingsBtn">저장</button>
-        <button type="button" class="btn btn--ghost" id="cancelSettingsBtn">취소</button>
+
+        <!-- Notification -->
+        <div id="settingsPanelNotification" class="settings-panel-view" hidden>
+          <div class="settings-section">
+            <div class="settings-row settings-row--toggle">
+              <div class="settings-row__body">
+                <strong class="settings-row__title">Due Date Reminder</strong>
+                <p class="settings-row__hint">마감일·지연 업무 알림</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="reminderDueDateToggle" />
+                <span class="toggle-switch__slider" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div class="settings-row settings-row--toggle">
+              <div class="settings-row__body">
+                <strong class="settings-row__title">D-1 Reminder</strong>
+                <p class="settings-row__hint">마감 하루 전 알림</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="reminderD1Toggle" />
+                <span class="toggle-switch__slider" aria-hidden="true"></span>
+              </label>
+            </div>
+            <p class="form-hint" id="reminderPermissionStatus"></p>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div id="settingsPanelAppearance" class="settings-panel-view" hidden>
+          <div class="settings-section">
+            <div class="settings-row settings-row--stacked">
+              <label class="settings-row__title" for="uiScaleSelect">UI Size</label>
+              <select id="uiScaleSelect" class="ui-scale-select" aria-label="UI 크기">
+                <option value="xsmall">80%</option>
+                <option value="small">90%</option>
+                <option value="normal">100%</option>
+                <option value="large">110%</option>
+                <option value="xlarge">120%</option>
+              </select>
+            </div>
+            <div class="settings-row settings-row--disabled">
+              <div class="settings-row__body">
+                <strong class="settings-row__title">Theme</strong>
+                <p class="settings-row__hint">추후 제공</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data -->
+        <div id="settingsPanelData" class="settings-panel-view" hidden>
+          <div class="settings-section">
+            <button type="button" class="settings-action-btn" id="settingsImportBtn">Import</button>
+            <button type="button" class="settings-action-btn" id="settingsExportBtn">Export</button>
+            <div class="settings-row settings-row--disabled">
+              <div class="settings-row__body">
+                <strong class="settings-row__title">Backup</strong>
+                <p class="settings-row__hint">추후 제공</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div id="settingsPanelAbout" class="settings-panel-view" hidden>
+          <div class="settings-section">
+            <dl class="settings-meta">
+              <div class="settings-meta__row">
+                <dt>Version</dt>
+                <dd id="settingsAppVersion">—</dd>
+              </div>
+            </dl>
+            <div class="settings-about">
+              <strong>CRA Workspace</strong>
+              <p>Clinical Research Associate Task Manager</p>
+              <p class="settings-about__desc">병원 현장에서 오늘 해야 할 업무를 빠르게 확인하고 완료하는 생산성 앱입니다.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

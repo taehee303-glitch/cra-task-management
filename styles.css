@@ -1143,6 +1143,224 @@ select:disabled {
   padding: 4px 0 8px;
 }
 
+.modal--settings {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  max-height: min(90vh, 720px);
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: calc(12px * var(--ui-scale)) calc(14px * var(--ui-scale));
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+
+.settings-header__back,
+.settings-header__close {
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.settings-header__back {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.settings-header__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(8px * var(--ui-scale)) calc(14px * var(--ui-scale)) calc(16px * var(--ui-scale));
+}
+
+.settings-panel-view {
+  display: block;
+}
+
+.settings-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-menu__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(12px * var(--ui-scale));
+  width: 100%;
+  padding: calc(14px * var(--ui-scale)) calc(4px * var(--ui-scale));
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.settings-menu__item:last-child {
+  border-bottom: none;
+}
+
+.settings-menu__item:active {
+  background: #f8fafc;
+}
+
+.settings-menu__icon {
+  font-size: 1.1rem;
+}
+
+.settings-menu__label {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.settings-menu__chevron {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--ui-scale));
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: calc(14px * var(--ui-scale)) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.settings-row--toggle {
+  align-items: flex-start;
+}
+
+.settings-row--disabled {
+  opacity: 0.55;
+}
+
+.settings-row__title {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.settings-row__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.settings-meta {
+  margin: calc(8px * var(--ui-scale)) 0 0;
+}
+
+.settings-meta__row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  padding: calc(8px * var(--ui-scale)) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-meta__row:last-child {
+  border-bottom: none;
+}
+
+.settings-meta__row dt {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.settings-meta__row dd {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.settings-meta__value--ok {
+  color: #059669;
+}
+
+.settings-reconnect-btn {
+  align-self: flex-start;
+  margin-top: calc(8px * var(--ui-scale));
+}
+
+.settings-action-btn {
+  display: block;
+  width: 100%;
+  padding: calc(14px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-action-btn:active {
+  background: #f8fafc;
+}
+
+.settings-about {
+  margin-top: calc(12px * var(--ui-scale));
+  padding-top: calc(12px * var(--ui-scale));
+  border-top: 1px solid var(--border);
+}
+
+.settings-about strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.settings-about p {
+  margin: 0 0 6px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.settings-about__desc {
+  line-height: 1.5;
+}
+
 .settings-item {
   display: flex;
   align-items: center;
@@ -4392,6 +4610,15 @@ select:disabled {
 /* Mobile fullscreen dialogs */
 .app-mode-daily .modal-overlay:not([hidden]) .modal,
 .app-mode-daily .modal-overlay:not([hidden]) .modal--sheet {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+}
+
+.app-mode-daily .modal-overlay:not([hidden]) .modal--settings {
   width: 100%;
   max-width: none;
   min-height: 100%;

@@ -305,15 +305,26 @@ const els = {
   openSettingsBtn: document.getElementById("openSettingsBtn"),
   settingsModal: document.getElementById("settingsModal"),
   closeSettingsModalBtn: document.getElementById("closeSettingsModalBtn"),
-  cancelSettingsBtn: document.getElementById("cancelSettingsBtn"),
-  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
-  reminderEnabledToggle: document.getElementById("reminderEnabledToggle"),
+  settingsBackBtn: document.getElementById("settingsBackBtn"),
+  settingsTitle: document.getElementById("settingsTitle"),
+  settingsPanelMain: document.getElementById("settingsPanelMain"),
+  settingsPanelCalendar: document.getElementById("settingsPanelCalendar"),
+  settingsPanelNotification: document.getElementById("settingsPanelNotification"),
+  settingsPanelAppearance: document.getElementById("settingsPanelAppearance"),
+  settingsPanelData: document.getElementById("settingsPanelData"),
+  settingsPanelAbout: document.getElementById("settingsPanelAbout"),
+  calendarSyncToggle: document.getElementById("calendarSyncToggle"),
+  calendarSyncStatus: document.getElementById("calendarSyncStatus"),
+  calendarLastSync: document.getElementById("calendarLastSync"),
+  calendarReconnectBtn: document.getElementById("calendarReconnectBtn"),
+  calendarSetupHint: document.getElementById("calendarSetupHint"),
+  reminderDueDateToggle: document.getElementById("reminderDueDateToggle"),
+  reminderD1Toggle: document.getElementById("reminderD1Toggle"),
   reminderPermissionStatus: document.getElementById("reminderPermissionStatus"),
-  googleConnectBtn: document.getElementById("googleConnectBtn"),
-  googleDisconnectBtn: document.getElementById("googleDisconnectBtn"),
-  googleSetupHint: document.getElementById("googleSetupHint"),
-  googleAccountStatus: document.getElementById("googleAccountStatus"),
   uiScaleSelect: document.getElementById("uiScaleSelect"),
+  settingsImportBtn: document.getElementById("settingsImportBtn"),
+  settingsExportBtn: document.getElementById("settingsExportBtn"),
+  settingsAppVersion: document.getElementById("settingsAppVersion"),
   taskListSection: document.getElementById("taskListSection"),
   mobileDailyHome: document.getElementById("mobileDailyHome"),
   mobileTaskFeed: document.getElementById("mobileTaskFeed"),
@@ -759,19 +770,24 @@ async function bootstrapApp() {
   els.editModal.addEventListener("click", (e) => {
     if (e.target === els.editModal) closeModal();
   });
-  els.openSettingsBtn?.addEventListener("click", openSettingsModal);
+  els.openSettingsBtn?.addEventListener("click", () => openSettingsModal());
   els.closeSettingsModalBtn.addEventListener("click", closeSettingsModal);
-  els.cancelSettingsBtn.addEventListener("click", closeSettingsModal);
-  els.saveSettingsBtn.addEventListener("click", handleSaveSettings);
-  els.googleConnectBtn.addEventListener("click", handleGoogleConnect);
-  els.googleDisconnectBtn.addEventListener("click", handleGoogleDisconnect);
+  els.settingsBackBtn?.addEventListener("click", () => openSettingsPanel("main"));
+  document.querySelectorAll("[data-settings-panel]").forEach((btn) => {
+    btn.addEventListener("click", () => openSettingsPanel(btn.dataset.settingsPanel));
+  });
+  els.calendarSyncToggle?.addEventListener("change", handleCalendarSyncToggleChange);
+  els.calendarReconnectBtn?.addEventListener("click", handleCalendarReconnect);
+  els.reminderDueDateToggle?.addEventListener("change", handleReminderSettingsChange);
+  els.reminderD1Toggle?.addEventListener("change", handleReminderSettingsChange);
+  els.uiScaleSelect?.addEventListener("change", handleUiScaleChange);
+  els.settingsImportBtn?.addEventListener("click", () => els.importCsvInput?.click());
+  els.settingsExportBtn?.addEventListener("click", exportTasksToCsv);
   els.settingsModal.addEventListener("click", (e) => {
     if (e.target === els.settingsModal) closeSettingsModal();
   });
+  els.referenceGoogleCalendarBtn?.addEventListener("click", () => openSettingsModal("calendar"));
   els.referenceSearchInput?.addEventListener("input", handleReferenceSearchInput);
-  els.referenceGoogleCalendarBtn?.addEventListener("click", () => {
-    openSettingsModal();
-  });
   els.referenceCloudSyncBtn?.addEventListener("click", handleReferenceCloudSyncClick);
   document.querySelectorAll(".reference-section__more[data-view]").forEach((btn) => {
     btn.addEventListener("click", () => switchView(btn.dataset.view));
@@ -5162,12 +5178,25 @@ function isActive(task) {
   return task.status !== "Completed" && task.status !== "Cancelled";
 }
 
+const APP_VERSION = "1.0.0";
+
+const SETTINGS_PANEL_TITLES = {
+  main: "⚙️ Settings",
+  calendar: "📅 Google Calendar",
+  notification: "🔔 Notification",
+  appearance: "🎨 Appearance",
+  data: "💾 Data",
+  about: "ℹ️ About",
+};
+
+let currentSettingsPanel = "main";
+
 const UI_SCALE_PRESETS = {
   xsmall: 0.8,
   small: 0.9,
   normal: 1,
   large: 1.1,
-  xlarge: 1.25,
+  xlarge: 1.2,
 };
 
 const UiSettingsStore = {
@@ -5232,17 +5261,33 @@ const ReminderSettingsStore = {
     try {
       const raw = localStorage.getItem(REMINDER_SETTINGS_KEY);
       if (!raw) {
-        return { enabled: true, permissionRequested: false, sentNotifications: {} };
+        return {
+          dueDateReminder: true,
+          d1Reminder: true,
+          permissionRequested: false,
+          sentNotifications: {},
+        };
       }
 
       const parsed = JSON.parse(raw);
+      const legacyEnabled = parsed.enabled !== false;
       return {
-        enabled: parsed.enabled !== false,
+        dueDateReminder:
+          parsed.dueDateReminder !== undefined ? Boolean(parsed.dueDateReminder) : legacyEnabled,
+        d1Reminder: parsed.d1Reminder !== undefined ? Boolean(parsed.d1Reminder) : legacyEnabled,
         permissionRequested: Boolean(parsed.permissionRequested),
-        sentNotifications: parsed.sentNotifications && typeof parsed.sentNotifications === "object" ? parsed.sentNotifications : {},
+        sentNotifications:
+          parsed.sentNotifications && typeof parsed.sentNotifications === "object"
+            ? parsed.sentNotifications
+            : {},
       };
     } catch {
-      return { enabled: true, permissionRequested: false, sentNotifications: {} };
+      return {
+        dueDateReminder: true,
+        d1Reminder: true,
+        permissionRequested: false,
+        sentNotifications: {},
+      };
     }
   },
 
@@ -5251,14 +5296,35 @@ const ReminderSettingsStore = {
     notifyCloudSync("reminderSettings");
   },
 
-  isEnabled() {
-    return this.load().enabled;
+  isDueDateReminderEnabled() {
+    return this.load().dueDateReminder;
   },
 
-  setEnabled(enabled) {
+  isD1ReminderEnabled() {
+    return this.load().d1Reminder;
+  },
+
+  isAnyEnabled() {
     const settings = this.load();
-    settings.enabled = enabled;
+    return settings.dueDateReminder || settings.d1Reminder;
+  },
+
+  setDueDateReminder(enabled) {
+    const settings = this.load();
+    settings.dueDateReminder = enabled;
     this.save(settings);
+  },
+
+  setD1Reminder(enabled) {
+    const settings = this.load();
+    settings.d1Reminder = enabled;
+    this.save(settings);
+  },
+
+  isReminderTypeEnabled(reminderType) {
+    if (reminderType === "d-1") return this.isD1ReminderEnabled();
+    if (reminderType === "d-0" || reminderType === "overdue") return this.isDueDateReminderEnabled();
+    return false;
   },
 
   markPermissionRequested() {
@@ -5341,11 +5407,12 @@ function showTaskReminderNotification(task, reminderType) {
 }
 
 function showDesktopReminders() {
-  if (!ReminderSettingsStore.isEnabled()) return;
+  if (!ReminderSettingsStore.isAnyEnabled()) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
 
   const reminderItems = getReminderTasks()
     .map((task) => ({ task, reminderType: getTaskReminderType(task) }))
+    .filter(({ reminderType }) => ReminderSettingsStore.isReminderTypeEnabled(reminderType))
     .sort(compareReminderTasks);
 
   let delay = 0;
@@ -5372,7 +5439,7 @@ async function requestReminderPermission() {
 }
 
 async function initDesktopReminders() {
-  if (!ReminderSettingsStore.isEnabled()) {
+  if (!ReminderSettingsStore.isAnyEnabled()) {
     updateReminderStatusBadge();
     return;
   }
@@ -5409,7 +5476,7 @@ function getReminderPermissionLabel() {
 function updateReminderStatusBadge() {
   if (!els.reminderStatusBadge) return;
 
-  const enabled = ReminderSettingsStore.isEnabled();
+  const enabled = ReminderSettingsStore.isAnyEnabled();
   const permissionGranted = "Notification" in window && Notification.permission === "granted";
 
   els.reminderStatusBadge.className = "attention-panel__reminder-badge";
@@ -5425,123 +5492,225 @@ function updateReminderStatusBadge() {
   }
 }
 
-function updateGoogleConnectUi() {
-  if (!window.CalendarSyncManager || !els.googleConnectBtn) return;
+function formatSettingsDateTime(isoString) {
+  if (!isoString) return "—";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "—";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
+function getSettingsPanelElement(panel) {
+  const map = {
+    main: els.settingsPanelMain,
+    calendar: els.settingsPanelCalendar,
+    notification: els.settingsPanelNotification,
+    appearance: els.settingsPanelAppearance,
+    data: els.settingsPanelData,
+    about: els.settingsPanelAbout,
+  };
+  return map[panel] || null;
+}
+
+function openSettingsPanel(panel = "main") {
+  currentSettingsPanel = panel;
+  ["main", "calendar", "notification", "appearance", "data", "about"].forEach((key) => {
+    const el = getSettingsPanelElement(key);
+    if (el) el.hidden = key !== panel;
+  });
+  if (els.settingsBackBtn) els.settingsBackBtn.hidden = panel === "main";
+  if (els.settingsTitle) {
+    els.settingsTitle.textContent = SETTINGS_PANEL_TITLES[panel] || SETTINGS_PANEL_TITLES.main;
+  }
+  if (panel === "calendar") updateCalendarSyncUi();
+  if (panel === "notification") updateNotificationSettingsUi();
+  if (panel === "appearance" && els.uiScaleSelect) {
+    els.uiScaleSelect.value = UiSettingsStore.getSize();
+  }
+  if (panel === "about" && els.settingsAppVersion) {
+    els.settingsAppVersion.textContent = APP_VERSION;
+  }
+}
+
+function updateCalendarSyncUi() {
+  if (!window.CalendarSyncManager) return;
 
   const configured = CalendarSyncManager.isConfigured();
   const onFileProtocol = window.location.protocol === "file:";
   const connected = CalendarSyncManager.isConnected();
+  const syncEnabled = CalendarSyncManager.isCalendarSyncEnabled();
+  const settings = CalendarSyncManager.getSettings();
 
-  els.googleConnectBtn.disabled = !configured || onFileProtocol || connected;
-  els.googleDisconnectBtn.disabled = !connected;
-
-  if (els.googleAccountStatus) {
-    els.googleAccountStatus.textContent = connected ? "🟢 Google 계정 연동됨" : "⚪ Google 계정 미연동";
-    els.googleAccountStatus.className = connected
-      ? "google-account-status google-account-status--connected"
-      : "google-account-status google-account-status--disconnected";
+  if (els.calendarSyncToggle) {
+    els.calendarSyncToggle.checked = syncEnabled;
+    els.calendarSyncToggle.disabled = onFileProtocol || !configured;
   }
 
-  if (els.googleSetupHint) {
+  if (els.calendarSyncStatus) {
+    els.calendarSyncStatus.textContent = connected ? "Connected" : "Not Connected";
+    els.calendarSyncStatus.className = connected
+      ? "settings-meta__value settings-meta__value--ok"
+      : "settings-meta__value";
+  }
+
+  if (els.calendarLastSync) {
+    els.calendarLastSync.textContent = formatSettingsDateTime(settings.lastSyncAt);
+  }
+
+  if (els.calendarReconnectBtn) {
+    els.calendarReconnectBtn.hidden = connected || onFileProtocol || !configured;
+  }
+
+  if (els.calendarSetupHint) {
     if (onFileProtocol) {
-      els.googleSetupHint.hidden = false;
-      els.googleSetupHint.textContent =
-        "현재 file:// 로 열려 있어 Google OAuth가 동작하지 않습니다. Live Server 등으로 http://localhost 에서 실행해 주세요.";
+      els.calendarSetupHint.hidden = false;
+      els.calendarSetupHint.textContent =
+        "현재 file:// 로 열려 있어 Calendar Sync가 동작하지 않습니다. Live Server 등으로 http://localhost 에서 실행해 주세요.";
     } else if (!configured) {
-      els.googleSetupHint.hidden = false;
-      els.googleSetupHint.innerHTML =
-        'Google Cloud Console에서 OAuth Client ID를 발급받아 <code>calendar-config.js</code>의 <code>google.clientId</code>에 입력한 뒤 페이지를 새로고침하세요.';
+      els.calendarSetupHint.hidden = false;
+      els.calendarSetupHint.innerHTML =
+        'Calendar Sync를 사용하려면 <code>calendar-config.js</code>의 <code>google.clientId</code>를 설정한 뒤 페이지를 새로고침하세요.';
     } else {
-      els.googleSetupHint.hidden = true;
-      els.googleSetupHint.textContent = "";
+      els.calendarSetupHint.hidden = true;
+      els.calendarSetupHint.textContent = "";
     }
   }
 }
 
-function openSettingsModal() {
-  els.reminderEnabledToggle.checked = ReminderSettingsStore.isEnabled();
-  if (els.uiScaleSelect) {
-    els.uiScaleSelect.value = UiSettingsStore.getSize();
-  }
-
-  if (window.CalendarSyncManager) {
-    CalendarSyncManager.reconcileAuthWithSettings();
-    updateGoogleConnectUi();
-  }
-
-  els.reminderPermissionStatus.textContent = getReminderPermissionLabel();
-  els.settingsModal.hidden = false;
+function syncAllEligibleTasksToCalendar() {
+  if (!window.CalendarSyncManager?.isCalendarSyncActive()) return;
+  tasks.forEach((task) => {
+    if (task.dueDate && isActive(task)) {
+      CalendarSyncManager.scheduleSyncTask(task.id);
+    }
+  });
 }
 
-function closeSettingsModal() {
-  els.settingsModal.hidden = true;
-}
+async function handleCalendarSyncToggleChange() {
+  if (!window.CalendarSyncManager || !els.calendarSyncToggle) return;
 
-async function handleSaveSettings() {
-  const enabled = els.reminderEnabledToggle.checked;
-  ReminderSettingsStore.setEnabled(enabled);
+  const wantEnabled = els.calendarSyncToggle.checked;
 
-  if (els.uiScaleSelect) {
-    UiSettingsStore.setSize(els.uiScaleSelect.value);
-    applyUiScale();
-  }
-
-  if (enabled) {
-    await requestReminderPermission();
-  }
-
-  updateReminderStatusBadge();
-  els.reminderPermissionStatus.textContent = getReminderPermissionLabel();
-  closeSettingsModal();
-
-  if (enabled) {
-    showDesktopReminders();
-  }
-}
-
-async function handleGoogleConnect() {
-  if (!window.CalendarSyncManager) {
-    alert("Calendar 연동 모듈을 불러오지 못했습니다.\n페이지를 새로고침해 주세요.");
+  if (!wantEnabled) {
+    CalendarSyncManager.setCalendarSyncEnabled(false);
+    updateCalendarSyncUi();
     return;
   }
 
-  updateGoogleConnectUi();
-
   if (!CalendarSyncManager.isConfigured()) {
+    els.calendarSyncToggle.checked = false;
     alert(
-      "Google OAuth Client ID가 설정되지 않았습니다.\n\ncalendar-config.js 파일을 열어 google.clientId에 Client ID를 입력한 뒤 페이지를 새로고침해 주세요."
+      "Calendar Sync를 사용하려면 calendar-config.js에 Google Client ID를 설정해 주세요."
     );
     return;
   }
 
   if (window.location.protocol === "file:") {
-    alert(
-      "Google OAuth는 파일을 직접 열(file://)면 동작하지 않습니다.\n\nVS Code Live Server 등으로 http://localhost 환경에서 실행해 주세요."
-    );
+    els.calendarSyncToggle.checked = false;
+    alert("Calendar Sync는 http://localhost 환경에서만 사용할 수 있습니다.");
     return;
   }
 
-  const originalLabel = els.googleConnectBtn.textContent;
-  els.googleConnectBtn.disabled = true;
-  els.googleConnectBtn.textContent = "연동 중...";
-
+  els.calendarSyncToggle.disabled = true;
   try {
-    await CalendarSyncManager.connect(true);
-    updateGoogleConnectUi();
-    alert("Google 계정이 연동되었습니다.");
+    if (!CalendarSyncManager.isConnected()) {
+      await CalendarSyncManager.connect(true);
+    }
+    CalendarSyncManager.setCalendarSyncEnabled(true);
+    syncAllEligibleTasksToCalendar();
+    updateCalendarSyncUi();
   } catch (err) {
-    updateGoogleConnectUi();
-    alert(`Google 계정 연동에 실패했습니다.\n\n${err.message || err}`);
+    CalendarSyncManager.setCalendarSyncEnabled(false);
+    els.calendarSyncToggle.checked = false;
+    updateCalendarSyncUi();
+    alert(`Calendar Sync 연결에 실패했습니다.\n\n${err.message || err}`);
   } finally {
-    els.googleConnectBtn.textContent = originalLabel;
-    updateGoogleConnectUi();
+    if (els.calendarSyncToggle) els.calendarSyncToggle.disabled = false;
+    updateCalendarSyncUi();
   }
 }
 
-function handleGoogleDisconnect() {
+async function handleCalendarReconnect() {
   if (!window.CalendarSyncManager) return;
-  CalendarSyncManager.disconnect();
-  updateGoogleConnectUi();
+
+  if (els.calendarReconnectBtn) {
+    els.calendarReconnectBtn.disabled = true;
+    els.calendarReconnectBtn.textContent = "연결 중…";
+  }
+
+  try {
+    await CalendarSyncManager.connect(true);
+    if (CalendarSyncManager.isCalendarSyncEnabled()) {
+      syncAllEligibleTasksToCalendar();
+    }
+    updateCalendarSyncUi();
+  } catch (err) {
+    alert(`Calendar Sync 재연결에 실패했습니다.\n\n${err.message || err}`);
+    updateCalendarSyncUi();
+  } finally {
+    if (els.calendarReconnectBtn) {
+      els.calendarReconnectBtn.disabled = false;
+      els.calendarReconnectBtn.textContent = "Reconnect";
+    }
+  }
+}
+
+function updateNotificationSettingsUi() {
+  if (els.reminderDueDateToggle) {
+    els.reminderDueDateToggle.checked = ReminderSettingsStore.isDueDateReminderEnabled();
+  }
+  if (els.reminderD1Toggle) {
+    els.reminderD1Toggle.checked = ReminderSettingsStore.isD1ReminderEnabled();
+  }
+  if (els.reminderPermissionStatus) {
+    els.reminderPermissionStatus.textContent = getReminderPermissionLabel();
+  }
+}
+
+async function handleReminderSettingsChange() {
+  ReminderSettingsStore.setDueDateReminder(Boolean(els.reminderDueDateToggle?.checked));
+  ReminderSettingsStore.setD1Reminder(Boolean(els.reminderD1Toggle?.checked));
+
+  if (ReminderSettingsStore.isAnyEnabled()) {
+    await requestReminderPermission();
+    showDesktopReminders();
+  }
+
+  updateReminderStatusBadge();
+  if (els.reminderPermissionStatus) {
+    els.reminderPermissionStatus.textContent = getReminderPermissionLabel();
+  }
+}
+
+function handleUiScaleChange() {
+  if (!els.uiScaleSelect) return;
+  UiSettingsStore.setSize(els.uiScaleSelect.value);
+  applyUiScale();
+}
+
+function openSettingsModal(panel = "main") {
+  openSettingsPanel(panel);
+  if (window.CalendarSyncManager) {
+    CalendarSyncManager.reconcileAuthWithSettings();
+    updateCalendarSyncUi();
+  }
+  updateNotificationSettingsUi();
+  if (els.uiScaleSelect) {
+    els.uiScaleSelect.value = UiSettingsStore.getSize();
+  }
+  if (els.settingsAppVersion) {
+    els.settingsAppVersion.textContent = APP_VERSION;
+  }
+  els.settingsModal.hidden = false;
+}
+
+function closeSettingsModal() {
+  els.settingsModal.hidden = true;
+  openSettingsPanel("main");
 }
 
 function getDueUrgency(dueDateStr, status) {
