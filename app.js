@@ -5706,11 +5706,27 @@ function openSettingsModal(panel = "main") {
     els.settingsAppVersion.textContent = APP_VERSION;
   }
   els.settingsModal.hidden = false;
+  lockSettingsBodyScroll();
 }
 
 function closeSettingsModal() {
   els.settingsModal.hidden = true;
+  unlockSettingsBodyScroll();
   openSettingsPanel("main");
+}
+
+let settingsBodyOverflowBackup = "";
+
+function lockSettingsBodyScroll() {
+  settingsBodyOverflowBackup = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  document.body.classList.add("body--settings-open");
+}
+
+function unlockSettingsBodyScroll() {
+  document.body.style.overflow = settingsBodyOverflowBackup || "";
+  document.body.classList.remove("body--settings-open");
+  settingsBodyOverflowBackup = "";
 }
 
 function getDueUrgency(dueDateStr, status) {

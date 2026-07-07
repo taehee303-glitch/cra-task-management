@@ -1148,11 +1148,14 @@ select:disabled {
   flex-direction: column;
   width: min(480px, 100%);
   max-height: min(90vh, 720px);
+  min-height: 0;
   padding: 0;
   overflow: hidden;
+  background: var(--surface);
 }
 
 .settings-header {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -1187,7 +1190,67 @@ select:disabled {
 .settings-body {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: calc(8px * var(--ui-scale)) calc(14px * var(--ui-scale)) calc(16px * var(--ui-scale));
+}
+
+/* Settings modal overlay — fixed layer above app chrome */
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  background: rgba(15, 23, 42, 0.55);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.settings-modal-overlay[hidden] {
+  display: none !important;
+}
+
+.settings-modal-overlay .modal--settings {
+  touch-action: auto;
+  flex-shrink: 0;
+}
+
+body.body--settings-open {
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .settings-modal-overlay:not([hidden]) {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .settings-modal-overlay .modal--settings {
+    width: 100%;
+    max-width: none;
+    max-height: min(88dvh, 720px);
+    min-height: unset;
+    margin: 0;
+    border-radius: calc(16px * var(--ui-scale)) calc(16px * var(--ui-scale)) 0 0;
+    box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.18);
+  }
+}
+
+@media (min-width: 769px) {
+  .settings-modal-overlay:not([hidden]) {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .settings-modal-overlay .modal--settings {
+    width: min(480px, 100%);
+    max-height: min(85vh, 720px);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+  }
 }
 
 .settings-panel-view {
@@ -2392,6 +2455,10 @@ select:disabled {
   flex-wrap: wrap;
   gap: calc(6px * var(--ui-scale));
   min-width: calc(120px * var(--ui-scale));
+}
+
+#settingsModal.settings-modal-overlay {
+  z-index: 500;
 }
 
 /* Modal */
@@ -4607,18 +4674,9 @@ select:disabled {
   display: flex;
 }
 
-/* Mobile fullscreen dialogs */
+/* Mobile fullscreen dialogs (add task etc.; settings uses bottom sheet) */
 .app-mode-daily .modal-overlay:not([hidden]) .modal,
 .app-mode-daily .modal-overlay:not([hidden]) .modal--sheet {
-  width: 100%;
-  max-width: none;
-  min-height: 100%;
-  max-height: none;
-  margin: 0;
-  border-radius: 0;
-}
-
-.app-mode-daily .modal-overlay:not([hidden]) .modal--settings {
   width: 100%;
   max-width: none;
   min-height: 100%;
