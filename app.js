@@ -291,10 +291,19 @@ const els = {
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   importCsvBtn: document.getElementById("importCsvBtn"),
   importCsvInput: document.getElementById("importCsvInput"),
-  editModal: document.getElementById("editModal"),
+  editModal: document.getElementById("taskDetailPanel"),
+  taskDetailPanel: document.getElementById("taskDetailPanel"),
+  taskDetailBackBtn: document.getElementById("taskDetailBackBtn"),
+  taskDetailTitle: document.getElementById("taskDetailTitle"),
   editForm: document.getElementById("editForm"),
-  closeModalBtn: document.getElementById("closeModalBtn"),
+  closeModalBtn: document.getElementById("closeTaskDetailBtn"),
+  closeTaskDetailBtn: document.getElementById("closeTaskDetailBtn"),
   cancelEditBtn: document.getElementById("cancelEditBtn"),
+  deleteTaskDetailBtn: document.getElementById("deleteTaskDetailBtn"),
+  taskDetailChecklist: document.getElementById("taskDetailChecklist"),
+  taskChecklistNewInput: document.getElementById("taskChecklistNewInput"),
+  taskChecklistAddBtn: document.getElementById("taskChecklistAddBtn"),
+  taskDetailHistory: document.getElementById("taskDetailHistory"),
   attentionTodayCount: document.getElementById("attentionTodayCount"),
   attentionOverdueCount: document.getElementById("attentionOverdueCount"),
   attentionD1Count: document.getElementById("attentionD1Count"),
@@ -770,11 +779,22 @@ async function bootstrapApp() {
   els.importCsvBtn.addEventListener("click", () => els.importCsvInput.click());
   els.importCsvInput.addEventListener("change", handleCsvImport);
   els.editForm.addEventListener("submit", handleEditTask);
-  els.closeModalBtn.addEventListener("click", closeModal);
-  els.cancelEditBtn.addEventListener("click", closeModal);
-  els.editModal.addEventListener("click", (e) => {
-    if (e.target === els.editModal) closeModal();
+  els.closeTaskDetailBtn?.addEventListener("click", closeTaskDetail);
+  els.taskDetailBackBtn?.addEventListener("click", closeTaskDetail);
+  els.cancelEditBtn?.addEventListener("click", closeTaskDetail);
+  els.deleteTaskDetailBtn?.addEventListener("click", () => {
+    const id = document.getElementById("editId")?.value;
+    if (id) deleteTask(id);
   });
+  els.taskChecklistAddBtn?.addEventListener("click", addTaskChecklistItem);
+  els.taskChecklistNewInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addTaskChecklistItem();
+    }
+  });
+  els.taskDetailChecklist?.addEventListener("click", handleTaskChecklistClick);
+  els.taskDetailChecklist?.addEventListener("change", handleTaskChecklistChange);
   els.openSettingsBtn?.addEventListener("click", () => openSettingsModal());
   els.closeSettingsModalBtn.addEventListener("click", closeSettingsModal);
   els.settingsBackBtn?.addEventListener("click", () => openSettingsPanel("main"));
@@ -2414,6 +2434,9 @@ function applyAppMode() {
   if (!daily && currentViewName === "reference") {
     switchView("tasks");
   }
+  if (selectedTaskId) {
+    closeTaskDetail();
+  }
 }
 
 function openMasterSheet() {
@@ -2586,7 +2609,7 @@ function renderMobileTaskCard(task) {
   const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
 
   return `
-    <button type="button" class="mobile-task-card" data-edit="${escapeAttr(task.id)}">
+    <button type="button" class="mobile-task-card${selectedTaskId === task.id ? " is-selected" : ""}" data-edit="${escapeAttr(task.id)}">
       <span class="priority-badge priority-badge--${priorityClass(task.priority)} priority-badge--xs">${escapeHtml(task.priority)}</span>
       <span class="mobile-task-card__body">
         <span class="mobile-task-card__title">${escapeHtml(task.task)}</span>
@@ -2599,7 +2622,7 @@ function renderMobileTaskCard(task) {
 
 function bindMobileTaskFeedClicks(container) {
   container?.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.addEventListener("click", () => openEditModal(btn.dataset.edit));
+    btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
   });
 }
 
@@ -2894,6 +2917,7 @@ function switchView(viewName) {
   closeFabMenu();
   closeSidebar();
   closeMasterSheet();
+  if (selectedTaskId) closeTaskDetail();
 
   if (els.topbarTitle) {
     els.topbarTitle.textContent = getViewTitle(viewName);
@@ -3194,7 +3218,7 @@ function renderScheduleItem(task) {
 
 function bindPreviewTaskClicks(container) {
   container?.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.addEventListener("click", () => openEditModal(btn.dataset.edit));
+    btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
   });
 }
 
@@ -3375,7 +3399,7 @@ function bindTaskListActions(container) {
   container?.querySelectorAll(".task-card__main, [data-edit]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
-      openEditModal(btn.dataset.edit);
+      openTaskDetail(btn.dataset.edit);
     });
   });
   container?.querySelectorAll("[data-delete]").forEach((btn) => {
@@ -4905,8 +4929,9 @@ const TaskStore = {
     const idx = tasks.findIndex((t) => t.id === id);
     if (idx === -1) return false;
 
+    const before = tasks[idx];
     const merged = {
-      ...tasks[idx],
+      ...before,
       ...updates,
       id,
       updatedAt: new Date().toISOString(),
@@ -4914,6 +4939,13 @@ const TaskStore = {
 
     if (updates.status && updates.status !== "Completed") {
       delete merged.completedAt;
+    }
+
+    const historyEntries = buildTaskChangeHistory(before, merged);
+    if (historyEntries.length) {
+      merged.history = [...(before.history || []), ...historyEntries].slice(-100);
+    } else if (before.history) {
+      merged.history = before.history;
     }
 
     tasks[idx] = normalizeTask(merged);
@@ -4986,6 +5018,60 @@ function isInboxTask(task) {
   return !task.study?.trim() && !task.site?.trim() && !task.dueDate?.trim();
 }
 
+function normalizeChecklist(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item && typeof item.text === "string" && item.text.trim())
+    .map((item) => ({
+      id: item.id || generateId(),
+      text: item.text.trim(),
+      done: Boolean(item.done),
+    }));
+}
+
+function normalizeTaskHistory(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item && typeof item.at === "string")
+    .map((item) => ({
+      at: item.at,
+      field: item.field || "Updated",
+      from: item.from ?? "",
+      to: item.to ?? "",
+    }))
+    .slice(-100);
+}
+
+function buildTaskChangeHistory(before, after) {
+  const entries = [];
+  const now = new Date().toISOString();
+  const fields = [
+    { key: "study", label: "Study" },
+    { key: "site", label: "Site" },
+    { key: "task", label: "Task" },
+    { key: "dueDate", label: "Due Date" },
+    { key: "status", label: "Status" },
+    { key: "priority", label: "Priority" },
+    { key: "memo", label: "Memo" },
+  ];
+
+  fields.forEach(({ key, label }) => {
+    const fromVal = before[key] ?? "";
+    const toVal = after[key] ?? "";
+    if (fromVal !== toVal) {
+      entries.push({ at: now, field: label, from: fromVal, to: toVal });
+    }
+  });
+
+  const beforeChecklist = JSON.stringify(before.checklist || []);
+  const afterChecklist = JSON.stringify(after.checklist || []);
+  if (beforeChecklist !== afterChecklist) {
+    entries.push({ at: now, field: "Checklist", from: "", to: "updated" });
+  }
+
+  return entries;
+}
+
 function normalizeTask(item) {
   const normalized = {
     id: item.id,
@@ -4995,6 +5081,9 @@ function normalizeTask(item) {
     dueDate: item.dueDate,
     status: migrateTaskStatus(item.status),
     priority: PRIORITIES.includes(item.priority) ? item.priority : "Medium",
+    memo: typeof item.memo === "string" ? item.memo : "",
+    checklist: normalizeChecklist(item.checklist),
+    history: normalizeTaskHistory(item.history),
     createdAt: item.createdAt || new Date().toISOString(),
     ...(item.updatedAt ? { updatedAt: item.updatedAt } : {}),
   };
@@ -5186,7 +5275,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.0.0";
-const APP_BUILD = "23";
+const APP_BUILD = "24";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -5199,6 +5288,8 @@ const SETTINGS_PANEL_TITLES = {
 };
 
 let currentSettingsPanel = "main";
+let selectedTaskId = null;
+let taskDetailChecklistDraft = [];
 
 const UI_SCALE_PRESETS = {
   xsmall: 0.8,
@@ -6407,6 +6498,8 @@ function handleEditTask(e) {
     dueDate: newDueDate,
     status: newStatus,
     priority: document.getElementById("editPriority").value,
+    memo: document.getElementById("editMemo")?.value ?? "",
+    checklist: taskDetailChecklistDraft.map((item) => ({ ...item })),
   };
 
   if (newStatus === "Completed") {
@@ -6443,7 +6536,10 @@ function handleEditTask(e) {
     workflowCount = runWorkflowAutomation(completedTask).length;
   }
 
-  closeModal();
+  const updatedTask = tasks.find((t) => t.id === id);
+  if (updatedTask) {
+    populateTaskDetailForm(updatedTask);
+  }
   renderAll();
 
   if (window.CalendarSyncManager) {
@@ -6476,6 +6572,7 @@ async function deleteTask(id) {
       await CalendarSyncManager.onTasksDeleted(idsToRemove);
     }
     TaskStore.removeMany(idsToRemove);
+    if (selectedTaskId && idsToRemove.includes(selectedTaskId)) closeTaskDetail();
     renderAll();
     return;
   }
@@ -6488,13 +6585,11 @@ async function deleteTask(id) {
     await CalendarSyncManager.onTasksDeleted([id]);
   }
   TaskStore.remove(id);
+  if (selectedTaskId === id) closeTaskDetail();
   renderAll();
 }
 
-function openEditModal(id) {
-  const task = tasks.find((t) => t.id === id);
-  if (!task) return;
-
+function populateTaskDetailForm(task) {
   document.getElementById("editId").value = task.id;
   populateStudySelect(document.getElementById("editStudy"), task.study);
   populateSiteSelect(document.getElementById("editSite"), task.study, task.site);
@@ -6505,6 +6600,17 @@ function openEditModal(id) {
   document.getElementById("editDueDate").value = task.dueDate;
   document.getElementById("editStatus").value = task.status;
   document.getElementById("editPriority").value = task.priority;
+  if (document.getElementById("editMemo")) {
+    document.getElementById("editMemo").value = task.memo || "";
+  }
+
+  taskDetailChecklistDraft = (task.checklist || []).map((item) => ({ ...item }));
+  renderTaskDetailChecklist();
+  renderTaskDetailHistory(task);
+
+  if (els.taskDetailTitle) {
+    els.taskDetailTitle.textContent = task.task || "Task";
+  }
 
   const sourceEl = document.getElementById("editSourceVisit");
   const editMeta = [];
@@ -6520,16 +6626,134 @@ function openEditModal(id) {
     sourceEl.hidden = true;
     sourceEl.innerHTML = "";
   }
+}
 
-  els.editModal.hidden = false;
+function openTaskDetail(id) {
+  const task = tasks.find((t) => t.id === id);
+  if (!task) return;
+
+  selectedTaskId = id;
+  populateTaskDetailForm(task);
+
+  if (els.taskDetailPanel) els.taskDetailPanel.hidden = false;
+  document.body.classList.add("task-detail-open");
+  if (isDailyMode()) {
+    document.body.classList.add("task-detail-mobile-open");
+    lockTaskDetailBodyScroll();
+  }
+
+  if (els.taskDetailBackBtn) els.taskDetailBackBtn.hidden = !isDailyMode();
+  if (els.closeTaskDetailBtn) els.closeTaskDetailBtn.hidden = isDailyMode();
+  updateTaskListSelection();
+  els.taskDetailPanel?.querySelector(".task-detail-panel__scroll")?.scrollTo(0, 0);
+}
+
+function closeTaskDetail() {
+  selectedTaskId = null;
+  taskDetailChecklistDraft = [];
+  if (els.taskDetailPanel) els.taskDetailPanel.hidden = true;
+  document.body.classList.remove("task-detail-open", "task-detail-mobile-open");
+  unlockTaskDetailBodyScroll();
+  els.editForm?.reset();
+  setEditSiteInfoExpanded(false);
+  if (els.editSiteInfoToggleBtn) els.editSiteInfoToggleBtn.hidden = true;
+  if (els.editSiteMasterHint) els.editSiteMasterHint.hidden = true;
+  updateTaskListSelection();
+}
+
+let taskDetailBodyOverflowBackup = "";
+
+function lockTaskDetailBodyScroll() {
+  taskDetailBodyOverflowBackup = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+}
+
+function unlockTaskDetailBodyScroll() {
+  document.body.style.overflow = taskDetailBodyOverflowBackup || "";
+  taskDetailBodyOverflowBackup = "";
+}
+
+function updateTaskListSelection() {
+  document.querySelectorAll("[data-task-id]").forEach((el) => {
+    el.classList.toggle("is-selected", selectedTaskId && el.dataset.taskId === selectedTaskId);
+  });
+  document.querySelectorAll(".mobile-task-card[data-edit]").forEach((el) => {
+    el.classList.toggle("is-selected", selectedTaskId && el.dataset.edit === selectedTaskId);
+  });
+}
+
+function renderTaskDetailChecklist() {
+  if (!els.taskDetailChecklist) return;
+  if (!taskDetailChecklistDraft.length) {
+    els.taskDetailChecklist.innerHTML = '<li class="task-checklist__empty">항목 없음</li>';
+    return;
+  }
+
+  els.taskDetailChecklist.innerHTML = taskDetailChecklistDraft
+    .map(
+      (item) => `
+    <li class="task-checklist__item">
+      <label class="task-checklist__label">
+        <input type="checkbox" data-checklist-id="${escapeAttr(item.id)}" ${item.done ? "checked" : ""} />
+        <span class="task-checklist__text${item.done ? " task-checklist__text--done" : ""}">${escapeHtml(item.text)}</span>
+      </label>
+      <button type="button" class="task-checklist__remove" data-remove-checklist="${escapeAttr(item.id)}" aria-label="삭제">&times;</button>
+    </li>
+  `
+    )
+    .join("");
+}
+
+function renderTaskDetailHistory(task) {
+  if (!els.taskDetailHistory) return;
+  const history = task?.history || [];
+  if (!history.length) {
+    els.taskDetailHistory.innerHTML = '<li class="task-history__empty">변경 이력 없음</li>';
+    return;
+  }
+
+  els.taskDetailHistory.innerHTML = [...history]
+    .reverse()
+    .map((entry) => {
+      const when = formatSettingsDateTime(entry.at);
+      if (entry.field === "Checklist") {
+        return `<li class="task-history__item"><span class="task-history__when">${escapeHtml(when)}</span> Checklist updated</li>`;
+      }
+      return `<li class="task-history__item"><span class="task-history__when">${escapeHtml(when)}</span> ${escapeHtml(entry.field)}: ${escapeHtml(entry.from || "—")} → ${escapeHtml(entry.to || "—")}</li>`;
+    })
+    .join("");
+}
+
+function addTaskChecklistItem() {
+  const text = els.taskChecklistNewInput?.value.trim();
+  if (!text) return;
+  taskDetailChecklistDraft.push({ id: generateId(), text, done: false });
+  if (els.taskChecklistNewInput) els.taskChecklistNewInput.value = "";
+  renderTaskDetailChecklist();
+}
+
+function handleTaskChecklistClick(event) {
+  const removeBtn = event.target.closest("[data-remove-checklist]");
+  if (!removeBtn) return;
+  const itemId = removeBtn.dataset.removeChecklist;
+  taskDetailChecklistDraft = taskDetailChecklistDraft.filter((item) => item.id !== itemId);
+  renderTaskDetailChecklist();
+}
+
+function handleTaskChecklistChange(event) {
+  const checkbox = event.target.closest('input[type="checkbox"][data-checklist-id]');
+  if (!checkbox) return;
+  const item = taskDetailChecklistDraft.find((entry) => entry.id === checkbox.dataset.checklistId);
+  if (item) item.done = checkbox.checked;
+  renderTaskDetailChecklist();
+}
+
+function openEditModal(id) {
+  openTaskDetail(id);
 }
 
 function closeModal() {
-  els.editModal.hidden = true;
-  els.editForm.reset();
-  setEditSiteInfoExpanded(false);
-  els.editSiteInfoToggleBtn.hidden = true;
-  els.editSiteMasterHint.hidden = true;
+  closeTaskDetail();
 }
 
 function statusClass(status) {
@@ -7028,7 +7252,7 @@ function renderTaskCard({ task, isSubtask }) {
   const isDone = task.status === "Completed";
 
   return `
-    <article class="task-card task-card--dense ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+    <article class="task-card task-card--dense ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       <button type="button" class="task-card__main" data-edit="${escapeAttr(task.id)}">
         <div class="task-card__head">
           <span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>
@@ -7070,7 +7294,7 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   const calendarSynced = task.calendarSync?.eventId ? " task-card__action--synced" : "";
 
   return `
-    <tr class="${rowClass}" data-task-id="${escapeAttr(task.id)}">
+    <tr class="${rowClass}${selectedTaskId === task.id ? " is-selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       <td class="task-list-check">
         <button type="button" class="task-card__action task-card__action--complete task-card__action--sm" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료">✓</button>
       </td>
