@@ -7,6 +7,35 @@ function hasPendingAuthRedirect() {
   return href.includes("__/auth/") || Boolean(sessionStorage.getItem("cra-firebase-auth-redirect"));
 }
 
+async function purgeFitSpaceServiceWorkerCache() {
+  const KEY = "cra_purge_fitspace_sw_v1";
+  if (localStorage.getItem(KEY)) return false;
+
+  let shouldReload = false;
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      const stale = keys.filter((k) => k.startsWith("fitspace"));
+      if (stale.length) {
+        await Promise.all(stale.map((k) => caches.delete(k)));
+        shouldReload = true;
+      }
+    }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      if (regs.length) {
+        await Promise.all(regs.map((reg) => reg.unregister()));
+        shouldReload = true;
+      }
+    }
+  } catch (error) {
+    console.warn("FitSpace cache purge failed:", error);
+  } finally {
+    localStorage.setItem(KEY, "1");
+  }
+  return shouldReload;
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   if (location.protocol !== "http:" && location.protocol !== "https:") return;
@@ -50,4 +79,10 @@ function applyPwaDisplayMode() {
 }
 
 applyPwaDisplayMode();
-registerServiceWorker();
+purgeFitSpaceServiceWorkerCache().then((shouldReload) => {
+  if (shouldReload) {
+    window.location.reload();
+    return;
+  }
+  registerServiceWorker();
+});

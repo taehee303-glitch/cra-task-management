@@ -1,4 +1,4 @@
-const CACHE_VERSION = "27";
+const CACHE_VERSION = "28";
 const CACHE_NAME = `cra-task-manager-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -43,7 +43,10 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith("cra-task-manager-") && key !== CACHE_NAME)
+            .filter((key) =>
+              (key.startsWith("cra-task-manager-") && key !== CACHE_NAME) ||
+              key.startsWith("fitspace")
+            )
             .map((key) => caches.delete(key))
         )
       )
