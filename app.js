@@ -559,8 +559,14 @@ function init() {
   applyUiScale();
   bootstrapApp().catch((err) => {
     console.error("앱 초기화 실패:", err);
-    alert("앱을 초기화하는 중 오류가 발생했습니다. 페이지를 새로고침해 주세요.");
+    alert(
+      `앱을 초기화하는 중 오류가 발생했습니다.\n\n${err?.message || err}\n\nCtrl+Shift+R로 강력 새로고침하거나, PWA라면 앱을 재설치해 주세요.`
+    );
   });
+}
+
+function bindEvent(target, event, handler) {
+  target?.addEventListener(event, handler);
 }
 
 async function bootstrapApp() {
@@ -588,33 +594,51 @@ async function bootstrapApp() {
   taskViewMode = UiSettingsStore.getTaskViewMode();
   applyTaskViewModeUi();
   renderAll();
-  renderStudyMaster();
-  renderSystemMaster();
-  refreshTaskStudySiteSelects();
-
-  if (window.CalendarSyncManager) {
-    await CalendarSyncManager.init();
-    CalendarSyncManager.registerHelpers({
-      getStandardSiteName,
-      getTaskById: (id) => tasks.find((t) => t.id === id),
-      updateTaskCalendarSync: (taskId, calendarSync) => TaskStore.update(taskId, { calendarSync }),
-      clearTaskCalendarSync: (taskId) => {
-        const idx = tasks.findIndex((t) => t.id === taskId);
-        if (idx === -1) return false;
-        const updated = { ...tasks[idx], updatedAt: new Date().toISOString() };
-        delete updated.calendarSync;
-        tasks[idx] = updated;
-        TaskStore.persist();
-        return true;
-      },
-    });
-    CalendarSyncManager.reconcileAuthWithSettings();
+  try {
+    renderStudyMaster();
+    renderSystemMaster();
+    refreshTaskStudySiteSelects();
+  } catch (err) {
+    console.warn("Master 화면 초기화 중 일부 오류:", err);
   }
 
-  await initDesktopReminders();
+  if (window.CalendarSyncManager) {
+    try {
+      await CalendarSyncManager.init();
+      CalendarSyncManager.registerHelpers({
+        getStandardSiteName,
+        getTaskById: (id) => tasks.find((t) => t.id === id),
+        updateTaskCalendarSync: (taskId, calendarSync) => TaskStore.update(taskId, { calendarSync }),
+        clearTaskCalendarSync: (taskId) => {
+          const idx = tasks.findIndex((t) => t.id === taskId);
+          if (idx === -1) return false;
+          const updated = { ...tasks[idx], updatedAt: new Date().toISOString() };
+          delete updated.calendarSync;
+          tasks[idx] = updated;
+          TaskStore.persist();
+          return true;
+        },
+      });
+      CalendarSyncManager.reconcileAuthWithSettings();
+    } catch (err) {
+      console.warn("Calendar Sync 초기화를 건너뜁니다:", err);
+    }
+  }
 
-  els.taskForm.addEventListener("submit", handleAddTask);
-  els.resetFormBtn.addEventListener("click", () => {
+  try {
+    await initDesktopReminders();
+  } catch (err) {
+    console.warn("Reminder 초기화를 건너뜁니다:", err);
+  }
+
+  if (!els.taskForm || !els.editForm) {
+    throw new Error(
+      "필수 UI(taskForm/editForm)를 찾을 수 없습니다. 브라우저 캐시가 오래되었을 수 있습니다."
+    );
+  }
+
+  bindEvent(els.taskForm, "submit", handleAddTask);
+  bindEvent(els.resetFormBtn, "click", () => {
     els.taskForm.reset();
     refreshTaskStudySiteSelects();
     updateSiteInfoDisplays();
@@ -631,8 +655,8 @@ async function bootstrapApp() {
     updateEditSiteInfoDisplay();
     updateSiteSelectHint(document.getElementById("editStudy").value, els.editSiteMasterHint);
   });
-  document.getElementById("editSite").addEventListener("change", updateEditSiteInfoDisplay);
-  els.editSiteInfoToggleBtn.addEventListener("click", toggleEditSiteInfo);
+  bindEvent(document.getElementById("editSite"), "change", updateEditSiteInfoDisplay);
+  bindEvent(els.editSiteInfoToggleBtn, "click", toggleEditSiteInfo);
   els.navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       closeSidebar();
@@ -778,44 +802,44 @@ async function bootstrapApp() {
   els.exportCsvBtn.addEventListener("click", exportTasksToCsv);
   els.importCsvBtn.addEventListener("click", () => els.importCsvInput.click());
   els.importCsvInput.addEventListener("change", handleCsvImport);
-  els.editForm.addEventListener("submit", handleEditTask);
-  els.closeTaskDetailBtn?.addEventListener("click", closeTaskDetail);
-  els.taskDetailBackBtn?.addEventListener("click", closeTaskDetail);
-  els.cancelEditBtn?.addEventListener("click", closeTaskDetail);
-  els.deleteTaskDetailBtn?.addEventListener("click", () => {
+  bindEvent(els.editForm, "submit", handleEditTask);
+  bindEvent(els.closeTaskDetailBtn, "click", closeTaskDetail);
+  bindEvent(els.taskDetailBackBtn, "click", closeTaskDetail);
+  bindEvent(els.cancelEditBtn, "click", closeTaskDetail);
+  bindEvent(els.deleteTaskDetailBtn, "click", () => {
     const id = document.getElementById("editId")?.value;
     if (id) deleteTask(id);
   });
-  els.taskChecklistAddBtn?.addEventListener("click", addTaskChecklistItem);
-  els.taskChecklistNewInput?.addEventListener("keydown", (event) => {
+  bindEvent(els.taskChecklistAddBtn, "click", addTaskChecklistItem);
+  bindEvent(els.taskChecklistNewInput, "keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       addTaskChecklistItem();
     }
   });
-  els.taskDetailChecklist?.addEventListener("click", handleTaskChecklistClick);
-  els.taskDetailChecklist?.addEventListener("change", handleTaskChecklistChange);
-  els.openSettingsBtn?.addEventListener("click", () => openSettingsModal());
-  els.closeSettingsModalBtn.addEventListener("click", closeSettingsModal);
-  els.settingsBackBtn?.addEventListener("click", () => openSettingsPanel("main"));
+  bindEvent(els.taskDetailChecklist, "click", handleTaskChecklistClick);
+  bindEvent(els.taskDetailChecklist, "change", handleTaskChecklistChange);
+  bindEvent(els.openSettingsBtn, "click", () => openSettingsModal());
+  bindEvent(els.closeSettingsModalBtn, "click", closeSettingsModal);
+  bindEvent(els.settingsBackBtn, "click", () => openSettingsPanel("main"));
   document.querySelectorAll("[data-settings-panel]").forEach((btn) => {
     btn.addEventListener("click", () => openSettingsPanel(btn.dataset.settingsPanel));
   });
-  els.calendarSyncToggle?.addEventListener("change", handleCalendarSyncToggleChange);
-  els.calendarReconnectBtn?.addEventListener("click", handleCalendarReconnect);
-  els.calendarDisconnectBtn?.addEventListener("click", handleCalendarDisconnect);
-  els.reminderDueToggle?.addEventListener("change", handleReminderSettingsChange);
-  els.reminderOverdueToggle?.addEventListener("change", handleReminderSettingsChange);
-  els.uiScaleSelect?.addEventListener("change", handleUiScaleChange);
-  els.settingsImportBtn?.addEventListener("click", () => els.importCsvInput?.click());
-  els.settingsExportBtn?.addEventListener("click", exportTasksToCsv);
-  els.settingsResetCacheBtn?.addEventListener("click", handleResetLocalCache);
-  els.settingsModal.addEventListener("click", (e) => {
+  bindEvent(els.calendarSyncToggle, "change", handleCalendarSyncToggleChange);
+  bindEvent(els.calendarReconnectBtn, "click", handleCalendarReconnect);
+  bindEvent(els.calendarDisconnectBtn, "click", handleCalendarDisconnect);
+  bindEvent(els.reminderDueToggle, "change", handleReminderSettingsChange);
+  bindEvent(els.reminderOverdueToggle, "change", handleReminderSettingsChange);
+  bindEvent(els.uiScaleSelect, "change", handleUiScaleChange);
+  bindEvent(els.settingsImportBtn, "click", () => els.importCsvInput?.click());
+  bindEvent(els.settingsExportBtn, "click", exportTasksToCsv);
+  bindEvent(els.settingsResetCacheBtn, "click", handleResetLocalCache);
+  bindEvent(els.settingsModal, "click", (e) => {
     if (e.target === els.settingsModal) closeSettingsModal();
   });
-  els.referenceGoogleCalendarBtn?.addEventListener("click", () => openSettingsModal("calendar"));
-  els.referenceSearchInput?.addEventListener("input", handleReferenceSearchInput);
-  els.referenceCloudSyncBtn?.addEventListener("click", handleReferenceCloudSyncClick);
+  bindEvent(els.referenceGoogleCalendarBtn, "click", () => openSettingsModal("calendar"));
+  bindEvent(els.referenceSearchInput, "input", handleReferenceSearchInput);
+  bindEvent(els.referenceCloudSyncBtn, "click", handleReferenceCloudSyncClick);
   document.querySelectorAll(".reference-section__more[data-view]").forEach((btn) => {
     btn.addEventListener("click", () => switchView(btn.dataset.view));
   });
@@ -5275,7 +5299,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.0.0";
-const APP_BUILD = "25";
+const APP_BUILD = "26";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
