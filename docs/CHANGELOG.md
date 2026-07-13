@@ -17,6 +17,25 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 40 — 2026-07-13 — Workflow Library editor + follow-up fix
+
+### Added
+
+- **Workflow Detail 편집** — Study/Workspace Workflow Library에서 「편집」으로 기준 Task 중심 **이전·이후 단계** 추가/삭제
+- Workflow 데이터 모델에 `preSteps`, `rootTaskName` 필드 추가 (Library 수동 편집용)
+
+### Fixed
+
+- **Follow-up → Add Task** — 「예」 클릭 시 후속 Task Modal이 즉시 열리도록 타이밍·z-index·Status Portal 간섭 보완
+- Follow-up Modal 내부 클릭이 overlay로 전파되어 닫히는 문제 방지
+
+### Changed
+
+- Workflow Learning(업무 중)은 **Post-task만** 유지 — Library에서만 Pre-task 편집
+- Workflow Flow 미리보기에 이전 단계(preSteps) 표시
+
+---
+
 ## [1.1.0] — build 39 — 2026-07-13 — Dashboard QA fixes
 
 ### Fixed

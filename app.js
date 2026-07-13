@@ -221,6 +221,8 @@ const PRIORITY_SORT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 let currentViewName = "dashboard";
 let followUpPromptContext = null;
 let pendingFollowUpParentTask = null;
+let workflowDetailEditRef = null;
+let workflowDetailDraft = null;
 let activeStatusPicker = null;
 let mobileDailyFilter = null;
 
@@ -313,6 +315,8 @@ const els = {
   followUpPromptSummary: document.getElementById("followUpPromptSummary"),
   workflowLearnModal: document.getElementById("workflowLearnModal"),
   workflowLearnBody: document.getElementById("workflowLearnBody"),
+  workflowDetailModal: document.getElementById("workflowDetailModal"),
+  workflowDetailBody: document.getElementById("workflowDetailBody"),
   studyRoutinesList: document.getElementById("studyRoutinesList"),
   routineModal: document.getElementById("routineModal"),
   routineForm: document.getElementById("routineForm"),
@@ -888,8 +892,20 @@ async function bootstrapApp() {
   bindEvent(document.getElementById("followUpPromptYesBtn"), "click", handleFollowUpPromptYes);
   bindEvent(document.getElementById("followUpPromptNoBtn"), "click", closeFollowUpPromptModal);
   bindEvent(document.getElementById("closeFollowUpPromptBtn"), "click", closeFollowUpPromptModal);
+  els.followUpPromptModal?.querySelector(".modal")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
   bindEvent(els.followUpPromptModal, "click", (e) => {
     if (e.target === els.followUpPromptModal) closeFollowUpPromptModal();
+  });
+  bindEvent(document.getElementById("workflowDetailSaveBtn"), "click", handleWorkflowDetailSave);
+  bindEvent(document.getElementById("closeWorkflowDetailBtn"), "click", closeWorkflowDetailModal);
+  bindEvent(document.getElementById("cancelWorkflowDetailBtn"), "click", closeWorkflowDetailModal);
+  bindEvent(els.workflowDetailModal, "click", (e) => {
+    if (e.target === els.workflowDetailModal) closeWorkflowDetailModal();
+  });
+  els.workflowDetailModal?.querySelector(".modal")?.addEventListener("click", (event) => {
+    event.stopPropagation();
   });
   bindEvent(document.getElementById("closeWorkflowSuggestBtn"), "click", closeWorkflowSuggestModal);
   bindEvent(els.workflowSuggestModal, "click", (e) => {
@@ -2632,7 +2648,9 @@ function normalizeWorkflowStep(step) {
 }
 
 function computeWorkflowStepCount(workflow) {
-  return 1 + (Array.isArray(workflow?.steps) ? workflow.steps.length : 0);
+  const preCount = Array.isArray(workflow?.preSteps) ? workflow.preSteps.length : 0;
+  const postCount = Array.isArray(workflow?.steps) ? workflow.steps.length : 0;
+  return 1 + preCount + postCount;
 }
 
 function inferWorkflowCategory(name, tags = []) {
@@ -2645,6 +2663,9 @@ function inferWorkflowCategory(name, tags = []) {
 }
 
 function normalizeWorkflowRecord(workflow) {
+  const preSteps = Array.isArray(workflow?.preSteps)
+    ? workflow.preSteps.map(normalizeWorkflowStep).filter((s) => s.taskName)
+    : [];
   const steps = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
   const tags = Array.isArray(workflow?.tags)
     ? [...new Set(workflow.tags.map((tag) => String(tag).trim()).filter(Boolean))]
@@ -2659,11 +2680,15 @@ function normalizeWorkflowRecord(workflow) {
     id: workflow?.id || generateId(),
     name: workflow?.name?.trim() || "Untitled Workflow",
     scope,
+    preSteps,
     steps,
     category,
     tags,
     trigger,
-    stepCount: Number.isFinite(Number(workflow?.stepCount)) ? Math.max(1, Number(workflow.stepCount)) : computeWorkflowStepCount({ steps }),
+    stepCount: Number.isFinite(Number(workflow?.stepCount))
+      ? Math.max(1, Number(workflow.stepCount))
+      : computeWorkflowStepCount({ preSteps, steps }),
+    rootTaskName: workflow?.rootTaskName?.trim() || "",
     usageCount: Number.isFinite(Number(workflow?.usageCount)) ? Math.max(0, Number(workflow.usageCount)) : 0,
     lastUsedAt: workflow?.lastUsedAt || null,
     source: workflow?.source || "manual",
@@ -3586,7 +3611,13 @@ function openAddTaskModal(presetOrOptions = null) {
   updateSiteSelectHint(els.study.value, els.siteMasterHint);
   updateAddTaskFollowUpContextPanel();
   if (els.addTaskModal) {
+    if (isFollowUp) {
+      els.addTaskModal.classList.add("modal-overlay--stack");
+    } else {
+      els.addTaskModal.classList.remove("modal-overlay--stack");
+    }
     els.addTaskModal.hidden = false;
+    els.addTaskModal.removeAttribute("hidden");
   }
   if (!isFollowUp) {
     updateAddTaskWorkflowHint();
@@ -3600,6 +3631,7 @@ function openAddTaskModal(presetOrOptions = null) {
 function closeAddTaskModal() {
   if (!els.addTaskModal) return;
   els.addTaskModal.hidden = true;
+  els.addTaskModal.classList.remove("modal-overlay--stack");
   pendingFollowUpParentTask = null;
   if (els.taskWorkflowMatchHint) els.taskWorkflowMatchHint.hidden = true;
   updateAddTaskFollowUpContextPanel();
@@ -4252,13 +4284,15 @@ function formatWorkflowMeta(workflow) {
   };
 }
 
-function formatWorkflowStepOffset(step) {
+function formatWorkflowStepOffset(step, side = "post") {
   if (!step?.dueOffset) return "";
   const unit = step.dueUnit === "business" ? " business days" : "일";
-  return `(+${step.dueOffset}${step.dueUnit === "business" ? unit : "일"})`;
+  const prefix = side === "pre" ? "-" : "+";
+  return `(${prefix}${step.dueOffset}${step.dueUnit === "business" ? unit : "일"})`;
 }
 
 function getWorkflowRootLabel(workflow) {
+  if (workflow?.rootTaskName?.trim()) return workflow.rootTaskName.trim();
   if (workflow.source === "legacy-taskRules") {
     const baseEvent = (workflow.tags || []).find((tag) => ["mv", "siv", "cov"].includes(tag));
     const visitRule = WORKFLOW_VISIT_RULES.find((rule) => rule.key === baseEvent);
@@ -4277,26 +4311,30 @@ function getWorkflowRootLabel(workflow) {
 
 function renderWorkflowFlowPreview(workflow, options = {}) {
   const rootLabel = options.rootLabel || getWorkflowRootLabel(workflow);
+  const preSteps = Array.isArray(workflow?.preSteps) ? workflow.preSteps : [];
   const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
   const showOffsets = options.showOffsets !== false;
   const compact = Boolean(options.compact);
-  const maxSteps = options.maxSteps ?? (compact ? 4 : steps.length);
-  const visibleSteps = compact ? steps.slice(0, maxSteps) : steps;
-  const hiddenCount = compact ? Math.max(0, steps.length - visibleSteps.length) : 0;
+  const allSteps = [...preSteps.map((step) => ({ step, side: "pre" })), ...steps.map((step) => ({ step, side: "post" }))];
+  const maxSteps = options.maxSteps ?? (compact ? 4 : allSteps.length);
+  const visiblePre = compact ? preSteps.slice(0, Math.max(0, maxSteps - Math.min(steps.length, maxSteps))) : preSteps;
+  const remainingSlots = compact ? Math.max(0, maxSteps - visiblePre.length) : steps.length;
+  const visiblePost = compact ? steps.slice(0, remainingSlots) : steps;
+  const hiddenCount = compact ? Math.max(0, allSteps.length - visiblePre.length - visiblePost.length) : 0;
 
-  const stepHtml = visibleSteps
-    .map((step) => {
-      const offset = showOffsets ? formatWorkflowStepOffset(step) : "";
-      return `
-        <div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>
-        <div class="workflow-flow-preview__step">
-          <span class="workflow-flow-preview__name">${escapeHtml(step.taskName)}</span>
-          ${offset ? `<span class="workflow-flow-preview__meta">${escapeHtml(offset)}</span>` : ""}
-        </div>
-      `;
-    })
-    .join("");
+  const renderStep = (step, side) => {
+    const offset = showOffsets ? formatWorkflowStepOffset(step, side) : "";
+    return `
+      <div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>
+      <div class="workflow-flow-preview__step${side === "pre" ? " workflow-flow-preview__step--pre" : ""}">
+        <span class="workflow-flow-preview__name">${escapeHtml(step.taskName)}</span>
+        ${offset ? `<span class="workflow-flow-preview__meta">${escapeHtml(offset)}</span>` : ""}
+      </div>
+    `;
+  };
 
+  const preHtml = visiblePre.map((step) => renderStep(step, "pre")).join("");
+  const postHtml = visiblePost.map((step) => renderStep(step, "post")).join("");
   const moreHtml =
     hiddenCount > 0
       ? `<div class="workflow-flow-preview__more">… +${hiddenCount} more</div>`
@@ -4304,10 +4342,12 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
 
   return `
     <div class="workflow-flow-preview${compact ? " workflow-flow-preview--compact" : ""}">
+      ${preHtml}
+      ${preHtml ? `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>` : ""}
       <div class="workflow-flow-preview__step workflow-flow-preview__step--root">
         <span class="workflow-flow-preview__name">${escapeHtml(rootLabel)}</span>
       </div>
-      ${stepHtml}
+      ${postHtml}
       ${moreHtml}
     </div>
   `;
@@ -4354,6 +4394,11 @@ function workflowMatchesTaskName(workflow, taskName) {
   const nameLower = (taskName || "").trim().toLowerCase();
   if (!nameLower) return false;
 
+  const rootLabel = getWorkflowRootLabel(workflow).toLowerCase();
+  if (rootLabel && (rootLabel.includes(nameLower) || nameLower.includes(rootLabel))) {
+    return true;
+  }
+
   const workflowName = (workflow.name || "").toLowerCase();
   if (workflowName.includes(nameLower) || nameLower.includes(workflowName.replace(/ follow-up.*$/i, ""))) {
     return true;
@@ -4383,7 +4428,7 @@ function findMatchingWorkflows(taskName, studyProtocol) {
     const key = `${workflow.scope}:${workflow.id}`;
     if (seen.has(key)) return;
     if (!workflowMatchesTaskName(workflow, taskName)) return;
-    if (!(workflow.steps || []).length && workflow.source !== "legacy-taskRules") return;
+    if (!(workflow.steps || []).length && !(workflow.preSteps || []).length && workflow.source !== "legacy-taskRules") return;
     seen.add(key);
     matches.push(workflow);
   };
@@ -4494,6 +4539,7 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
     ? `<button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>`
     : `
       <button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>
+      ${!isGlobal && !isLegacy ? `<button type="button" class="btn btn--ghost btn--sm" data-edit-workflow="${refJson}">편집</button>` : ""}
       ${!isGlobal && !isLegacy ? `<button type="button" class="btn btn--ghost btn--sm" data-delete-workflow="${refJson}">삭제</button>` : ""}
       ${isGlobal ? `<button type="button" class="btn btn--ghost btn--sm" data-copy-workflow="${refJson}">Study에 복사</button>` : ""}
     `;
@@ -4558,6 +4604,17 @@ function renderStudyWorkflowLibrary(study) {
     });
   });
 
+  els.studyWorkflowLibrary.querySelectorAll("[data-edit-workflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      try {
+        const ref = JSON.parse(btn.dataset.editWorkflow);
+        openWorkflowDetailModal(ref);
+      } catch {
+        showToast("Workflow를 편집할 수 없습니다.");
+      }
+    });
+  });
+
   els.studyWorkflowLibrary.querySelectorAll("[data-delete-workflow]").forEach((btn) => {
     btn.addEventListener("click", () => {
       try {
@@ -4597,6 +4654,207 @@ function renderStudyWorkflowLibrary(study) {
       }
     });
   });
+}
+
+function canEditWorkflowRef(ref) {
+  if (!ref || ref.scope === "global") return false;
+  const workflow = resolveWorkflowRecord(ref);
+  return Boolean(workflow && workflow.source !== "legacy-taskRules");
+}
+
+function renderWorkflowDetailPriorityOptions(selected = "Medium") {
+  return PRIORITIES.map(
+    (priority) =>
+      `<option value="${priority}"${priority === selected ? " selected" : ""}>${priority}</option>`
+  ).join("");
+}
+
+function renderWorkflowDetailStepRow(step, side, index) {
+  return `
+    <div class="workflow-detail-step" data-step-side="${side}" data-step-index="${index}">
+      <input type="text" class="workflow-detail-step__name" value="${escapeAttr(step.taskName)}" placeholder="Task 이름" data-field="taskName" />
+      <div class="workflow-detail-step__offset-wrap">
+        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset}" min="0" step="1" data-field="dueOffset" />
+        <span class="workflow-detail-step__offset-label">${side === "pre" ? "일 전" : "일 후"}</span>
+      </div>
+      <select class="workflow-detail-step__priority" data-field="priority">${renderWorkflowDetailPriorityOptions(step.priority)}</select>
+      <button type="button" class="btn btn--ghost btn--sm workflow-detail-step__remove" data-remove-step aria-label="단계 삭제">삭제</button>
+    </div>
+  `;
+}
+
+function syncWorkflowDetailDraftFromDom() {
+  if (!workflowDetailDraft || !els.workflowDetailBody) return null;
+
+  const nameInput = document.getElementById("workflowDetailName");
+  const rootInput = document.getElementById("workflowDetailRootTask");
+  workflowDetailDraft.name = nameInput?.value.trim() || workflowDetailDraft.name;
+  workflowDetailDraft.rootTaskName = rootInput?.value.trim() || workflowDetailDraft.rootTaskName;
+
+  const readSteps = (side) =>
+    [...els.workflowDetailBody.querySelectorAll(`.workflow-detail-step[data-step-side="${side}"]`)].map((row) =>
+      normalizeWorkflowStep({
+        taskName: row.querySelector('[data-field="taskName"]')?.value || "",
+        dueOffset: row.querySelector('[data-field="dueOffset"]')?.value,
+        dueUnit: "calendar",
+        priority: row.querySelector('[data-field="priority"]')?.value,
+      })
+    );
+
+  workflowDetailDraft.preSteps = readSteps("pre");
+  workflowDetailDraft.steps = readSteps("post");
+  return workflowDetailDraft;
+}
+
+function bindWorkflowDetailEditorEvents() {
+  if (!els.workflowDetailBody) return;
+
+  els.workflowDetailBody.querySelector("[data-add-pre]")?.addEventListener("click", () => {
+    syncWorkflowDetailDraftFromDom();
+    workflowDetailDraft.preSteps.push(
+      normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" })
+    );
+    renderWorkflowDetailEditor();
+  });
+
+  els.workflowDetailBody.querySelector("[data-add-post]")?.addEventListener("click", () => {
+    syncWorkflowDetailDraftFromDom();
+    workflowDetailDraft.steps.push(
+      normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" })
+    );
+    renderWorkflowDetailEditor();
+  });
+
+  els.workflowDetailBody.querySelectorAll("[data-remove-step]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      syncWorkflowDetailDraftFromDom();
+      const row = btn.closest(".workflow-detail-step");
+      if (!row) return;
+      const side = row.dataset.stepSide;
+      const index = Number(row.dataset.stepIndex);
+      if (side === "pre") workflowDetailDraft.preSteps.splice(index, 1);
+      else workflowDetailDraft.steps.splice(index, 1);
+      renderWorkflowDetailEditor();
+    });
+  });
+}
+
+function renderWorkflowDetailEditor() {
+  if (!els.workflowDetailBody || !workflowDetailDraft) return;
+
+  const draft = workflowDetailDraft;
+  const preRows = draft.preSteps
+    .map((step, index) => {
+      const row = renderWorkflowDetailStepRow(step, "pre", index);
+      return index > 0 ? `<div class="workflow-detail-arrow" aria-hidden="true">↓</div>${row}` : row;
+    })
+    .join("");
+
+  const postRows = draft.steps
+    .map((step, index) => {
+      const row = renderWorkflowDetailStepRow(step, "post", index);
+      return `${index === 0 ? "" : '<div class="workflow-detail-arrow" aria-hidden="true">↓</div>'}${row}`;
+    })
+    .join("");
+
+  els.workflowDetailBody.innerHTML = `
+    <div class="form-group">
+      <label for="workflowDetailName">Workflow 이름</label>
+      <input type="text" id="workflowDetailName" class="workflow-detail-form__input" value="${escapeAttr(draft.name)}" />
+    </div>
+    <div class="workflow-detail-flow">
+      <button type="button" class="btn btn--ghost btn--sm workflow-detail-add" data-add-pre>+ 이전 단계 추가</button>
+      ${preRows ? `<div class="workflow-detail-steps">${preRows}</div>` : ""}
+      ${preRows ? '<div class="workflow-detail-arrow" aria-hidden="true">↓</div>' : ""}
+      <div class="workflow-detail-root">
+        <span class="workflow-detail-root__label">기준 Task</span>
+        <input type="text" id="workflowDetailRootTask" class="workflow-detail-form__input" value="${escapeAttr(draft.rootTaskName)}" placeholder="예: Monitoring Visit" />
+      </div>
+      <div class="workflow-detail-arrow" aria-hidden="true">↓</div>
+      <button type="button" class="btn btn--ghost btn--sm workflow-detail-add" data-add-post>+ 이후 단계 추가</button>
+      ${postRows ? `<div class="workflow-detail-steps">${postRows}</div>` : ""}
+    </div>
+    <p class="form-hint">업무 중 학습은 이후 단계(Post-task)만 추가됩니다. Workflow Library에서 전체 프로세스를 다듬을 수 있습니다.</p>
+  `;
+
+  bindWorkflowDetailEditorEvents();
+}
+
+function openWorkflowDetailModal(ref) {
+  if (!canEditWorkflowRef(ref)) {
+    showToast("이 Workflow는 편집할 수 없습니다.");
+    return;
+  }
+  const workflow = resolveWorkflowRecord(ref);
+  if (!workflow) {
+    showToast("Workflow를 찾을 수 없습니다.");
+    return;
+  }
+
+  workflowDetailEditRef = ref;
+  workflowDetailDraft = {
+    name: workflow.name,
+    rootTaskName: workflow.rootTaskName || getWorkflowRootLabel(workflow),
+    preSteps: (workflow.preSteps || []).map(normalizeWorkflowStep),
+    steps: (workflow.steps || []).map(normalizeWorkflowStep),
+  };
+  renderWorkflowDetailEditor();
+  if (els.workflowDetailModal) {
+    els.workflowDetailModal.hidden = false;
+    els.workflowDetailModal.removeAttribute("hidden");
+  }
+}
+
+function closeWorkflowDetailModal() {
+  if (els.workflowDetailModal) els.workflowDetailModal.hidden = true;
+  workflowDetailEditRef = null;
+  workflowDetailDraft = null;
+}
+
+function handleWorkflowDetailSave() {
+  if (!workflowDetailEditRef || !workflowDetailDraft) return;
+  const draft = syncWorkflowDetailDraftFromDom();
+  if (!draft) return;
+
+  if (!draft.name.trim()) {
+    showToast("Workflow 이름을 입력해 주세요.");
+    return;
+  }
+  if (!draft.rootTaskName.trim()) {
+    showToast("기준 Task 이름을 입력해 주세요.");
+    return;
+  }
+
+  const payload = {
+    name: draft.name.trim(),
+    rootTaskName: draft.rootTaskName.trim(),
+    preSteps: draft.preSteps.filter((step) => step.taskName),
+    steps: draft.steps.filter((step) => step.taskName),
+    source: "manual",
+  };
+
+  const ref = workflowDetailEditRef;
+  let saved = null;
+  if (ref.scope === "study" && ref.studyId) {
+    saved = StudyMasterStore.updateWorkflow(ref.studyId, ref.id, payload);
+    if (saved && selectedStudyMasterId === ref.studyId) {
+      renderStudyWorkflowLibrary(StudyMasterStore.getById(ref.studyId));
+    }
+  } else if (ref.scope === "workspace") {
+    saved = WorkspaceWorkflowStore.update(ref.id, payload);
+    const study = selectedStudyMasterId && selectedStudyMasterId !== "new"
+      ? StudyMasterStore.getById(selectedStudyMasterId)
+      : null;
+    if (study) renderStudyWorkflowLibrary(study);
+  }
+
+  if (!saved) {
+    showToast("Workflow를 저장할 수 없습니다.");
+    return;
+  }
+
+  showToast("Workflow가 저장되었습니다.");
+  closeWorkflowDetailModal();
 }
 
 function handleApplyWorkflowFromLibrary(ref, study) {
@@ -4727,12 +4985,23 @@ function updateAddTaskFollowUpContextPanel() {
 
 function openAddTaskModalForFollowUp(completedTask) {
   if (!completedTask) return;
-  pendingFollowUpParentTask = completedTask;
-  openAddTaskModal({
+  pendingFollowUpParentTask = {
+    id: completedTask.id,
     study: completedTask.study || "",
     site: completedTask.site || "",
+    task: completedTask.task || "",
+    dueDate: completedTask.dueDate || "",
     priority: completedTask.priority || "Medium",
-    followUp: true,
+    workflowId: completedTask.workflowId || null,
+    parentTaskId: completedTask.parentTaskId || null,
+  };
+  requestAnimationFrame(() => {
+    openAddTaskModal({
+      study: pendingFollowUpParentTask.study,
+      site: pendingFollowUpParentTask.site,
+      priority: pendingFollowUpParentTask.priority,
+      followUp: true,
+    });
   });
 }
 
@@ -4763,17 +5032,21 @@ function handleFollowUpPromptYes(event) {
   event?.preventDefault();
   event?.stopPropagation();
   const completedTask = resolveFollowUpCompletedTask();
-  closeFollowUpPromptModal();
   if (!completedTask) {
     showToast("완료된 Task 정보를 찾을 수 없습니다.");
+    closeFollowUpPromptModal();
     return;
   }
+  closeFollowUpPromptModal();
+  closeStatusPickerPortal();
   openAddTaskModalForFollowUp(completedTask);
 }
 
 function finalizeTaskCompletion(completedTask, workflowCount = 0) {
   if (!completedTask) return;
 
+  closeStatusPickerPortal();
+  closeAllStatusDropdowns();
   lastCompletedTaskContext = {
     id: completedTask.id,
     study: completedTask.study,
@@ -4899,7 +5172,8 @@ function getWorkflowStepPosition(task) {
   if (currentIndex < 0) return null;
   if (!workflowInfo && !root.workflowId && children.length === 0) return null;
 
-  const definedSteps = workflowInfo?.workflow?.steps?.length || 0;
+  const definedSteps =
+    (workflowInfo?.workflow?.preSteps?.length || 0) + (workflowInfo?.workflow?.steps?.length || 0);
   const total = Math.max(steps.length, definedSteps > 0 ? definedSteps + 1 : steps.length);
 
   return {
@@ -5126,6 +5400,7 @@ function openWorkflowLearnModal(context) {
 
   const previewWorkflow = normalizeWorkflowRecord({
     name: `${root.task} Follow-up`,
+    rootTaskName: root.task,
     steps: [
       {
         taskName: followUp.task,
@@ -5232,6 +5507,7 @@ function handleWorkflowLearnSave() {
   const name = nameInput?.value.trim() || `${root.task} Follow-up`;
   const payload = {
     name,
+    rootTaskName: root.task,
     steps: [step],
     source: "learned",
     trigger: "TASK_COMPLETED",
@@ -7114,7 +7390,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "39";
+const APP_BUILD = "40";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

@@ -1240,6 +1240,24 @@
     </div>
   </div>
 
+  <!-- Workflow Detail Editor Modal -->
+  <div class="modal-overlay" id="workflowDetailModal" hidden>
+    <div class="modal modal--wide workflow-modal">
+      <div class="modal-header">
+        <h3>Workflow 편집</h3>
+        <button type="button" class="modal-close" id="closeWorkflowDetailBtn" aria-label="닫기">&times;</button>
+      </div>
+      <div class="modal-body workflow-modal__body">
+        <p class="form-hint">기준 Task를 중심으로 이전·이후 단계를 자유롭게 편집할 수 있습니다.</p>
+        <div id="workflowDetailBody"></div>
+      </div>
+      <div class="form-actions workflow-modal__actions">
+        <button type="button" class="btn btn--primary" id="workflowDetailSaveBtn">저장</button>
+        <button type="button" class="btn btn--ghost" id="cancelWorkflowDetailBtn">취소</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Routine Modal -->
   <div class="modal-overlay" id="routineModal" hidden>
     <div class="modal modal--wide">

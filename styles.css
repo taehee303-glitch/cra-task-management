@@ -2821,8 +2821,13 @@ body.body--settings-open {
 #followUpPromptModal,
 #addTaskModal,
 #workflowLearnModal,
-#workflowSuggestModal {
+#workflowSuggestModal,
+#workflowDetailModal {
   z-index: 1100;
+}
+
+#addTaskModal.modal-overlay--stack {
+  z-index: 1150;
 }
 
 .status-picker-portal {
@@ -5872,6 +5877,108 @@ body.body--settings-open {
 @media (max-width: 768px) {
   .workflow-library-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.workflow-flow-preview__step--pre .workflow-flow-preview__meta {
+  color: #6366f1;
+}
+
+.workflow-detail-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.workflow-detail-add {
+  align-self: flex-start;
+}
+
+.workflow-detail-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  border: 2px solid #6366f1;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.workflow-detail-root__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6366f1;
+}
+
+.workflow-detail-form__input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.workflow-detail-arrow {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.workflow-detail-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.workflow-detail-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(88px, 0.7fr) minmax(96px, 0.6fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.workflow-detail-step__name,
+.workflow-detail-step__offset,
+.workflow-detail-step__priority {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.workflow-detail-step__offset-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.workflow-detail-step__offset-label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .workflow-detail-step {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-detail-step__remove {
+    justify-self: start;
   }
 }
 
