@@ -17,6 +17,15 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 54 — 2026-07-14 — Follow-up Site prefill
+
+### Fixed
+
+- Task 완료 후 Follow-up Prompt **예** 선택 시 Add Task 모달에 **이전 Task와 동일 Site** 자동 설정
+- Task Site(표준명) ↔ Site 드롭다운(site id) 값 매핑 보정
+
+---
+
 ## [1.1.0] — build 53 — 2026-07-13 — Dashboard compact row + inline expand
 
 ### Changed

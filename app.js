@@ -1645,6 +1645,40 @@ function getSiteOptionValue(site) {
   return site.id;
 }
 
+function resolveSiteSelectValue(siteValue, protocolNumber = "") {
+  if (!siteValue) return "";
+  const entry = resolveSiteMasterEntry(siteValue);
+  if (entry) return getSiteOptionValue(entry);
+
+  if (protocolNumber) {
+    const sites = getLinkedSitesForProtocol(protocolNumber, siteValue);
+    const match = sites.find(
+      (site) =>
+        site.id === siteValue ||
+        site.standardName === siteValue ||
+        site.siteNumber === siteValue ||
+        SiteMasterStore.resolve(siteValue) === site.standardName
+    );
+    if (match) return getSiteOptionValue(match);
+  }
+
+  return siteValue;
+}
+
+function resolveFollowUpTaskSite(task) {
+  if (!task) return "";
+  if (task.site?.trim()) return task.site.trim();
+
+  const parent =
+    task.parentTaskId && tasks.find((item) => item.id === task.parentTaskId);
+  if (parent?.site?.trim()) return parent.site.trim();
+
+  const root = getWorkflowRootTask(task);
+  if (root?.site?.trim() && root.id !== task.id) return root.site.trim();
+
+  return "";
+}
+
 function formatSiteOptionLabel(site) {
   return site.standardName || site.siteNumber || "Site";
 }
@@ -3732,12 +3766,16 @@ function openAddTaskModal(presetOrOptions = null) {
     els.dueDate.value = options.dueDate || toDateString(getToday());
   }
   refreshTaskStudySiteSelects();
+  const resolvedSite =
+    options.site && options.study
+      ? resolveSiteSelectValue(options.site, options.study)
+      : options.site || "";
   if (options.study) {
     els.study.value = options.study;
-    populateSiteSelect(els.site, options.study, options.site || "");
+    populateSiteSelect(els.site, options.study, resolvedSite || options.site || "");
   }
-  if (options.site) {
-    els.site.value = options.site;
+  if (resolvedSite) {
+    els.site.value = resolvedSite;
   }
   updateSiteInfoDisplays();
   updateSiteSelectHint(els.study.value, els.siteMasterHint);
@@ -5345,10 +5383,11 @@ function updateAddTaskFollowUpContextPanel() {
 
 function openAddTaskModalForFollowUp(completedTask) {
   if (!completedTask) return;
+  const followUpSite = resolveFollowUpTaskSite(completedTask);
   pendingFollowUpParentTask = {
     id: completedTask.id,
     study: completedTask.study || "",
-    site: completedTask.site || "",
+    site: followUpSite,
     task: completedTask.task || "",
     dueDate: completedTask.dueDate || "",
     priority: completedTask.priority || "Medium",
@@ -8113,7 +8152,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "53";
+const APP_BUILD = "54";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
