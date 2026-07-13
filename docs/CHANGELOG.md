@@ -17,6 +17,19 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 42 — 2026-07-13 — Dashboard Daily Control Center UX
+
+### Changed
+
+- **Dashboard 철학** — Workflow/Routine 별도 Section 없음, Task 하단 Context Chip(🟣 Workflow 2/4 · 🔁 Routine)만 표시
+- **카드 순서** — Today's Progress → 이번 주 마감 → 오늘 마감 → D-1 → 최근 완료 → 지연 → 통계
+- **KPI Quick Filter** — 전체 → 이번 주 → 오늘 → D-1 → 지연 → 완료 (6개)
+- **Compact Empty Card** — 업무 없을 때 한 줄 높이로 축소, 카드 간 여백 축소
+- **지연 업무** — 빈 상태·하단 배치로 React보다 Prevent(예방) 우선 UX
+- Dashboard tagline: CRA Daily Control Center
+
+---
+
 ## [1.1.0] — build 41 — 2026-07-13 — Follow-up Add Task modal fix
 
 ### Fixed

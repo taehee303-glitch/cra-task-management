@@ -367,7 +367,7 @@
           <header class="dashboard__header">
             <div class="dashboard__header-main">
               <h2 class="section-title">Dashboard</h2>
-              <p class="dashboard__tagline">오늘 업무를 확인하고 바로 처리하세요.</p>
+              <p class="dashboard__tagline">CRA Daily Control Center — 오늘 해야 할 업무를 바로 처리하세요.</p>
             </div>
             <span class="attention-panel__reminder-badge" id="reminderStatusBadge">Reminder ON</span>
           </header>
@@ -386,31 +386,31 @@
           </button>
 
           <div class="dashboard-stack">
-            <section class="dash-card dash-card--execute dash-card--attention-today" aria-labelledby="attentionTodayHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">📅</span>
-                <div class="dash-card-header__text">
-                  <h3 id="attentionTodayHeading">오늘 마감</h3>
-                  <p class="dash-card-header__sub">카드 탭 → 상세 · Status · ✓ 완료</p>
-                </div>
-                <span class="badge badge--primary" id="attentionTodayCount">0</span>
-              </div>
-              <div class="dash-list dash-list--execute" id="attentionTodayList">
-                <p class="empty-msg">오늘 마감 업무가 없습니다.</p>
-              </div>
-            </section>
-
             <section class="dash-card dash-card--week-list dash-card--priority" aria-labelledby="dashboardWeekDueHeading">
               <div class="dash-card-header">
                 <span class="dash-icon">📆</span>
                 <div class="dash-card-header__text">
                   <h3 id="dashboardWeekDueHeading">이번 주 마감</h3>
-                  <p class="dash-card-header__sub">오늘·내일(D-1) 제외 · 미리 준비</p>
+                  <p class="dash-card-header__sub">오늘·D-1 제외 · 이번 주 준비</p>
                 </div>
                 <span class="badge badge--primary" id="dashboardWeekDueCount">0</span>
               </div>
               <div class="dash-list" id="dashboardWeekDueList">
-                <p class="empty-msg">이번 주 마감 업무가 없습니다.</p>
+                <p class="empty-msg empty-msg--compact">✓ 이번 주에 미리 준비할 업무가 없습니다.</p>
+              </div>
+            </section>
+
+            <section class="dash-card dash-card--execute dash-card--attention-today" aria-labelledby="attentionTodayHeading">
+              <div class="dash-card-header">
+                <span class="dash-icon">📅</span>
+                <div class="dash-card-header__text">
+                  <h3 id="attentionTodayHeading">오늘 마감</h3>
+                  <p class="dash-card-header__sub">탭 → 상세 · Status · ✓ 완료</p>
+                </div>
+                <span class="badge badge--primary" id="attentionTodayCount">0</span>
+              </div>
+              <div class="dash-list dash-list--execute" id="attentionTodayList">
+                <p class="empty-msg empty-msg--compact">✓ 오늘 마감 업무가 없습니다.</p>
               </div>
             </section>
 
@@ -424,21 +424,7 @@
                 <span class="badge badge--warning" id="attentionD1Count">0</span>
               </div>
               <div class="dash-list" id="attentionD1List">
-                <p class="empty-msg">D-1 업무가 없습니다.</p>
-              </div>
-            </section>
-
-            <section class="dash-card dash-card--attention-overdue dash-card--followup" aria-labelledby="attentionOverdueHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">⚠️</span>
-                <div class="dash-card-header__text">
-                  <h3 id="attentionOverdueHeading">지연 업무</h3>
-                  <p class="dash-card-header__sub">마감 지남 · 가능한 빨리 처리</p>
-                </div>
-                <span class="badge badge--danger" id="attentionOverdueCount">0</span>
-              </div>
-              <div class="dash-list dash-list--compact" id="attentionOverdueList">
-                <p class="empty-msg">지연된 업무가 없습니다.</p>
+                <p class="empty-msg empty-msg--compact">✓ D-1 업무가 없습니다.</p>
               </div>
             </section>
 
@@ -452,7 +438,21 @@
                 <span class="badge badge--muted" id="dashboardRecentCompletedCount">0</span>
               </div>
               <div class="dash-list dash-list--compact" id="dashboardRecentCompletedList">
-                <p class="empty-msg">최근 완료 업무가 없습니다.</p>
+                <p class="empty-msg empty-msg--compact">✓ 최근 완료 업무가 없습니다.</p>
+              </div>
+            </section>
+
+            <section class="dash-card dash-card--attention-overdue dash-card--followup" aria-labelledby="attentionOverdueHeading">
+              <div class="dash-card-header">
+                <span class="dash-icon">⚠️</span>
+                <div class="dash-card-header__text">
+                  <h3 id="attentionOverdueHeading">지연 업무</h3>
+                  <p class="dash-card-header__sub">마감 지남</p>
+                </div>
+                <span class="badge badge--danger" id="attentionOverdueCount">0</span>
+              </div>
+              <div class="dash-list dash-list--compact" id="attentionOverdueList">
+                <p class="empty-msg empty-msg--compact">✓ 지연된 업무가 없습니다.</p>
               </div>
             </section>
           </div>
@@ -469,13 +469,6 @@
           </section>
 
           <div class="stats-grid stats-grid--dashboard-footer">
-            <button type="button" class="stat-card stat-card--week stat-card--filter" data-dashboard-filter="week" aria-pressed="false">
-              <div class="stat-card__icon">📆</div>
-              <div class="stat-card__body">
-                <p class="stat-card__label">이번 주 마감</p>
-                <p class="stat-card__value" id="statWeekDue">0</p>
-              </div>
-            </button>
             <button type="button" class="stat-card stat-card--total stat-card--filter" data-dashboard-filter="all" aria-pressed="false">
               <div class="stat-card__icon">📊</div>
               <div class="stat-card__body">
@@ -483,11 +476,25 @@
                 <p class="stat-card__value" id="statTotal">0</p>
               </div>
             </button>
-            <button type="button" class="stat-card stat-card--completed stat-card--filter" data-dashboard-filter="completed" aria-pressed="false">
-              <div class="stat-card__icon">✅</div>
+            <button type="button" class="stat-card stat-card--week stat-card--filter" data-dashboard-filter="week" aria-pressed="false">
+              <div class="stat-card__icon">📆</div>
               <div class="stat-card__body">
-                <p class="stat-card__label">완료된 업무</p>
-                <p class="stat-card__value" id="statCompleted">0</p>
+                <p class="stat-card__label">이번 주 마감</p>
+                <p class="stat-card__value" id="statWeekDue">0</p>
+              </div>
+            </button>
+            <button type="button" class="stat-card stat-card--today stat-card--filter" data-dashboard-filter="today" aria-pressed="false">
+              <div class="stat-card__icon">📅</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">오늘 마감</p>
+                <p class="stat-card__value" id="statTodayDue">0</p>
+              </div>
+            </button>
+            <button type="button" class="stat-card stat-card--d1 stat-card--filter" data-dashboard-filter="d1" aria-pressed="false">
+              <div class="stat-card__icon">🔔</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">D-1</p>
+                <p class="stat-card__value" id="statD1Due">0</p>
               </div>
             </button>
             <button type="button" class="stat-card stat-card--overdue stat-card--filter" data-dashboard-filter="overdue" aria-pressed="false">
@@ -495,6 +502,13 @@
               <div class="stat-card__body">
                 <p class="stat-card__label">지연 업무</p>
                 <p class="stat-card__value" id="statOverdue">0</p>
+              </div>
+            </button>
+            <button type="button" class="stat-card stat-card--completed stat-card--filter" data-dashboard-filter="completed" aria-pressed="false">
+              <div class="stat-card__icon">✅</div>
+              <div class="stat-card__body">
+                <p class="stat-card__label">완료</p>
+                <p class="stat-card__value" id="statCompleted">0</p>
               </div>
             </button>
           </div>
