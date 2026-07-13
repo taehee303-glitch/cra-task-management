@@ -203,7 +203,8 @@ const VIEW_TITLES = {
   "system-master": "System",
 };
 
-const DAILY_PRIMARY_VIEWS = ["tasks", "inbox", "calendar", "reference"];
+const DAILY_PRIMARY_VIEWS = ["dashboard", "tasks", "inbox", "calendar", "reference"];
+const FAB_VIEWS = ["dashboard", "tasks", "inbox", "calendar"];
 const MASTER_VIEWS = ["study-master", "site-master", "system-master"];
 const MOBILE_BREAKPOINT = window.matchMedia("(max-width: 768px)");
 
@@ -217,7 +218,8 @@ const MOBILE_FILTER_LABELS = {
 
 const PRIORITY_SORT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
-let currentViewName = "tasks";
+let currentViewName = "dashboard";
+let followUpPromptContext = null;
 let mobileDailyFilter = null;
 
 let addTaskPresetPriority = "Medium";
@@ -276,7 +278,6 @@ const els = {
   calendarNextMonthBtn: document.getElementById("calendarNextMonthBtn"),
   calendarTodayBtn: document.getElementById("calendarTodayBtn"),
   fabToggleBtn: document.getElementById("fabToggleBtn"),
-  fabMenu: document.getElementById("fabMenu"),
   fabRoot: document.getElementById("fabRoot"),
   studyMasterList: document.getElementById("studyMasterList"),
   studyMasterEmpty: document.getElementById("studyMasterEmpty"),
@@ -299,6 +300,8 @@ const els = {
   studyWorkflowLibrary: document.getElementById("studyWorkflowLibrary"),
   workflowSuggestModal: document.getElementById("workflowSuggestModal"),
   workflowSuggestBody: document.getElementById("workflowSuggestBody"),
+  followUpPromptModal: document.getElementById("followUpPromptModal"),
+  followUpPromptSummary: document.getElementById("followUpPromptSummary"),
   workflowLearnModal: document.getElementById("workflowLearnModal"),
   workflowLearnBody: document.getElementById("workflowLearnBody"),
   studyRoutinesList: document.getElementById("studyRoutinesList"),
@@ -812,20 +815,7 @@ async function bootstrapApp() {
   });
   els.fabToggleBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (isDailyMode()) {
-      openAddTaskModal();
-      return;
-    }
-    toggleFabMenu();
-  });
-  document.querySelectorAll("[data-fab-action]").forEach((btn) => {
-    btn.addEventListener("click", () => handleFabAction(btn.dataset.fabAction));
-  });
-  els.fabMenu?.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-  document.addEventListener("click", () => {
-    closeFabMenu();
+    openAddTaskModal();
   });
   els.taskQuickFilterBtns.forEach((btn) => {
     btn.addEventListener("click", () => handleQuickFilterClick(btn.dataset.quickFilter));
@@ -871,6 +861,26 @@ async function bootstrapApp() {
     const draft = pendingTaskDraft;
     closeWorkflowSuggestModal();
     persistPendingTaskDraft(draft);
+  });
+  bindEvent(document.getElementById("workflowSuggestApplyBtn"), "click", () => {
+    if (!pendingTaskDraft || !pendingWorkflowMatches.length) return;
+    const index = pendingWorkflowApplyIndex || 0;
+    const entry = pendingWorkflowMatches[index];
+    if (!entry) return;
+    const workflow = entry.workflow || entry;
+    const ref = entry.ref || getWorkflowRef(workflow);
+    closeWorkflowSuggestModal();
+    persistPendingTaskDraft(pendingTaskDraft, {
+      applyWorkflow: true,
+      workflow,
+      workflowRef: ref,
+    });
+  });
+  bindEvent(document.getElementById("followUpPromptYesBtn"), "click", handleFollowUpPromptYes);
+  bindEvent(document.getElementById("followUpPromptNoBtn"), "click", closeFollowUpPromptModal);
+  bindEvent(document.getElementById("closeFollowUpPromptBtn"), "click", closeFollowUpPromptModal);
+  bindEvent(els.followUpPromptModal, "click", (e) => {
+    if (e.target === els.followUpPromptModal) closeFollowUpPromptModal();
   });
   bindEvent(document.getElementById("closeWorkflowSuggestBtn"), "click", closeWorkflowSuggestModal);
   bindEvent(els.workflowSuggestModal, "click", (e) => {
@@ -981,6 +991,7 @@ async function bootstrapApp() {
   window.addEventListener("storage", handleStorageSync);
 
   initAppMode();
+  switchView("dashboard");
   MOBILE_BREAKPOINT.addEventListener("change", () => {
     applyAppMode();
     switchView(currentViewName);
@@ -2943,6 +2954,7 @@ function isDailyMode() {
 }
 
 function getViewTitle(viewName) {
+  if (isDailyMode() && viewName === "dashboard") return "Home";
   if (isDailyMode() && viewName === "tasks") return "Today";
   return VIEW_TITLES[viewName] || "CRA Workspace";
 }
@@ -2959,11 +2971,8 @@ function applyAppMode() {
   if (els.sidebarToggleBtn) {
     els.sidebarToggleBtn.hidden = daily;
   }
-  if (daily && currentViewName === "dashboard") {
-    switchView("tasks");
-  }
   if (!daily && currentViewName === "reference") {
-    switchView("tasks");
+    switchView("dashboard");
   }
   if (selectedTaskId) {
     closeTaskDetail();
@@ -3451,11 +3460,8 @@ function renderMobileRoutinePreview() {
 }
 
 function switchView(viewName) {
-  if (isDailyMode() && viewName === "dashboard") {
-    viewName = "tasks";
-  }
   if (!isDailyMode() && viewName === "reference") {
-    viewName = "tasks";
+    viewName = "dashboard";
   }
 
   currentViewName = viewName;
@@ -3468,7 +3474,6 @@ function switchView(viewName) {
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
 
-  closeFabMenu();
   closeSidebar();
   closeMasterSheet();
   if (selectedTaskId) closeTaskDetail();
@@ -3504,7 +3509,7 @@ function switchView(viewName) {
       renderTaskList();
     }
   }
-  const showFab = isDailyMode() ? DAILY_PRIMARY_VIEWS.includes(viewName) : viewName === "tasks";
+  const showFab = FAB_VIEWS.includes(viewName);
   if (els.fabRoot) els.fabRoot.hidden = !showFab;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -3548,38 +3553,40 @@ function closeSidebar() {
 
 function closeMasterMenuDropdown() {}
 
-function toggleFabMenu() {
-  if (!els.fabMenu || !els.fabToggleBtn) return;
-  const willOpen = els.fabMenu.hidden;
-  els.fabMenu.hidden = !willOpen;
-  els.fabToggleBtn.setAttribute("aria-expanded", String(willOpen));
-  els.fabToggleBtn.classList.toggle("fab--open", willOpen);
-}
+function openAddTaskModal(presetOrOptions = null) {
+  let preset = null;
+  let options = {};
 
-function closeFabMenu() {
-  if (!els.fabMenu || !els.fabToggleBtn) return;
-  els.fabMenu.hidden = true;
-  els.fabToggleBtn.setAttribute("aria-expanded", "false");
-  els.fabToggleBtn.classList.remove("fab--open");
-}
+  if (typeof presetOrOptions === "string" && VISIT_TASK_PRESETS[presetOrOptions]) {
+    preset = VISIT_TASK_PRESETS[presetOrOptions];
+  } else if (presetOrOptions && typeof presetOrOptions === "object") {
+    options = presetOrOptions;
+  }
 
-function openAddTaskModal(presetKey = null) {
-  closeFabMenu();
-  const preset = presetKey ? VISIT_TASK_PRESETS[presetKey] : null;
   const defaultTitle = isDailyMode() && !preset ? "새 업무 등록" : preset?.title || "새 업무";
   if (els.addTaskModalTitle) {
     els.addTaskModalTitle.textContent = defaultTitle;
   }
   els.taskForm.reset();
-  const priority = preset?.priority || "Medium";
+  const priority = preset?.priority || options.priority || "Medium";
   addTaskPresetPriority = priority;
   if (els.addTaskPriority) els.addTaskPriority.value = priority;
-  if (preset) {
+  if (preset?.task) {
     els.task.value = preset.task;
+  } else if (options.task) {
+    els.task.value = options.task;
   }
-  els.dueDate.value = toDateString(getToday());
+  els.dueDate.value = options.dueDate || toDateString(getToday());
   refreshTaskStudySiteSelects();
+  if (options.study) {
+    els.study.value = options.study;
+    populateSiteSelect(els.site, options.study, options.site || "");
+  }
+  if (options.site) {
+    els.site.value = options.site;
+  }
   updateSiteInfoDisplays();
+  updateSiteSelectHint(els.study.value, els.siteMasterHint);
   if (els.addTaskModal) els.addTaskModal.hidden = false;
   updateAddTaskWorkflowHint();
 }
@@ -3588,7 +3595,6 @@ function closeAddTaskModal() {
   if (!els.addTaskModal) return;
   els.addTaskModal.hidden = true;
   if (els.taskWorkflowMatchHint) els.taskWorkflowMatchHint.hidden = true;
-  closeFabMenu();
 }
 
 function handleNavAction(action) {
@@ -3600,16 +3606,6 @@ function handleNavAction(action) {
   }
   if (action === "close-master") {
     closeMasterSheet();
-  }
-}
-
-function handleFabAction(action) {
-  if (action === "task") {
-    openAddTaskModal();
-    return;
-  }
-  if (VISIT_TASK_PRESETS[action]) {
-    openAddTaskModal(action);
   }
 }
 
@@ -4634,7 +4630,7 @@ function openWorkflowSuggestModal(matches, draft) {
           <h4 class="workflow-suggest-card__title">${escapeHtml(workflow.name)}</h4>
           ${renderWorkflowFlowPreview(workflow, { rootLabel: draft.task, compact: matches.length > 1 })}
           <p class="workflow-suggest-card__meta">${meta.taskCount}개 Task · ${escapeHtml(meta.scopeLabel)} · ${meta.usageCount}회 적용 · ${escapeHtml(meta.lastUsedLabel)}</p>
-          <button type="button" class="btn btn--primary btn--sm workflow-suggest-card__apply" data-suggest-apply="${index}">이 Workflow 적용</button>
+          <button type="button" class="btn btn--primary btn--sm workflow-suggest-card__apply" data-suggest-apply="${index}">Workflow 적용</button>
         </div>
       `;
     })
@@ -4642,6 +4638,16 @@ function openWorkflowSuggestModal(matches, draft) {
 
   els.workflowSuggestBody.innerHTML = cards;
   els.workflowSuggestModal.hidden = false;
+
+  els.workflowSuggestBody.querySelectorAll(".workflow-suggest-card").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("[data-suggest-apply]")) return;
+      pendingWorkflowApplyIndex = Number(card.dataset.suggestIndex) || 0;
+      els.workflowSuggestBody.querySelectorAll(".workflow-suggest-card").forEach((item) => {
+        item.classList.toggle("workflow-suggest-card--active", item === card);
+      });
+    });
+  });
 
   els.workflowSuggestBody.querySelectorAll("[data-suggest-apply]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -4671,6 +4677,51 @@ function shouldOfferWorkflowLearn(draft) {
   const completedAt = new Date(lastCompletedTaskContext.completedAt).getTime();
   if (Number.isNaN(completedAt)) return false;
   return Date.now() - completedAt <= 7 * 24 * 60 * 60 * 1000;
+}
+
+function openFollowUpPromptModal(completedTask, workflowCount = 0) {
+  if (!els.followUpPromptModal || !completedTask) return;
+
+  followUpPromptContext = completedTask;
+  if (els.followUpPromptSummary) {
+    const autoNote =
+      workflowCount > 0 ? ` ${workflowCount}개의 후속 Task가 자동 생성되었습니다.` : "";
+    els.followUpPromptSummary.textContent = `「${completedTask.task}」 완료.${autoNote} 연결된 후속 업무가 있으면 등록해 주세요.`;
+  }
+  els.followUpPromptModal.hidden = false;
+}
+
+function closeFollowUpPromptModal() {
+  followUpPromptContext = null;
+  if (els.followUpPromptModal) els.followUpPromptModal.hidden = true;
+}
+
+function handleFollowUpPromptYes() {
+  const completedTask = followUpPromptContext;
+  closeFollowUpPromptModal();
+  if (!completedTask) return;
+
+  openAddTaskModal({
+    study: completedTask.study || "",
+    site: completedTask.site || "",
+    priority: completedTask.priority || "Medium",
+  });
+}
+
+function finalizeTaskCompletion(completedTask, workflowCount = 0) {
+  if (!completedTask) return;
+
+  lastCompletedTaskContext = {
+    id: completedTask.id,
+    study: completedTask.study,
+    site: completedTask.site,
+    task: completedTask.task,
+    dueDate: completedTask.dueDate,
+    priority: completedTask.priority,
+    completedAt: completedTask.completedAt || new Date().toISOString(),
+  };
+
+  openFollowUpPromptModal(completedTask, workflowCount);
 }
 
 function findWorkflowByIdAnywhere(workflowId, studyProtocol) {
@@ -7092,7 +7143,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "33";
+const APP_BUILD = "34";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -8349,15 +8400,7 @@ function handleEditTask(e) {
   if (!wasCompleted && newStatus === "Completed") {
     const completedTask = tasks.find((t) => t.id === id);
     workflowCount = runWorkflowAutomation(completedTask).length;
-    lastCompletedTaskContext = {
-      id: completedTask.id,
-      study: completedTask.study,
-      site: completedTask.site,
-      task: completedTask.task,
-      dueDate: completedTask.dueDate,
-      priority: completedTask.priority,
-      completedAt: completedTask.completedAt || new Date().toISOString(),
-    };
+    finalizeTaskCompletion(completedTask, workflowCount);
   }
 
   const updatedTask = tasks.find((t) => t.id === id);
@@ -8374,10 +8417,6 @@ function handleEditTask(e) {
     if (workflowCount > 0) {
       getSubtasks(id).forEach((subtask) => CalendarSyncManager.onTaskCreated(subtask.id));
     }
-  }
-
-  if (workflowCount > 0) {
-    alert(`${workflowCount}개의 후속 업무가 자동 생성되었습니다.`);
   }
 }
 
@@ -8732,7 +8771,9 @@ function applyTaskStatusChange(taskId, newStatus) {
 
   let workflowCount = 0;
   if (!wasCompleted && newStatus === "Completed") {
-    workflowCount = runWorkflowAutomation(tasks.find((task) => task.id === taskId)).length;
+    const completedTask = tasks.find((task) => task.id === taskId);
+    workflowCount = runWorkflowAutomation(completedTask).length;
+    finalizeTaskCompletion(completedTask, workflowCount);
   }
 
   renderAll();
@@ -8742,10 +8783,6 @@ function applyTaskStatusChange(taskId, newStatus) {
     if (workflowCount > 0) {
       getSubtasks(taskId).forEach((subtask) => CalendarSyncManager.onTaskCreated(subtask.id));
     }
-  }
-
-  if (workflowCount > 0) {
-    showToast(`${workflowCount}개의 후속 업무가 자동 생성되었습니다.`);
   }
 }
 

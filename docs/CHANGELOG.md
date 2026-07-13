@@ -13,7 +13,21 @@
 
 ## [Unreleased]
 
-_(none — v1.1 RC 배포 후 실사용 단계)_
+_(none)_
+
+---
+
+## [1.1.0] — build 34 — 2026-07-13 — Task-first UX
+
+### Changed
+
+- **기본 Landing:** Dashboard (PC·Mobile Home)
+- **FAB:** 클릭 시 바로 새 업무 생성 (MV/SIV/COV 메뉴 제거)
+- **Task 완료 후:** 「추가로 진행할 업무가 있나요?」→ 후속 Task → Learning Modal
+- Suggestion Modal: 「Workflow 적용」/「이번만 Task」
+- Learning Modal: 「이 Workflow를 저장하거나 업데이트하시겠습니까?」
+- Mobile bottom nav: Home(Dashboard) · Tasks · Inbox · Calendar · Reference
+- Sidebar: Dashboard 최상단
 
 ---
 

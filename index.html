@@ -59,7 +59,11 @@
         </div>
       </div>
       <nav class="sidebar__nav" aria-label="메인 메뉴">
-        <button type="button" class="sidebar__item sidebar__item--active sidebar__item--primary" data-view="tasks" aria-current="page">
+        <button type="button" class="sidebar__item sidebar__item--active sidebar__item--primary" data-view="dashboard" aria-current="page">
+          <span class="sidebar__icon" aria-hidden="true">📊</span>
+          <span class="sidebar__label">Dashboard</span>
+        </button>
+        <button type="button" class="sidebar__item sidebar__item--primary" data-view="tasks">
           <span class="sidebar__icon" aria-hidden="true">📋</span>
           <span class="sidebar__label">My Tasks</span>
         </button>
@@ -71,10 +75,6 @@
         <button type="button" class="sidebar__item sidebar__item--primary" data-view="calendar">
           <span class="sidebar__icon" aria-hidden="true">📅</span>
           <span class="sidebar__label">Calendar</span>
-        </button>
-        <button type="button" class="sidebar__item sidebar__item--primary" data-view="dashboard">
-          <span class="sidebar__icon" aria-hidden="true">📊</span>
-          <span class="sidebar__label">Dashboard</span>
         </button>
         <div class="sidebar__divider sidebar__divider--secondary" role="separator"></div>
         <p class="sidebar__section-label">Master Data</p>
@@ -116,7 +116,7 @@
 
     <main class="main">
       <!-- Tasks View (Home / My Tasks) -->
-      <div id="viewTasks" class="view-panel">
+      <div id="viewTasks" class="view-panel" hidden>
         <!-- Mobile Daily Workspace (Today home) -->
         <section class="mobile-daily" id="mobileDailyHome" aria-label="Today">
           <div class="mobile-daily__summary">
@@ -271,14 +271,8 @@
           </div>
         </section>
 
-        <div class="fab-root" id="fabRoot">
-          <div class="fab-menu" id="fabMenu" hidden>
-            <button type="button" class="fab-menu__item" data-fab-action="task"><span>📝</span> 새 업무</button>
-            <button type="button" class="fab-menu__item" data-fab-action="mv"><span>🏥</span> MV Workflow</button>
-            <button type="button" class="fab-menu__item" data-fab-action="siv"><span>🚀</span> SIV Workflow</button>
-            <button type="button" class="fab-menu__item" data-fab-action="cov"><span>✅</span> COV Workflow</button>
-          </div>
-          <button type="button" class="fab" id="fabToggleBtn" aria-label="업무 추가" aria-expanded="false">+</button>
+        <div class="fab-root" id="fabRoot" hidden>
+          <button type="button" class="fab" id="fabToggleBtn" aria-label="새 업무 추가">+</button>
         </div>
       </div>
 
@@ -383,7 +377,7 @@
       </div>
 
       <!-- Dashboard View -->
-      <div id="viewDashboard" class="view-panel" hidden>
+      <div id="viewDashboard" class="view-panel">
         <section class="dashboard">
           <header class="dashboard__header">
             <h2 class="section-title">Dashboard</h2>
@@ -932,9 +926,13 @@
     </main>
 
       <nav class="bottom-nav" id="bottomNav" aria-label="Daily 메뉴">
-        <button type="button" class="bottom-nav__btn bottom-nav__btn--active" data-view="tasks" aria-current="page">
+        <button type="button" class="bottom-nav__btn bottom-nav__btn--active" data-view="dashboard" aria-current="page">
           <span class="bottom-nav__icon" aria-hidden="true">🏠</span>
-          <span class="bottom-nav__label">Today</span>
+          <span class="bottom-nav__label">Home</span>
+        </button>
+        <button type="button" class="bottom-nav__btn" data-view="tasks">
+          <span class="bottom-nav__icon" aria-hidden="true">📋</span>
+          <span class="bottom-nav__label">Tasks</span>
         </button>
         <button type="button" class="bottom-nav__btn" data-view="inbox">
           <span class="bottom-nav__icon" aria-hidden="true">📥</span>
@@ -1199,6 +1197,23 @@
     </div>
   </div>
 
+  <!-- Follow-up Prompt Modal (after Task complete) -->
+  <div class="modal-overlay" id="followUpPromptModal" hidden>
+    <div class="modal modal--sheet">
+      <div class="modal-header">
+        <h3>추가로 진행할 업무가 있나요?</h3>
+        <button type="button" class="modal-close" id="closeFollowUpPromptBtn" aria-label="닫기">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="followUpPromptSummary" class="form-hint"></p>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn--primary" id="followUpPromptYesBtn">예, 추가합니다</button>
+        <button type="button" class="btn btn--ghost" id="followUpPromptNoBtn">아니오</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Workflow Suggestion Modal -->
   <div class="modal-overlay" id="workflowSuggestModal" hidden>
     <div class="modal modal--wide workflow-modal">
@@ -1207,11 +1222,12 @@
         <button type="button" class="modal-close" id="closeWorkflowSuggestBtn" aria-label="닫기">&times;</button>
       </div>
       <div class="modal-body workflow-modal__body">
-        <p class="form-hint">후속 Task Flow를 확인한 뒤 적용 여부를 선택하세요.</p>
+        <p class="form-hint">적용하시겠습니까?</p>
         <div id="workflowSuggestBody" class="workflow-suggest-list"></div>
       </div>
       <div class="form-actions workflow-modal__actions">
-        <button type="button" class="btn btn--ghost" id="workflowSuggestTaskOnlyBtn">이번만 Task 생성</button>
+        <button type="button" class="btn btn--primary" id="workflowSuggestApplyBtn">Workflow 적용</button>
+        <button type="button" class="btn btn--ghost" id="workflowSuggestTaskOnlyBtn">이번만 Task</button>
       </div>
     </div>
   </div>
@@ -1220,11 +1236,11 @@
   <div class="modal-overlay" id="workflowLearnModal" hidden>
     <div class="modal modal--wide workflow-modal">
       <div class="modal-header">
-        <h3>Workflow에 저장할까요?</h3>
+        <h3>이 Workflow를 저장하거나 업데이트하시겠습니까?</h3>
         <button type="button" class="modal-close" id="closeWorkflowLearnBtn" aria-label="닫기">&times;</button>
       </div>
       <div class="modal-body workflow-modal__body">
-        <p class="form-hint">완료한 Task와 후속 Task를 Workflow로 저장하면 다음에 빠르게 적용할 수 있습니다.</p>
+        <p class="form-hint">Study 또는 Workspace에 저장하면 다음에 빠르게 적용할 수 있습니다.</p>
         <div id="workflowLearnBody"></div>
       </div>
       <div class="form-actions workflow-modal__actions">
