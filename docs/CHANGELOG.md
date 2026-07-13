@@ -17,6 +17,14 @@ _(none)_
 
 ---
 
+## [1.2.0] — build 58 — 2026-07-14 — Hotfix: app.js syntax error
+
+### Fixed
+
+- `migrateInferredWorkflowChains()` 함수 선언 누락으로 `app.js` 파싱 실패 → 앱 전체 미실행 (Dashboard 0건 고정) 수정
+
+---
+
 ## [1.2.0] — build 57 — 2026-07-14 — Workflow Engine stabilization
 
 ### Fixed

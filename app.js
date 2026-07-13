@@ -3232,6 +3232,7 @@ function migrateMisassignedLearnedFollowUps() {
   });
 }
 
+function migrateInferredWorkflowChains() {
   const rootIds = new Set();
   tasks.forEach((task) => {
     if (task.workflowInstanceId) return;
@@ -8570,7 +8571,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "57";
+const APP_BUILD = "58";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
