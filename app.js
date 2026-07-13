@@ -229,9 +229,14 @@ const els = {
   statCompleted: document.getElementById("statCompleted"),
   statOverdue: document.getElementById("statOverdue"),
   statWeekDue: document.getElementById("statWeekDue"),
-  progressSubtitle: document.getElementById("progressSubtitle"),
-  progressPercent: document.getElementById("progressPercent"),
-  progressFill: document.getElementById("progressFill"),
+  todayProgressHero: document.getElementById("todayProgressHero"),
+  todayProgressPercent: document.getElementById("todayProgressPercent"),
+  todayProgressCount: document.getElementById("todayProgressCount"),
+  todayProgressFill: document.getElementById("todayProgressFill"),
+  todayProgressRemaining: document.getElementById("todayProgressRemaining"),
+  overallProgressPercent: document.getElementById("overallProgressPercent"),
+  overallProgressSubtitle: document.getElementById("overallProgressSubtitle"),
+  overallProgressFill: document.getElementById("overallProgressFill"),
   taskForm: document.getElementById("taskForm"),
   study: document.getElementById("study"),
   site: document.getElementById("site"),
@@ -942,6 +947,7 @@ async function bootstrapApp() {
   els.dashboardFilterCards.forEach((card) => {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
+  els.todayProgressHero?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   els.searchInput.addEventListener("input", renderTaskList);
   els.exportCsvBtn.addEventListener("click", exportTasksToCsv);
   els.importCsvBtn.addEventListener("click", () => els.importCsvInput.click());
@@ -4844,11 +4850,14 @@ function renderTaskContextMeta(task) {
 }
 
 function getDashboardWeekDueTasks() {
-  const todayStr = toDateString(getToday());
   return tasks
-    .filter((task) => isActive(task) && task.dueDate && isDueThisWeek(task.dueDate) && task.dueDate !== todayStr)
+    .filter((task) => {
+      if (!isActive(task) || !task.dueDate || !isDueThisWeek(task.dueDate)) return false;
+      const days = daysUntilDue(task.dueDate);
+      return days >= 2;
+    })
     .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate))
-    .slice(0, 8);
+    .slice(0, 12);
 }
 
 function getRecentlyCompletedTasks(limit = 6) {
@@ -7025,7 +7034,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "35";
+const APP_BUILD = "36";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -8707,6 +8716,17 @@ function isCompleted(task) {
   return task.status === "Completed";
 }
 
+function getTodayProgressStats() {
+  const todayStr = toDateString(getToday());
+  const todayDueTasks = tasks.filter((t) => !isInboxTask(t) && t.dueDate === todayStr);
+  const total = todayDueTasks.length;
+  const completed = todayDueTasks.filter(isCompleted).length;
+  const remaining = total - completed;
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return { total, completed, remaining, rate };
+}
+
 function getDashboardStats() {
   const total = tasks.length;
   const completed = tasks.filter(isCompleted).length;
@@ -8852,6 +8872,33 @@ function scrollToTaskList() {
   scrollFilteredTasksIntoView();
 }
 
+function renderTodayProgressHero() {
+  const progress = getTodayProgressStats();
+
+  if (els.todayProgressPercent) els.todayProgressPercent.textContent = `${progress.rate}%`;
+  if (els.todayProgressCount) {
+    els.todayProgressCount.textContent = `${progress.completed} / ${progress.total} Tasks Completed`;
+  }
+  if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
+  if (els.todayProgressRemaining) {
+    if (progress.total === 0) {
+      els.todayProgressRemaining.textContent = "오늘 예정된 업무가 없습니다";
+    } else if (progress.remaining === 0) {
+      els.todayProgressRemaining.textContent = "오늘 업무를 모두 완료했습니다";
+    } else {
+      els.todayProgressRemaining.textContent = `남은 업무 ${progress.remaining}건`;
+    }
+  }
+}
+
+function renderOverallProgress(stats) {
+  if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${stats.completionRate}%`;
+  if (els.overallProgressSubtitle) {
+    els.overallProgressSubtitle.textContent = `${stats.completed} / ${stats.total} 완료`;
+  }
+  if (els.overallProgressFill) els.overallProgressFill.style.width = `${stats.completionRate}%`;
+}
+
 function renderDashboard() {
   const todayStr = toDateString(getToday());
   const activeTasks = tasks.filter(isActive);
@@ -8861,9 +8908,8 @@ function renderDashboard() {
   els.statCompleted.textContent = stats.completed;
   els.statOverdue.textContent = stats.overdue;
   els.statWeekDue.textContent = stats.weekDue;
-  els.progressPercent.textContent = `${stats.completionRate}%`;
-  els.progressSubtitle.textContent = `${stats.completed} / ${stats.total} 완료`;
-  els.progressFill.style.width = `${stats.completionRate}%`;
+  renderTodayProgressHero();
+  renderOverallProgress(stats);
 
   const overdueTasks = activeTasks
     .filter((t) => daysUntilDue(t.dueDate) < 0)
@@ -8877,13 +8923,12 @@ function renderDashboard() {
     .filter((t) => daysUntilDue(t.dueDate) === 1)
     .sort((a, b) => compareAttentionTasks(a, b));
 
-  renderAttentionPanel(todayTasks, overdueTasks, d1Tasks);
-  renderDashboardTaskLists();
+  renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks);
   updateReminderStatusBadge();
   updateDashboardCardFilterUi();
 }
 
-function renderDashboardTaskLists() {
+function renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks) {
   const weekDueTasks = getDashboardWeekDueTasks();
   const recentCompleted = getRecentlyCompletedTasks();
 
@@ -8891,7 +8936,28 @@ function renderDashboardTaskLists() {
   if (els.dashboardWeekDueList) {
     els.dashboardWeekDueList.innerHTML = weekDueTasks.length
       ? weekDueTasks.map((task) => renderDashItem(task, "week")).join("")
-      : '<p class="empty-msg">이번 주 마감 업무가 없습니다.</p>';
+      : '<p class="empty-msg">이번 주에 미리 준비할 업무가 없습니다.</p>';
+  }
+
+  if (els.attentionTodayCount) els.attentionTodayCount.textContent = String(todayTasks.length);
+  if (els.attentionTodayList) {
+    els.attentionTodayList.innerHTML = todayTasks.length
+      ? todayTasks.map((t) => renderDashItem(t, "attention-today")).join("")
+      : '<p class="empty-msg">오늘 마감 업무가 없습니다.</p>';
+  }
+
+  if (els.attentionD1Count) els.attentionD1Count.textContent = String(d1Tasks.length);
+  if (els.attentionD1List) {
+    els.attentionD1List.innerHTML = d1Tasks.length
+      ? d1Tasks.map((t) => renderDashItem(t, "attention-d1")).join("")
+      : '<p class="empty-msg">D-1 업무가 없습니다.</p>';
+  }
+
+  if (els.attentionOverdueCount) els.attentionOverdueCount.textContent = String(overdueTasks.length);
+  if (els.attentionOverdueList) {
+    els.attentionOverdueList.innerHTML = overdueTasks.length
+      ? overdueTasks.map((t) => renderDashItem(t, "attention-overdue")).join("")
+      : '<p class="empty-msg">지연된 업무가 없습니다.</p>';
   }
 
   if (els.dashboardRecentCompletedCount) {
@@ -8909,24 +8975,6 @@ function compareAttentionTasks(a, b) {
   const criticalB = b.priority === "Critical" ? 0 : 1;
   if (criticalA !== criticalB) return criticalA - criticalB;
   return a.study.localeCompare(b.study, "ko");
-}
-
-function renderAttentionPanel(todayTasks, overdueTasks, d1Tasks) {
-  els.attentionTodayCount.textContent = todayTasks.length;
-  els.attentionOverdueCount.textContent = overdueTasks.length;
-  els.attentionD1Count.textContent = d1Tasks.length;
-
-  els.attentionTodayList.innerHTML = todayTasks.length
-    ? todayTasks.map((t) => renderDashItem(t, "attention-today")).join("")
-    : '<p class="empty-msg">오늘 마감 업무가 없습니다.</p>';
-
-  els.attentionOverdueList.innerHTML = overdueTasks.length
-    ? overdueTasks.map((t) => renderDashItem(t, "attention-overdue")).join("")
-    : '<p class="empty-msg">지연된 업무가 없습니다.</p>';
-
-  els.attentionD1List.innerHTML = d1Tasks.length
-    ? d1Tasks.map((t) => renderDashItem(t, "attention-d1")).join("")
-    : '<p class="empty-msg">D-1 업무가 없습니다.</p>';
 }
 
 function renderDashItem(task, type) {

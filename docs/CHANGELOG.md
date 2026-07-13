@@ -17,6 +17,24 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 36 — 2026-07-13 — Prevention-first Dashboard & Today's Progress
+
+### Changed
+
+- **Today's Progress Hero** — Dashboard 최상단, 오늘 Due Task 기준 완료율
+  - `완료 / 오늘 예정`, 남은 업무 건수, 진행 바
+  - 클릭 시 Today 필터가 적용된 Task 목록으로 이동
+- **Dashboard 카드 우선순위** — 업무 누락 방지 중심
+  1. Today's Progress
+  2. 이번 주 마감
+  3. 오늘 마감 · D-1
+  4. 지연 업무 (하단)
+  5. 최근 완료
+- **전체 완료율** — Dashboard 하단 통계 영역으로 이동
+- 이번 주 마감: 오늘·D-1 제외, 2일 이후~주말까지 미리 준비할 업무
+
+---
+
 ## [1.1.0] — build 35 — 2026-07-13 — Task-centric Dashboard & My Tasks
 
 ### Changed
