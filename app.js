@@ -7399,7 +7399,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "42";
+const APP_BUILD = "43";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9362,16 +9362,16 @@ function renderTodayProgressHero() {
 
   if (els.todayProgressPercent) els.todayProgressPercent.textContent = `${progress.rate}%`;
   if (els.todayProgressCount) {
-    els.todayProgressCount.textContent = `${progress.completed} / ${progress.total} Tasks Completed`;
+    els.todayProgressCount.textContent = `${progress.completed} / ${progress.total} 완료`;
   }
   if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
   if (els.todayProgressRemaining) {
     if (progress.total === 0) {
-      els.todayProgressRemaining.textContent = "오늘 예정된 업무가 없습니다";
+      els.todayProgressRemaining.textContent = "오늘 Due 없음";
     } else if (progress.remaining === 0) {
-      els.todayProgressRemaining.textContent = "오늘 업무를 모두 완료했습니다 🎉";
+      els.todayProgressRemaining.textContent = "완료 🎉";
     } else {
-      els.todayProgressRemaining.textContent = `남은 업무 ${progress.remaining}건`;
+      els.todayProgressRemaining.textContent = `남은 ${progress.remaining}건`;
     }
   }
   if (els.todayProgressHero) {

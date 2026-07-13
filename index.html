@@ -364,25 +364,26 @@
       <!-- Dashboard View -->
       <div id="viewDashboard" class="view-panel">
         <section class="dashboard">
-          <header class="dashboard__header">
+          <header class="dashboard__header dashboard__header--compact">
             <div class="dashboard__header-main">
               <h2 class="section-title">Dashboard</h2>
-              <p class="dashboard__tagline">CRA Daily Control Center — 오늘 해야 할 업무를 바로 처리하세요.</p>
             </div>
             <span class="attention-panel__reminder-badge" id="reminderStatusBadge">Reminder ON</span>
           </header>
 
-          <button type="button" class="today-progress-hero" id="todayProgressHero" aria-label="오늘 업무 목록 보기">
-            <div class="today-progress-hero__head">
+          <button type="button" class="today-progress-hero today-progress-hero--compact" id="todayProgressHero" aria-label="오늘 업무 목록 보기">
+            <div class="today-progress-hero__row">
               <h3 class="today-progress-hero__title">Today's Progress</h3>
               <span class="today-progress-hero__percent" id="todayProgressPercent">0%</span>
             </div>
-            <p class="today-progress-hero__count" id="todayProgressCount">0 / 0 Tasks Completed</p>
-            <div class="progress-bar today-progress-hero__bar">
+            <div class="today-progress-hero__meta">
+              <span id="todayProgressCount">0 / 0 완료</span>
+              <span class="today-progress-hero__sep" aria-hidden="true">·</span>
+              <span id="todayProgressRemaining">남은 0건</span>
+            </div>
+            <div class="progress-bar progress-bar--compact today-progress-hero__bar">
               <div class="progress-bar__fill" id="todayProgressFill" style="width: 0%"></div>
             </div>
-            <p class="today-progress-hero__remaining" id="todayProgressRemaining">남은 업무 0건</p>
-            <span class="today-progress-hero__cta">오늘 업무 목록 보기 →</span>
           </button>
 
           <div class="dashboard-stack">
@@ -391,7 +392,6 @@
                 <span class="dash-icon">📆</span>
                 <div class="dash-card-header__text">
                   <h3 id="dashboardWeekDueHeading">이번 주 마감</h3>
-                  <p class="dash-card-header__sub">오늘·D-1 제외 · 이번 주 준비</p>
                 </div>
                 <span class="badge badge--primary" id="dashboardWeekDueCount">0</span>
               </div>
@@ -405,7 +405,6 @@
                 <span class="dash-icon">📅</span>
                 <div class="dash-card-header__text">
                   <h3 id="attentionTodayHeading">오늘 마감</h3>
-                  <p class="dash-card-header__sub">탭 → 상세 · Status · ✓ 완료</p>
                 </div>
                 <span class="badge badge--primary" id="attentionTodayCount">0</span>
               </div>
@@ -419,7 +418,6 @@
                 <span class="dash-icon">🔔</span>
                 <div class="dash-card-header__text">
                   <h3 id="attentionD1Heading">D-1 업무</h3>
-                  <p class="dash-card-header__sub">내일 마감 · 오늘 준비</p>
                 </div>
                 <span class="badge badge--warning" id="attentionD1Count">0</span>
               </div>
@@ -433,7 +431,6 @@
                 <span class="dash-icon">✅</span>
                 <div class="dash-card-header__text">
                   <h3 id="dashboardRecentCompletedHeading">최근 완료</h3>
-                  <p class="dash-card-header__sub">최근 처리한 업무</p>
                 </div>
                 <span class="badge badge--muted" id="dashboardRecentCompletedCount">0</span>
               </div>
@@ -447,7 +444,6 @@
                 <span class="dash-icon">⚠️</span>
                 <div class="dash-card-header__text">
                   <h3 id="attentionOverdueHeading">지연 업무</h3>
-                  <p class="dash-card-header__sub">마감 지남</p>
                 </div>
                 <span class="badge badge--danger" id="attentionOverdueCount">0</span>
               </div>
@@ -457,7 +453,7 @@
             </section>
           </div>
 
-          <section class="dashboard-overall-progress" aria-label="전체 업무 완료율">
+          <section class="dashboard-overall-progress dashboard-overall-progress--compact" aria-label="전체 업무 완료율">
             <div class="dashboard-overall-progress__header">
               <h3 class="dashboard-overall-progress__title">전체 완료율</h3>
               <span class="dashboard-overall-progress__percent" id="overallProgressPercent">0%</span>

@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 43 — 2026-07-13 — Dashboard density polish
+
+### Changed
+
+- **Section 부가 설명 제거** — 각 카드 하단 subtitle(「오늘·D-1 제외」 등) 삭제
+- **Today's Progress 컴팩트화** — 패딩·폰트 축소, 메타 한 줄(4/5 완료 · 남은 1건), CTA 제거
+- Dashboard 헤더 tagline 제거, 카드 헤더·빈 상태·통계 영역 여백 추가 축소
+
+---
+
 ## [1.1.0] — build 42 — 2026-07-13 — Dashboard Daily Control Center UX
 
 ### Changed
