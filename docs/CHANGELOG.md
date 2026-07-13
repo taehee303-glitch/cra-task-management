@@ -17,6 +17,15 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 53 — 2026-07-13 — Dashboard compact row + inline expand
+
+### Changed
+
+- **Dashboard 카드** — Task · Study/Site · Due · Status · 완료를 **가로 한 줄**로 표시 (행 높이 축소)
+- **더 보기** — My Tasks 이동 대신 Dashboard 섹션 내에서 접힌 Task **바로 펼치기/접기**
+
+---
+
 ## [1.1.0] — build 52 — 2026-07-13 — Dashboard Execute on cards only
 
 ### Changed

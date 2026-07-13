@@ -227,6 +227,7 @@ let pendingFollowUpParentTask = null;
 let workflowDetailEditRef = null;
 let workflowDetailDraft = null;
 let dashboardWorkflowTaskId = null;
+let dashboardExpandedSections = new Set();
 let selectedWorkflowMasterTab = "global";
 let activeStatusPicker = null;
 let mobileDailyFilter = null;
@@ -5901,16 +5902,30 @@ function updateDashboardWorkflowSelection() {
 
 const DASHBOARD_TODAY_PREVIEW_LIMIT = DASHBOARD_SECTION_PREVIEW_LIMIT;
 
-function renderDashboardMoreButton(filter, remaining) {
-  if (!remaining || remaining <= 0 || !filter) return "";
-  return `<button type="button" class="dash-more-btn" data-dashboard-filter="${escapeAttr(filter)}">+ ${remaining}개 더 보기</button>`;
+function renderDashboardMoreButton(filter, taskList, limit) {
+  if (!filter || taskList.length <= limit) return "";
+  const isExpanded = dashboardExpandedSections.has(filter);
+  const remaining = taskList.length - limit;
+  const label = isExpanded ? "접기" : `+ ${remaining}개 더 보기`;
+  return `<button type="button" class="dash-more-btn${isExpanded ? " dash-more-btn--collapse" : ""}" data-dashboard-expand="${escapeAttr(filter)}" aria-expanded="${isExpanded}">${escapeHtml(label)}</button>`;
+}
+
+function toggleDashboardSectionExpand(filter) {
+  if (!filter) return;
+  if (dashboardExpandedSections.has(filter)) {
+    dashboardExpandedSections.delete(filter);
+  } else {
+    dashboardExpandedSections.add(filter);
+  }
+  renderDashboard();
 }
 
 function renderDashboardSectionTasks(taskList, type, filter, limit, compact = true) {
-  const visible = taskList.slice(0, limit);
-  const remaining = Math.max(0, taskList.length - visible.length);
+  const isExpanded = dashboardExpandedSections.has(filter);
+  const visibleCount = isExpanded ? taskList.length : Math.min(taskList.length, limit);
+  const visible = taskList.slice(0, visibleCount);
   const itemsHtml = visible.map((task) => renderDashItem(task, type, { compact })).join("");
-  return `${itemsHtml}${renderDashboardMoreButton(filter, remaining)}`;
+  return `${itemsHtml}${renderDashboardMoreButton(filter, taskList, limit)}`;
 }
 
 function setDashCardEmptyState(listEl, isEmpty) {
@@ -8098,7 +8113,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "52";
+const APP_BUILD = "53";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10225,10 +10240,10 @@ function bindDashboardTaskActions() {
     });
   });
   bindStatusDropdowns(els.viewDashboard);
-  els.viewDashboard.querySelectorAll(".dash-more-btn[data-dashboard-filter]").forEach((btn) => {
+  els.viewDashboard.querySelectorAll("[data-dashboard-expand]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
-      handleDashboardCardFilterClick(btn.dataset.dashboardFilter);
+      toggleDashboardSectionExpand(btn.dataset.dashboardExpand);
     });
   });
 }
@@ -10255,26 +10270,23 @@ function renderDashItem(task, type, options = {}) {
 
   if (compact) {
     return `
-    <article class="dash-item dash-item--interactive dash-item--compact dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+    <article class="dash-item dash-item--interactive dash-item--compact dash-item--horz dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
       <button type="button" class="dash-item__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
-        <div class="dash-item__head">
+        <div class="dash-item__row">
           <div class="dash-item__title-wrap">
             ${criticalBadge}
             <span class="dash-item-title">${escapeHtml(task.task)}</span>
           </div>
-          <span class="dash-item__due-chip ${dueClass}">${escapeHtml(dueLabel)}</span>
-        </div>
-        <div class="dash-item__sub">
           <span class="dash-item-meta"><span class="dash-item-meta__study">${escapeHtml(studyLabel)}</span><span class="dash-item-meta__sep" aria-hidden="true">·</span><span class="dash-item-meta__site">${escapeHtml(siteLabel)}</span></span>
           ${contextMeta}
+          <span class="dash-item__due-chip ${dueClass}">${escapeHtml(dueLabel)}</span>
         </div>
         <span class="dash-item__chevron" aria-hidden="true">›</span>
       </button>
-      <div class="dash-item__actions">
+      <div class="dash-item__actions dash-item__actions--compact">
         ${renderInlineStatusDropdown(task, { compact: true })}
-        <button type="button" class="dash-item__complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <button type="button" class="dash-item__complete dash-item__complete--icon" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
           <span class="dash-item__complete-icon" aria-hidden="true">✓</span>
-          <span class="dash-item__complete-label">완료</span>
         </button>
       </div>
     </article>
