@@ -4485,6 +4485,11 @@ function applyWorkflowToRootTask(rootTask, workflow, ref) {
   }
 
   TaskStore.update(rootTask.id, { workflowId: workflow.id });
+  getSubtasks(rootTask.id).forEach((child) => {
+    if (child.workflowId !== workflow.id) {
+      TaskStore.update(child.id, { workflowId: workflow.id });
+    }
+  });
   return followUps;
 }
 
@@ -4858,6 +4863,7 @@ function handleWorkflowDetailSave() {
 
   showToast("Workflow가 저장되었습니다.");
   closeWorkflowDetailModal();
+  renderAll();
 }
 
 function handleApplyWorkflowFromLibrary(ref, study) {
@@ -5073,8 +5079,8 @@ function findWorkflowByIdAnywhere(workflowId, studyProtocol) {
   }
 
   for (const study of StudyMasterStore.getAll()) {
-    const match = (study.workflows || []).find((w) => w.id === workflowId);
-    if (match) return normalizeWorkflowRecord({ ...match, scope: "study", studyId: study.id });
+    const match = StudyMasterStore.getWorkflow(study.id, workflowId);
+    if (match) return match;
   }
 
   const workspaceMatch = WorkspaceWorkflowStore.getById(workflowId);
@@ -5083,38 +5089,89 @@ function findWorkflowByIdAnywhere(workflowId, studyProtocol) {
   return getGlobalWorkflowPresets().find((w) => w.id === workflowId) || null;
 }
 
-function findRoutineByIdAnywhere(routineId, studyProtocol) {
-  if (!routineId) return null;
-  if (studyProtocol) {
-    const study = StudyMasterStore.getByProtocol(studyProtocol);
-    if (study) return StudyMasterStore.getRoutine(study.id, routineId);
+function getWorkflowRootTask(task) {
+  if (!task) return null;
+
+  let current = task;
+  const visited = new Set();
+  while (current.parentTaskId && !visited.has(current.parentTaskId)) {
+    visited.add(current.id);
+    const parent = tasks.find((t) => t.id === current.parentTaskId);
+    if (!parent) break;
+    current = parent;
   }
-  for (const study of StudyMasterStore.getAll()) {
-    const match = (study.routines || []).find((r) => r.id === routineId);
-    if (match) return normalizeRoutineRecord({ ...match, studyId: study.id });
+  return current;
+}
+
+function resolveTaskWorkflowId(task) {
+  if (!task) return null;
+  if (task.workflowId) return task.workflowId;
+
+  const root = getWorkflowRootTask(task);
+  if (root?.workflowId) return root.workflowId;
+
+  let current = task;
+  const visited = new Set();
+  while (current) {
+    if (current.workflowId) return current.workflowId;
+    if (!current.parentTaskId || visited.has(current.parentTaskId)) break;
+    visited.add(current.id);
+    current = tasks.find((t) => t.id === current.parentTaskId);
   }
+
   return null;
+}
+
+function inferWorkflowRecordForTaskChain(task) {
+  const root = getWorkflowRootTask(task);
+  if (!root?.task) return null;
+
+  const matches = findMatchingWorkflows(root.task, root.study);
+  if (!matches.length) return null;
+
+  const children = getSubtasks(root.id);
+  if (!children.length && !resolveTaskWorkflowId(task)) return null;
+
+  const ranked = sortWorkflowsForDisplay(matches);
+  const studyScoped = ranked.filter((workflow) => workflow.scope === "study");
+  if (studyScoped.length === 1) return studyScoped[0];
+  if (ranked.length === 1) return ranked[0];
+
+  const childNames = new Set(children.map((child) => (child.task || "").trim().toLowerCase()).filter(Boolean));
+  const stepMatches = ranked.filter((workflow) => {
+    const stepNames = (workflow.steps || []).map((step) => (step.taskName || "").trim().toLowerCase()).filter(Boolean);
+    if (!stepNames.length) return false;
+    const overlap = stepNames.filter((name) => childNames.has(name)).length;
+    return overlap > 0 && overlap >= Math.min(childNames.size, stepNames.length);
+  });
+
+  if (stepMatches.length === 1) return stepMatches[0];
+  return null;
+}
+
+function resolveTaskWorkflowRecord(task) {
+  if (!task) return null;
+
+  const workflowId = resolveTaskWorkflowId(task);
+  if (workflowId) {
+    const workflow = findWorkflowByIdAnywhere(workflowId, task.study);
+    if (workflow) return workflow;
+  }
+
+  return inferWorkflowRecordForTaskChain(task);
 }
 
 function resolveTaskWorkflowDisplay(task) {
   if (!task) return null;
 
-  let workflowId = task.workflowId;
-  if (!workflowId && task.parentTaskId) {
-    const parent = tasks.find((t) => t.id === task.parentTaskId);
-    workflowId = parent?.workflowId;
-  }
-
-  if (workflowId) {
-    const workflow = findWorkflowByIdAnywhere(workflowId, task.study);
-    if (workflow) {
-      return {
-        name: workflow.name,
-        scopeLabel: WORKFLOW_SCOPE_LABELS[workflow.scope] || workflow.scope,
-        workflow,
-        viaParent: Boolean(!task.workflowId && task.parentTaskId),
-      };
-    }
+  const workflow = resolveTaskWorkflowRecord(task);
+  if (workflow) {
+    return {
+      name: workflow.name,
+      scopeLabel: WORKFLOW_SCOPE_LABELS[workflow.scope] || workflow.scope,
+      workflow,
+      viaParent: Boolean(!task.workflowId && task.parentTaskId),
+    };
   }
 
   if (!task.parentTaskId && task.status === "Completed" && detectVisitWorkflowRule(task.task)) {
@@ -5127,6 +5184,19 @@ function resolveTaskWorkflowDisplay(task) {
     };
   }
 
+  return null;
+}
+
+function findRoutineByIdAnywhere(routineId, studyProtocol) {
+  if (!routineId) return null;
+  if (studyProtocol) {
+    const study = StudyMasterStore.getByProtocol(studyProtocol);
+    if (study) return StudyMasterStore.getRoutine(study.id, routineId);
+  }
+  for (const study of StudyMasterStore.getAll()) {
+    const match = (study.routines || []).find((r) => r.id === routineId);
+    if (match) return normalizeRoutineRecord({ ...match, studyId: study.id });
+  }
   return null;
 }
 
@@ -5147,10 +5217,22 @@ function sortWorkflowsForDisplay(items) {
   });
 }
 
-function getWorkflowRootTask(task) {
-  if (!task) return null;
-  if (!task.parentTaskId) return task;
-  return tasks.find((t) => t.id === task.parentTaskId) || task;
+function getWorkflowStepIndexForTask(task, root, workflow) {
+  const preCount = workflow?.preSteps?.length || 0;
+  if (task.id === root.id) return preCount + 1;
+
+  const taskName = (task.task || "").trim().toLowerCase();
+  const steps = workflow?.steps || [];
+  for (let i = 0; i < steps.length; i++) {
+    if ((steps[i].taskName || "").trim().toLowerCase() === taskName) {
+      return preCount + 2 + i;
+    }
+  }
+
+  const children = getSubtasks(root.id).sort(compareTasks);
+  const childIndex = children.findIndex((child) => child.id === task.id);
+  if (childIndex < 0) return null;
+  return preCount + 2 + childIndex;
 }
 
 function getWorkflowStepProgress(task) {
@@ -5166,33 +5248,20 @@ function getWorkflowStepPosition(task) {
   const root = getWorkflowRootTask(task);
   if (!root) return null;
 
-  const workflowInfo = resolveTaskWorkflowDisplay(task) || resolveTaskWorkflowDisplay(root);
-  const workflow = workflowInfo?.workflow || null;
-  const children = getSubtasks(root.id).sort(compareTasks);
+  const workflow = resolveTaskWorkflowRecord(task);
+  if (!workflow) return null;
 
-  if (!workflow && !workflowInfo && !root.workflowId && children.length === 0) return null;
+  const workflowName = workflow.name?.trim() || getWorkflowRootLabel(workflow);
+  if (!workflowName) return null;
 
-  const displayName = workflow
-    ? workflow.name || getWorkflowRootLabel(workflow)
-    : workflowInfo?.name;
-  if (!displayName || displayName === "Workflow") return null;
+  const current = getWorkflowStepIndexForTask(task, root, workflow);
+  if (!current) return null;
 
-  const preCount = workflow?.preSteps?.length || 0;
-  let current;
-  if (task.id === root.id) {
-    current = preCount + 1;
-  } else {
-    const childIndex = children.findIndex((child) => child.id === task.id);
-    if (childIndex < 0) return null;
-    current = preCount + 1 + childIndex + 1;
-  }
-
-  const total = workflow
-    ? computeWorkflowStepCount(workflow)
-    : Math.max(children.length + 1, current);
+  const total = computeWorkflowStepCount(workflow);
 
   return {
-    name: displayName,
+    workflowName,
+    name: workflowName,
     current,
     total,
     workflow,
@@ -5206,9 +5275,10 @@ function renderTaskContextMeta(task, options = {}) {
   const inline = Boolean(options.inline);
 
   if (step) {
+    const label = step.workflowName || step.name;
     const progress = step.total > 1 ? ` (${step.current}/${step.total})` : "";
     chips.push(
-      `<span class="task-context-chip task-context-chip--workflow" title="Workflow">🟣 ${escapeHtml(step.name)}${progress}</span>`
+      `<span class="task-context-chip task-context-chip--workflow" title="${escapeAttr(label)}">🟣 ${escapeHtml(label)}${progress}</span>`
     );
   }
   if (routineInfo) {
@@ -7440,7 +7510,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "46";
+const APP_BUILD = "47";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

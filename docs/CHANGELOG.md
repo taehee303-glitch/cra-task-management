@@ -17,6 +17,21 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 47 — 2026-07-13 — Dashboard WorkflowRecord sync
+
+### Fixed
+
+- Dashboard Task Card Workflow 표시가 Legacy `Workflow 2/2`로 남던 문제 — `workflowId` 기반 **WorkflowRecord** 조회로 통일 (Workflow Library와 동일 소스)
+- Root Task까지 parent chain을 따라 `workflowId` 해석
+- Workflow 이름 수정 시 Dashboard에 즉시 반영 (`renderAll` after save)
+
+### Changed
+
+- Workflow Chip 형식: `🟣 CTMS Update Follow-up (2/2)` — `workflowName` + `currentStep/totalSteps`
+- Workflow 적용 시 기존 follow-up Task에도 `workflowId` backfill
+
+---
+
 ## [1.1.0] — build 46 — 2026-07-13 — Dashboard Control Center UX
 
 ### Changed
