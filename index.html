@@ -485,6 +485,8 @@
                   <button type="button" class="site-master-tabs__btn site-master-tabs__btn--active" data-study-tab="basic" role="tab">기본정보</button>
                   <button type="button" class="site-master-tabs__btn" data-study-tab="sites" role="tab">Site</button>
                   <button type="button" class="site-master-tabs__btn" data-study-tab="systems" role="tab">System</button>
+                  <button type="button" class="site-master-tabs__btn" data-study-tab="workflow-library" role="tab">Workflow Library</button>
+                  <button type="button" class="site-master-tabs__btn" data-study-tab="routines" role="tab">Routine</button>
                   <button type="button" class="site-master-tabs__btn" data-study-tab="task-rules" role="tab">Workflow Rule</button>
                 </div>
 
@@ -581,6 +583,35 @@
                     </tbody>
                   </table>
                 </div>
+              </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-study-tab-panel="workflow-library" hidden>
+              <div id="studyWorkflowLibraryPanel" class="sites-panel sites-panel--embedded">
+                <div class="sites-panel__header">
+                  <h3 class="section-title">Workflow Library</h3>
+                </div>
+                <p id="studyWorkflowLibraryNewStudyHint" class="form-hint" hidden>Study 저장 후 Workflow Library를 확인할 수 있습니다.</p>
+                <p class="form-hint">Workflow Flow와 적용 횟수를 확인한 뒤 Task 생성 시 빠르게 적용할 수 있습니다.</p>
+                <div id="studyWorkflowLibrary" class="workflow-library"></div>
+              </div>
+                </div>
+
+                <div class="site-master-tab-panel" data-study-tab-panel="routines" hidden>
+              <div id="studyRoutinesPanel" class="sites-panel sites-panel--embedded">
+                <div class="sites-panel__header">
+                  <h3 class="section-title">Routine</h3>
+                  <button type="button" class="btn btn--primary btn--sm" id="newStudyRoutineBtn">+ Routine</button>
+                </div>
+                <p id="studyRoutinesNewStudyHint" class="form-hint" hidden>Study 저장 후 Routine을 등록할 수 있습니다.</p>
+                <p class="form-hint">Training뿐 아니라 자유롭게 반복 업무를 등록할 수 있습니다. 앱 실행 시 Task가 자동 생성됩니다.</p>
+                <div class="routine-presets">
+                  <span class="routine-presets__label">프리셋:</span>
+                  <button type="button" class="btn btn--ghost btn--sm" data-routine-preset="training">Training</button>
+                  <button type="button" class="btn btn--ghost btn--sm" data-routine-preset="queryCheck">Query Check</button>
+                  <button type="button" class="btn btn--ghost btn--sm" data-routine-preset="tmfCheck">TMF Check</button>
+                </div>
+                <div id="studyRoutinesList" class="routine-list"></div>
               </div>
                 </div>
 
@@ -921,6 +952,12 @@
               </div>
             </div>
 
+            <div class="task-detail-section" id="taskDetailLinksSection">
+              <h4 class="task-detail-section__title">연결</h4>
+              <div id="taskDetailWorkflowLink" class="task-detail-link" hidden></div>
+              <div id="taskDetailRoutineLink" class="task-detail-link" hidden></div>
+            </div>
+
             <div class="task-detail-section">
               <label class="task-detail-section__title" for="editMemo">Memo</label>
               <textarea id="editMemo" class="task-detail-memo" rows="4" placeholder="메모를 입력하세요"></textarea>
@@ -1085,6 +1122,115 @@
         <div class="form-actions">
           <button type="submit" class="btn btn--primary">저장</button>
           <button type="button" class="btn btn--ghost" id="cancelStudyTaskRuleBtn">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Workflow Suggestion Modal -->
+  <div class="modal-overlay" id="workflowSuggestModal" hidden>
+    <div class="modal modal--wide workflow-modal">
+      <div class="modal-header">
+        <h3>비슷한 Workflow가 있습니다</h3>
+        <button type="button" class="modal-close" id="closeWorkflowSuggestBtn" aria-label="닫기">&times;</button>
+      </div>
+      <div class="modal-body workflow-modal__body">
+        <p class="form-hint">후속 Task Flow를 확인한 뒤 적용 여부를 선택하세요.</p>
+        <div id="workflowSuggestBody" class="workflow-suggest-list"></div>
+      </div>
+      <div class="form-actions workflow-modal__actions">
+        <button type="button" class="btn btn--ghost" id="workflowSuggestTaskOnlyBtn">이번만 Task 생성</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workflow Learning Modal -->
+  <div class="modal-overlay" id="workflowLearnModal" hidden>
+    <div class="modal modal--wide workflow-modal">
+      <div class="modal-header">
+        <h3>Workflow에 저장할까요?</h3>
+        <button type="button" class="modal-close" id="closeWorkflowLearnBtn" aria-label="닫기">&times;</button>
+      </div>
+      <div class="modal-body workflow-modal__body">
+        <p class="form-hint">완료한 Task와 후속 Task를 Workflow로 저장하면 다음에 빠르게 적용할 수 있습니다.</p>
+        <div id="workflowLearnBody"></div>
+      </div>
+      <div class="form-actions workflow-modal__actions">
+        <button type="button" class="btn btn--primary" id="workflowLearnSaveBtn">저장</button>
+        <button type="button" class="btn btn--ghost" id="workflowLearnLaterBtn">나중에</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Routine Modal -->
+  <div class="modal-overlay" id="routineModal" hidden>
+    <div class="modal modal--wide">
+      <div class="modal-header">
+        <h3 id="routineModalTitle">Routine 등록</h3>
+        <button type="button" class="modal-close" id="closeRoutineModalBtn" aria-label="닫기">&times;</button>
+      </div>
+      <form id="routineForm" class="task-form">
+        <input type="hidden" id="routineId" />
+        <input type="hidden" id="routineStudyId" />
+        <div class="form-grid">
+          <div class="form-group form-group--wide">
+            <label for="routineName">Routine 이름</label>
+            <input type="text" id="routineName" required placeholder="예: GCP Training" />
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="routineTaskName">Task 이름</label>
+            <input type="text" id="routineTaskName" required placeholder="생성될 Task 이름" />
+          </div>
+          <div class="form-group">
+            <label for="routinePriority">Priority</label>
+            <select id="routinePriority">
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="routineEnabled">상태</label>
+            <select id="routineEnabled">
+              <option value="true">ON</option>
+              <option value="false">OFF</option>
+            </select>
+          </div>
+          <div class="form-group form-group--wide">
+            <label for="routineScheduleType">반복 방식</label>
+            <select id="routineScheduleType">
+              <option value="anchor">마감일 기준 (D-14/D-7/D-3/Due)</option>
+              <option value="weekly">매주</option>
+              <option value="monthly">매월</option>
+            </select>
+          </div>
+          <div id="routineAnchorFields" class="form-group form-group--wide">
+            <label for="routineAnchorDate">기준일 (Anchor Date)</label>
+            <input type="date" id="routineAnchorDate" />
+            <label for="routineOffsets" class="routine-offsets-label">Offset (일, 쉼표 구분)</label>
+            <input type="text" id="routineOffsets" placeholder="14, 7, 3, 0" value="14, 7, 3, 0" />
+          </div>
+          <div id="routineWeeklyFields" class="form-group" hidden>
+            <label for="routineWeekday">요일</label>
+            <select id="routineWeekday">
+              <option value="0">일요일</option>
+              <option value="1">월요일</option>
+              <option value="2">화요일</option>
+              <option value="3">수요일</option>
+              <option value="4">목요일</option>
+              <option value="5">금요일</option>
+              <option value="6">토요일</option>
+            </select>
+          </div>
+          <div id="routineMonthlyFields" class="form-group" hidden>
+            <label for="routineDayOfMonth">매월 날짜</label>
+            <input type="number" id="routineDayOfMonth" min="1" max="31" value="1" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">저장</button>
+          <button type="button" class="btn btn--ghost" id="cancelRoutineBtn">취소</button>
         </div>
       </form>
     </div>

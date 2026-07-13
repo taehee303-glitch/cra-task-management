@@ -1,4 +1,5 @@
 const STORAGE_KEY = "cra-tasks";
+const WORKSPACE_WORKFLOWS_KEY = "cra-workspace-workflows";
 const STUDY_MASTER_KEY = "cra-study-master";
 const SITE_MASTER_KEY = "cra-site-master";
 const SYSTEM_MASTER_KEY = "cra-system-master";
@@ -116,6 +117,54 @@ const WORKFLOW_VISIT_RULES = [
     ],
   },
 ];
+
+const WORKFLOW_CATEGORIES = ["Visit", "Training", "IRB", "Admin", "General"];
+const WORKFLOW_TRIGGERS = ["TASK_CREATED", "TASK_COMPLETED", "STUDY_CREATED", "ROUTINE"];
+const WORKFLOW_SCOPES = ["study", "workspace", "global"];
+const WORKFLOW_SCOPE_LABELS = {
+  study: "Study",
+  workspace: "Workspace",
+  global: "Global",
+};
+
+let pendingTaskDraft = null;
+let pendingWorkflowMatches = [];
+let pendingWorkflowApplyIndex = 0;
+let workflowLearnContext = null;
+let lastCompletedTaskContext = null;
+
+const ROUTINE_SCHEDULE_TYPES = [
+  { key: "anchor", label: "마감일 기준 (D-14/D-7/D-3/Due)" },
+  { key: "weekly", label: "매주" },
+  { key: "monthly", label: "매월" },
+];
+
+const ROUTINE_WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+const ROUTINE_PRESETS = {
+  training: {
+    name: "GCP Training",
+    taskName: "GCP Training",
+    priority: "Medium",
+    schedule: { type: "anchor", offsets: [14, 7, 3, 0] },
+    category: "Training",
+  },
+  queryCheck: {
+    name: "Weekly Query Check",
+    taskName: "Query Check",
+    priority: "High",
+    schedule: { type: "weekly", weekday: 5 },
+    category: "General",
+  },
+  tmfCheck: {
+    name: "Weekly TMF Check",
+    taskName: "TMF Check",
+    priority: "Medium",
+    schedule: { type: "weekly", weekday: 1 },
+    category: "General",
+  },
+};
+
 let tasks = [];
 let taskQuickFilter = "today";
 let taskViewMode = "card";
@@ -247,6 +296,16 @@ const els = {
   newStudySystemBtn: document.getElementById("newStudySystemBtn"),
   studyTaskRulesPanel: document.getElementById("studyTaskRulesPanel"),
   studyTaskRulesTableBody: document.getElementById("studyTaskRulesTableBody"),
+  studyWorkflowLibrary: document.getElementById("studyWorkflowLibrary"),
+  workflowSuggestModal: document.getElementById("workflowSuggestModal"),
+  workflowSuggestBody: document.getElementById("workflowSuggestBody"),
+  workflowLearnModal: document.getElementById("workflowLearnModal"),
+  workflowLearnBody: document.getElementById("workflowLearnBody"),
+  studyRoutinesList: document.getElementById("studyRoutinesList"),
+  routineModal: document.getElementById("routineModal"),
+  routineForm: document.getElementById("routineForm"),
+  taskDetailWorkflowLink: document.getElementById("taskDetailWorkflowLink"),
+  taskDetailRoutineLink: document.getElementById("taskDetailRoutineLink"),
   newStudyTaskRuleBtn: document.getElementById("newStudyTaskRuleBtn"),
   studyTaskRuleModal: document.getElementById("studyTaskRuleModal"),
   studyTaskRuleForm: document.getElementById("studyTaskRuleForm"),
@@ -377,6 +436,7 @@ function loadAllFromLocalStorage() {
   StudyMasterStore.load();
   SiteMasterStore.load();
   SystemMasterStore.load();
+  WorkspaceWorkflowStore.load();
 }
 
 function refreshAfterCloudSync() {
@@ -454,6 +514,15 @@ function registerCloudSyncSources() {
               : { enabled: true, permissionRequested: false, sentNotifications: {} }
           )
         );
+      },
+    },
+    workspaceWorkflows: {
+      kind: "array",
+      localStorageKey: WORKSPACE_WORKFLOWS_KEY,
+      getPayload: () => WorkspaceWorkflowStore.workflows,
+      applyPayload: (items) => {
+        WorkspaceWorkflowStore.workflows = Array.isArray(items) ? items.map(normalizeWorkflowRecord) : [];
+        localStorage.setItem(WORKSPACE_WORKFLOWS_KEY, JSON.stringify(WorkspaceWorkflowStore.workflows));
       },
     },
   });
@@ -586,6 +655,7 @@ async function bootstrapApp() {
   migrateTaskStatuses();
   StudyMasterStore.migrateFromTasks(tasks);
   reconcileSiteNamesAfterMasterChange();
+  runRoutineScheduler();
 
   updateTodayLabel();
   showFileProtocolBannerIfNeeded();
@@ -772,6 +842,43 @@ async function bootstrapApp() {
   els.studyTaskRuleModal?.addEventListener("click", (e) => {
     if (e.target === els.studyTaskRuleModal) closeStudyTaskRuleModal();
   });
+
+  bindEvent(document.getElementById("workflowSuggestTaskOnlyBtn"), "click", () => {
+    if (!pendingTaskDraft) {
+      closeWorkflowSuggestModal();
+      return;
+    }
+    const draft = pendingTaskDraft;
+    closeWorkflowSuggestModal();
+    persistPendingTaskDraft(draft);
+  });
+  bindEvent(document.getElementById("closeWorkflowSuggestBtn"), "click", closeWorkflowSuggestModal);
+  bindEvent(els.workflowSuggestModal, "click", (e) => {
+    if (e.target === els.workflowSuggestModal) closeWorkflowSuggestModal();
+  });
+  bindEvent(document.getElementById("workflowLearnSaveBtn"), "click", handleWorkflowLearnSave);
+  bindEvent(document.getElementById("workflowLearnLaterBtn"), "click", closeWorkflowLearnModal);
+  bindEvent(document.getElementById("closeWorkflowLearnBtn"), "click", closeWorkflowLearnModal);
+  bindEvent(els.workflowLearnModal, "click", (e) => {
+    if (e.target === els.workflowLearnModal) closeWorkflowLearnModal();
+  });
+  bindEvent(document.getElementById("newStudyRoutineBtn"), "click", () => {
+    if (selectedStudyMasterId && selectedStudyMasterId !== "new") openRoutineModal(selectedStudyMasterId);
+  });
+  document.querySelectorAll("[data-routine-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (selectedStudyMasterId && selectedStudyMasterId !== "new") {
+        openRoutineModal(selectedStudyMasterId, null, btn.dataset.routinePreset);
+      }
+    });
+  });
+  bindEvent(els.routineForm, "submit", handleRoutineSubmit);
+  bindEvent(document.getElementById("closeRoutineModalBtn"), "click", closeRoutineModal);
+  bindEvent(document.getElementById("cancelRoutineBtn"), "click", closeRoutineModal);
+  bindEvent(els.routineModal, "click", (e) => {
+    if (e.target === els.routineModal) closeRoutineModal();
+  });
+  bindEvent(document.getElementById("routineScheduleType"), "change", applyRoutineScheduleFieldsVisibility);
 
   els.newSystemMasterBtn?.addEventListener("click", openNewSystemMasterForm);
   els.systemMasterForm?.addEventListener("submit", handleSystemMasterSubmit);
@@ -1816,6 +1923,129 @@ const StudyMasterStore = {
     return true;
   },
 
+  getWorkflows(studyId) {
+    const study = this.getById(studyId);
+    if (!study) return [];
+    return (study.workflows || []).map(normalizeWorkflowRecord);
+  },
+
+  getWorkflow(studyId, workflowId) {
+    return this.getWorkflows(studyId).find((workflow) => workflow.id === workflowId) || null;
+  },
+
+  addWorkflow(studyId, data) {
+    const study = this.getById(studyId);
+    if (!study) return null;
+
+    const workflow = normalizeWorkflowRecord({
+      ...data,
+      scope: "study",
+      studyId,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    });
+    if (!study.workflows) study.workflows = [];
+    study.workflows.push(workflow);
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return workflow;
+  },
+
+  updateWorkflow(studyId, workflowId, data) {
+    const study = this.getById(studyId);
+    if (!study) return null;
+
+    const idx = (study.workflows || []).findIndex((workflow) => workflow.id === workflowId);
+    if (idx === -1) return null;
+
+    study.workflows[idx] = normalizeWorkflowRecord({
+      ...study.workflows[idx],
+      ...data,
+      id: workflowId,
+      scope: "study",
+      studyId,
+      updatedAt: new Date().toISOString(),
+    });
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return study.workflows[idx];
+  },
+
+  deleteWorkflow(studyId, workflowId) {
+    const study = this.getById(studyId);
+    if (!study) return false;
+
+    study.workflows = (study.workflows || []).filter((workflow) => workflow.id !== workflowId);
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return true;
+  },
+
+  recordWorkflowUsage(studyId, workflowId) {
+    const workflow = this.getWorkflow(studyId, workflowId);
+    if (!workflow) return null;
+    return this.updateWorkflow(studyId, workflowId, {
+      usageCount: (workflow.usageCount || 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+    });
+  },
+
+  getRoutines(studyId) {
+    const study = this.getById(studyId);
+    if (!study) return [];
+    return (study.routines || []).map(normalizeRoutineRecord);
+  },
+
+  getRoutine(studyId, routineId) {
+    return this.getRoutines(studyId).find((routine) => routine.id === routineId) || null;
+  },
+
+  addRoutine(studyId, data) {
+    const study = this.getById(studyId);
+    if (!study) return null;
+
+    const routine = normalizeRoutineRecord({
+      ...data,
+      studyId,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    });
+    if (!study.routines) study.routines = [];
+    study.routines.push(routine);
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return routine;
+  },
+
+  updateRoutine(studyId, routineId, data) {
+    const study = this.getById(studyId);
+    if (!study) return null;
+
+    const idx = (study.routines || []).findIndex((routine) => routine.id === routineId);
+    if (idx === -1) return null;
+
+    study.routines[idx] = normalizeRoutineRecord({
+      ...study.routines[idx],
+      ...data,
+      id: routineId,
+      studyId,
+      updatedAt: new Date().toISOString(),
+    });
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return study.routines[idx];
+  },
+
+  deleteRoutine(studyId, routineId) {
+    const study = this.getById(studyId);
+    if (!study) return false;
+
+    study.routines = (study.routines || []).filter((routine) => routine.id !== routineId);
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return true;
+  },
+
   addCustomTaskName(studyId, taskName) {
     const trimmed = taskName?.trim();
     if (!trimmed || isPresetTaskName(trimmed)) return false;
@@ -2300,6 +2530,14 @@ function normalizeStudyRecord(study) {
     ? study.taskRules.map(normalizeStudyTaskRuleRecord)
     : [];
 
+  const workflows = Array.isArray(study.workflows)
+    ? study.workflows.map(normalizeWorkflowRecord)
+    : [];
+
+  const routines = Array.isArray(study.routines)
+    ? study.routines.map(normalizeRoutineRecord)
+    : [];
+
   const customTaskNames = Array.isArray(study.customTaskNames)
     ? [...new Set(study.customTaskNames.map((name) => name.trim()).filter(Boolean))]
     : [];
@@ -2316,12 +2554,232 @@ function normalizeStudyRecord(study) {
     siteIds,
     systems,
     taskRules,
+    workflows,
+    routines,
     customTaskNames,
     ...(study.ruleTemplateId ? { ruleTemplateId: study.ruleTemplateId } : {}),
     createdAt: study.createdAt || new Date().toISOString(),
     ...(study.updatedAt ? { updatedAt: study.updatedAt } : {}),
   };
 }
+
+function normalizeWorkflowStep(step) {
+  const dueOffset = Number.isFinite(Number(step?.dueOffset)) ? Math.max(0, Math.round(Number(step.dueOffset))) : 0;
+  return {
+    id: step?.id || generateId(),
+    taskName: step?.taskName?.trim() || "",
+    dueOffset,
+    dueUnit: step?.dueUnit === "business" ? "business" : "calendar",
+    priority: PRIORITIES.includes(step?.priority) ? step.priority : "Medium",
+    defaultStatus: TASK_RULE_DEFAULT_STATUSES.includes(step?.defaultStatus)
+      ? step.defaultStatus
+      : DEFAULT_STATUS,
+  };
+}
+
+function computeWorkflowStepCount(workflow) {
+  return 1 + (Array.isArray(workflow?.steps) ? workflow.steps.length : 0);
+}
+
+function inferWorkflowCategory(name, tags = []) {
+  const combined = `${name || ""} ${(tags || []).join(" ")}`.toLowerCase();
+  if (/visit|monitoring|\bsiv\b|\bcov\b|\bmv\b|psv|close-out/.test(combined)) return "Visit";
+  if (/training|gcp/.test(combined)) return "Training";
+  if (/\birb\b|ethics|ec submission/.test(combined)) return "IRB";
+  if (/expense|timesheet|admin/.test(combined)) return "Admin";
+  return "General";
+}
+
+function normalizeWorkflowRecord(workflow) {
+  const steps = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
+  const tags = Array.isArray(workflow?.tags)
+    ? [...new Set(workflow.tags.map((tag) => String(tag).trim()).filter(Boolean))]
+    : [];
+  const category = WORKFLOW_CATEGORIES.includes(workflow?.category)
+    ? workflow.category
+    : inferWorkflowCategory(workflow?.name, tags);
+  const trigger = WORKFLOW_TRIGGERS.includes(workflow?.trigger) ? workflow.trigger : "TASK_CREATED";
+  const scope = WORKFLOW_SCOPES.includes(workflow?.scope) ? workflow.scope : "study";
+
+  const normalized = {
+    id: workflow?.id || generateId(),
+    name: workflow?.name?.trim() || "Untitled Workflow",
+    scope,
+    steps,
+    category,
+    tags,
+    trigger,
+    stepCount: Number.isFinite(Number(workflow?.stepCount)) ? Math.max(1, Number(workflow.stepCount)) : computeWorkflowStepCount({ steps }),
+    usageCount: Number.isFinite(Number(workflow?.usageCount)) ? Math.max(0, Number(workflow.usageCount)) : 0,
+    lastUsedAt: workflow?.lastUsedAt || null,
+    source: workflow?.source || "manual",
+    createdAt: workflow?.createdAt || new Date().toISOString(),
+    ...(workflow?.updatedAt ? { updatedAt: workflow.updatedAt } : {}),
+  };
+
+  if (workflow?.studyId) normalized.studyId = workflow.studyId;
+  return normalized;
+}
+
+function getGlobalWorkflowPresets() {
+  return WORKFLOW_VISIT_RULES.map((rule) =>
+    normalizeWorkflowRecord({
+      id: `global-preset-${rule.key}`,
+      name: `${rule.label} Follow-up`,
+      scope: "global",
+      category: "Visit",
+      tags: [rule.key, "visit", "preset", ...rule.keywords.map((k) => k.toLowerCase())],
+      trigger: "TASK_COMPLETED",
+      source: "template",
+      steps: rule.templates.map((template) => ({
+        taskName: template.task,
+        dueOffset: template.daysOffset,
+        dueUnit: "calendar",
+        priority: getDefaultPriorityForTaskName(template.task),
+      })),
+    })
+  );
+}
+
+function legacyTaskRulesToWorkflows(study) {
+  const rules = study?.taskRules || [];
+  if (!rules.length) return [];
+
+  const byEvent = {};
+  rules.forEach((rule) => {
+    const key = rule.baseEvent || "mv";
+    if (!byEvent[key]) byEvent[key] = [];
+    byEvent[key].push(rule);
+  });
+
+  return Object.entries(byEvent).map(([baseEvent, eventRules]) => {
+    const label = TASK_RULE_BASE_EVENT_LABELS[baseEvent] || baseEvent;
+    const steps = eventRules
+      .filter((rule) => rule.autoGenerate && rule.taskName)
+      .map((rule) => ({
+        taskName: rule.taskName,
+        dueOffset: rule.dueOffset,
+        dueUnit: rule.dueUnit,
+        priority: rule.priority,
+        defaultStatus: rule.defaultStatus,
+      }));
+    if (!steps.length) return null;
+    return normalizeWorkflowRecord({
+      id: `legacy-rules-${study.id}-${baseEvent}`,
+      name: `${label} Workflow (Legacy Rules)`,
+      scope: "study",
+      studyId: study.id,
+      category: "Visit",
+      tags: [baseEvent, "legacy"],
+      trigger: "TASK_COMPLETED",
+      source: "legacy-taskRules",
+      steps,
+    });
+  }).filter(Boolean);
+}
+
+function normalizeRoutineRecord(routine) {
+  const scheduleIn = routine?.schedule && typeof routine.schedule === "object" ? routine.schedule : {};
+  const type = ROUTINE_SCHEDULE_TYPES.some((item) => item.key === scheduleIn.type) ? scheduleIn.type : "anchor";
+  const offsets = Array.isArray(scheduleIn.offsets)
+    ? scheduleIn.offsets.map((n) => Math.max(0, Math.round(Number(n)))).filter((n) => Number.isFinite(n))
+    : [14, 7, 3, 0];
+  const weekday = Number.isFinite(Number(scheduleIn.weekday)) ? Math.min(6, Math.max(0, Math.round(Number(scheduleIn.weekday)))) : 1;
+  const dayOfMonth = Number.isFinite(Number(scheduleIn.dayOfMonth))
+    ? Math.min(31, Math.max(1, Math.round(Number(scheduleIn.dayOfMonth))))
+    : 1;
+
+  return {
+    id: routine?.id || generateId(),
+    name: routine?.name?.trim() || "Untitled Routine",
+    studyId: routine?.studyId || undefined,
+    taskTemplate: {
+      taskName: routine?.taskTemplate?.taskName?.trim() || "",
+      priority: PRIORITIES.includes(routine?.taskTemplate?.priority) ? routine.taskTemplate.priority : "Medium",
+      memo: typeof routine?.taskTemplate?.memo === "string" ? routine.taskTemplate.memo : "",
+    },
+    schedule: {
+      type,
+      anchorDate: scheduleIn.anchorDate || "",
+      offsets: offsets.length ? offsets : [14, 7, 3, 0],
+      weekday,
+      dayOfMonth,
+      intervalWeeks: Number.isFinite(Number(scheduleIn.intervalWeeks)) ? Math.max(1, Number(scheduleIn.intervalWeeks)) : 1,
+    },
+    enabled: routine?.enabled !== false,
+    category: routine?.category || "General",
+    lastMaterializedAt: routine?.lastMaterializedAt || null,
+    createdAt: routine?.createdAt || new Date().toISOString(),
+    ...(routine?.updatedAt ? { updatedAt: routine.updatedAt } : {}),
+  };
+}
+
+const WorkspaceWorkflowStore = {
+  workflows: [],
+
+  load() {
+    try {
+      const raw = localStorage.getItem(WORKSPACE_WORKFLOWS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      this.workflows = Array.isArray(parsed) ? parsed.map(normalizeWorkflowRecord) : [];
+    } catch {
+      this.workflows = [];
+    }
+  },
+
+  persist() {
+    localStorage.setItem(WORKSPACE_WORKFLOWS_KEY, JSON.stringify(this.workflows));
+    notifyCloudSync("workspaceWorkflows");
+  },
+
+  getAll() {
+    return [...this.workflows];
+  },
+
+  getById(id) {
+    return this.workflows.find((workflow) => workflow.id === id) || null;
+  },
+
+  add(data) {
+    const workflow = normalizeWorkflowRecord({
+      ...data,
+      scope: "workspace",
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    });
+    this.workflows.push(workflow);
+    this.persist();
+    return workflow;
+  },
+
+  update(id, data) {
+    const idx = this.workflows.findIndex((workflow) => workflow.id === id);
+    if (idx === -1) return null;
+    this.workflows[idx] = normalizeWorkflowRecord({
+      ...this.workflows[idx],
+      ...data,
+      id,
+      scope: "workspace",
+      updatedAt: new Date().toISOString(),
+    });
+    this.persist();
+    return this.workflows[idx];
+  },
+
+  delete(id) {
+    this.workflows = this.workflows.filter((workflow) => workflow.id !== id);
+    this.persist();
+  },
+
+  recordUsage(id) {
+    const workflow = this.getById(id);
+    if (!workflow || workflow.scope === "global") return null;
+    return this.update(id, {
+      usageCount: (workflow.usageCount || 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+    });
+  },
+};
 
 function upsertSiteMasterFromLegacy(nested) {
   const stdName = getStandardSiteName(nested.standardSiteName || nested.siteNumber || nested.standardName || "");
@@ -2386,6 +2844,28 @@ function migrateMasterStructureV2() {
     if (!study.taskRules) {
       study.taskRules = [];
       studyChanged = true;
+    }
+
+    if (!study.workflows) {
+      study.workflows = [];
+      studyChanged = true;
+    } else {
+      const normalizedWorkflows = study.workflows.map(normalizeWorkflowRecord);
+      if (JSON.stringify(normalizedWorkflows) !== JSON.stringify(study.workflows)) {
+        study.workflows = normalizedWorkflows;
+        studyChanged = true;
+      }
+    }
+
+    if (!study.routines) {
+      study.routines = [];
+      studyChanged = true;
+    } else {
+      const normalizedRoutines = study.routines.map(normalizeRoutineRecord);
+      if (JSON.stringify(normalizedRoutines) !== JSON.stringify(study.routines)) {
+        study.routines = normalizedRoutines;
+        studyChanged = true;
+      }
     }
 
     if (!study.customTaskNames) {
@@ -3683,6 +4163,958 @@ function switchStudyMasterTab(tabName) {
   applyStudyMasterTabUi();
 }
 
+function formatRelativeTime(isoString) {
+  if (!isoString) return "사용 기록 없음";
+  const then = new Date(isoString).getTime();
+  if (Number.isNaN(then)) return "사용 기록 없음";
+  const diffMs = Date.now() - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "방금 전";
+  if (diffMin < 60) return `${diffMin}분 전`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}시간 전`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}일 전`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths}개월 전`;
+  return `${Math.floor(diffMonths / 12)}년 전`;
+}
+
+function getWorkflowTaskCount(workflow) {
+  if (workflow?.stepCount) return workflow.stepCount;
+  return computeWorkflowStepCount(workflow);
+}
+
+function formatWorkflowMeta(workflow) {
+  return {
+    taskCount: getWorkflowTaskCount(workflow),
+    usageCount: workflow?.usageCount || 0,
+    lastUsedLabel: workflow?.lastUsedAt ? formatRelativeTime(workflow.lastUsedAt) : "사용 기록 없음",
+    scopeLabel: WORKFLOW_SCOPE_LABELS[workflow?.scope] || workflow?.scope || "Study",
+  };
+}
+
+function formatWorkflowStepOffset(step) {
+  if (!step?.dueOffset) return "";
+  const unit = step.dueUnit === "business" ? " business days" : "일";
+  return `(+${step.dueOffset}${step.dueUnit === "business" ? unit : "일"})`;
+}
+
+function getWorkflowRootLabel(workflow) {
+  if (workflow.source === "legacy-taskRules") {
+    const baseEvent = (workflow.tags || []).find((tag) => ["mv", "siv", "cov"].includes(tag));
+    const visitRule = WORKFLOW_VISIT_RULES.find((rule) => rule.key === baseEvent);
+    if (visitRule) return visitRule.label;
+  }
+  if (workflow.scope === "global" || String(workflow.id).startsWith("global-preset-")) {
+    const key = String(workflow.id).replace("global-preset-", "");
+    const visitRule = WORKFLOW_VISIT_RULES.find((rule) => rule.key === key);
+    if (visitRule) return visitRule.label;
+  }
+  return (workflow.name || "Task")
+    .replace(/ Follow-up.*$/i, "")
+    .replace(/ Workflow \(Legacy.*$/i, "")
+    .trim();
+}
+
+function renderWorkflowFlowPreview(workflow, options = {}) {
+  const rootLabel = options.rootLabel || getWorkflowRootLabel(workflow);
+  const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
+  const showOffsets = options.showOffsets !== false;
+  const compact = Boolean(options.compact);
+  const maxSteps = options.maxSteps ?? (compact ? 4 : steps.length);
+  const visibleSteps = compact ? steps.slice(0, maxSteps) : steps;
+  const hiddenCount = compact ? Math.max(0, steps.length - visibleSteps.length) : 0;
+
+  const stepHtml = visibleSteps
+    .map((step) => {
+      const offset = showOffsets ? formatWorkflowStepOffset(step) : "";
+      return `
+        <div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>
+        <div class="workflow-flow-preview__step">
+          <span class="workflow-flow-preview__name">${escapeHtml(step.taskName)}</span>
+          ${offset ? `<span class="workflow-flow-preview__meta">${escapeHtml(offset)}</span>` : ""}
+        </div>
+      `;
+    })
+    .join("");
+
+  const moreHtml =
+    hiddenCount > 0
+      ? `<div class="workflow-flow-preview__more">… +${hiddenCount} more</div>`
+      : "";
+
+  return `
+    <div class="workflow-flow-preview${compact ? " workflow-flow-preview--compact" : ""}">
+      <div class="workflow-flow-preview__step workflow-flow-preview__step--root">
+        <span class="workflow-flow-preview__name">${escapeHtml(rootLabel)}</span>
+      </div>
+      ${stepHtml}
+      ${moreHtml}
+    </div>
+  `;
+}
+
+function renderWorkflowMetaRow(workflow) {
+  const meta = formatWorkflowMeta(workflow);
+  return `
+    <div class="workflow-meta-row">
+      <span class="workflow-meta-row__item">📋 ${meta.taskCount} Tasks</span>
+      <span class="workflow-meta-row__sep" aria-hidden="true">·</span>
+      <span class="workflow-meta-row__item">🔁 ${meta.usageCount}회 적용</span>
+      <span class="workflow-meta-row__sep" aria-hidden="true">·</span>
+      <span class="workflow-meta-row__item">🕐 ${escapeHtml(meta.lastUsedLabel)}</span>
+    </div>
+  `;
+}
+
+function getWorkflowRef(workflow) {
+  if (workflow.scope === "global" || String(workflow.id).startsWith("global-preset-")) {
+    return { scope: "global", id: workflow.id, studyId: null };
+  }
+  if (workflow.scope === "workspace") {
+    return { scope: "workspace", id: workflow.id, studyId: null };
+  }
+  return { scope: "study", id: workflow.id, studyId: workflow.studyId || selectedStudyMasterId };
+}
+
+function resolveWorkflowRecord(ref) {
+  if (!ref) return null;
+  if (ref.scope === "global") {
+    return getGlobalWorkflowPresets().find((workflow) => workflow.id === ref.id) || null;
+  }
+  if (ref.scope === "workspace") {
+    return WorkspaceWorkflowStore.getById(ref.id);
+  }
+  if (ref.scope === "study" && ref.studyId) {
+    return StudyMasterStore.getWorkflow(ref.studyId, ref.id);
+  }
+  return null;
+}
+
+function workflowMatchesTaskName(workflow, taskName) {
+  const nameLower = (taskName || "").trim().toLowerCase();
+  if (!nameLower) return false;
+
+  const workflowName = (workflow.name || "").toLowerCase();
+  if (workflowName.includes(nameLower) || nameLower.includes(workflowName.replace(/ follow-up.*$/i, ""))) {
+    return true;
+  }
+
+  if ((workflow.tags || []).some((tag) => nameLower.includes(String(tag).toLowerCase()))) {
+    return true;
+  }
+
+  return WORKFLOW_VISIT_RULES.some((rule) => {
+    const keywordHit = rule.keywords.some((keyword) => nameLower.includes(keyword.toLowerCase()));
+    if (!keywordHit) return false;
+    return (
+      workflowName.includes(rule.key) ||
+      workflowName.includes(rule.label.toLowerCase()) ||
+      (workflow.tags || []).includes(rule.key)
+    );
+  });
+}
+
+function findMatchingWorkflows(taskName, studyProtocol) {
+  const seen = new Set();
+  const matches = [];
+  const study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+
+  const pushMatch = (workflow) => {
+    const key = `${workflow.scope}:${workflow.id}`;
+    if (seen.has(key)) return;
+    if (!workflowMatchesTaskName(workflow, taskName)) return;
+    if (!(workflow.steps || []).length && workflow.source !== "legacy-taskRules") return;
+    seen.add(key);
+    matches.push(workflow);
+  };
+
+  if (study) {
+    (study.workflows || []).forEach((workflow) => pushMatch(normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })));
+    legacyTaskRulesToWorkflows(study).forEach(pushMatch);
+  }
+
+  WorkspaceWorkflowStore.getAll().forEach(pushMatch);
+  getGlobalWorkflowPresets().forEach(pushMatch);
+
+  return matches.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0));
+}
+
+function recordWorkflowUsageByRef(ref) {
+  if (!ref || ref.scope === "global") return;
+  if (ref.scope === "workspace") {
+    WorkspaceWorkflowStore.recordUsage(ref.id);
+    return;
+  }
+  if (ref.scope === "study" && ref.studyId) {
+    StudyMasterStore.recordWorkflowUsage(ref.studyId, ref.id);
+  }
+}
+
+function applyWorkflowToRootTask(rootTask, workflow, ref) {
+  const baseDate = rootTask.dueDate || toDateString(getToday());
+  const followUps = (workflow.steps || [])
+    .filter((step) => step.taskName && !hasExistingFollowUp(rootTask.id, step.taskName))
+    .map((step) => ({
+      id: generateId(),
+      study: rootTask.study,
+      site: rootTask.site,
+      task: step.taskName,
+      dueDate: calculateDueDateFromRule(baseDate, step.dueOffset, step.dueUnit),
+      status: step.defaultStatus || DEFAULT_STATUS,
+      priority: step.priority || rootTask.priority || "Medium",
+      parentTaskId: rootTask.id,
+      autoGenerated: true,
+      workflowId: workflow.id,
+      createdAt: new Date().toISOString(),
+    }));
+
+  if (followUps.length) {
+    TaskStore.addMany(followUps);
+  }
+
+  if (ref && ref.scope !== "global") {
+    recordWorkflowUsageByRef(ref);
+  }
+
+  TaskStore.update(rootTask.id, { workflowId: workflow.id });
+  return followUps;
+}
+
+function persistPendingTaskDraft(draft, options = {}) {
+  TaskStore.add(draft);
+  if (window.CalendarSyncManager && draft.dueDate) {
+    CalendarSyncManager.onTaskCreated(draft.id);
+  }
+
+  let followUps = [];
+  if (options.applyWorkflow) {
+    const workflow = options.workflow;
+    const ref = options.workflowRef;
+    if (workflow) {
+      followUps = applyWorkflowToRootTask(draft, workflow, ref);
+      followUps.forEach((task) => {
+        if (window.CalendarSyncManager && task.dueDate) {
+          CalendarSyncManager.onTaskCreated(task.id);
+        }
+      });
+    }
+  }
+
+  els.taskForm.reset();
+  addTaskPresetPriority = "Medium";
+  if (els.addTaskPriority) els.addTaskPriority.value = "Medium";
+  refreshTaskStudySiteSelects();
+  updateSiteInfoDisplays();
+  closeAddTaskModal();
+  renderAll();
+
+  if (options.applyWorkflow && followUps.length) {
+    showToast(`${followUps.length}개의 후속 Task가 생성되었습니다.`);
+  }
+
+  if (options.checkLearnContext !== false && !options.applyWorkflow && shouldOfferWorkflowLearn(draft)) {
+    openWorkflowLearnModal({
+      rootTask: lastCompletedTaskContext,
+      followUpTask: draft,
+    });
+  }
+
+  pendingTaskDraft = null;
+  pendingWorkflowMatches = [];
+}
+
+function renderWorkflowLibraryCard(workflow, options = {}) {
+  const meta = formatWorkflowMeta(workflow);
+  const ref = getWorkflowRef(workflow);
+  const refJson = escapeAttr(JSON.stringify(ref));
+  const isGlobal = workflow.scope === "global";
+  const isLegacy = workflow.source === "legacy-taskRules";
+
+  const actions = options.readonly
+    ? `<button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>`
+    : `
+      <button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>
+      ${!isGlobal && !isLegacy ? `<button type="button" class="btn btn--ghost btn--sm" data-delete-workflow="${refJson}">삭제</button>` : ""}
+      ${isGlobal ? `<button type="button" class="btn btn--ghost btn--sm" data-copy-workflow="${refJson}">Study에 복사</button>` : ""}
+    `;
+
+  return `
+    <article class="workflow-library-card">
+      <header class="workflow-library-card__head">
+        <h4 class="workflow-library-card__title">${escapeHtml(workflow.name)}</h4>
+        <span class="workflow-library-card__scope">${escapeHtml(meta.scopeLabel)}</span>
+      </header>
+      ${renderWorkflowFlowPreview(workflow, { compact: true, rootLabel: getWorkflowRootLabel(workflow) })}
+      ${renderWorkflowMetaRow(workflow)}
+      <footer class="workflow-library-card__actions">${actions}</footer>
+    </article>
+  `;
+}
+
+function renderStudyWorkflowLibrary(study) {
+  if (!els.studyWorkflowLibrary) return;
+
+  const studyWorkflows = (study.workflows || []).map((workflow) =>
+    normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })
+  );
+  const legacyWorkflows = legacyTaskRulesToWorkflows(study);
+  const workspaceWorkflows = WorkspaceWorkflowStore.getAll();
+  const globalPresets = getGlobalWorkflowPresets();
+
+  const sections = [
+    { title: "Study Workflow", items: studyWorkflows },
+    { title: "Legacy Task Rules", items: legacyWorkflows },
+    { title: "Workspace", items: workspaceWorkflows },
+    { title: "Global Template", items: globalPresets },
+  ].filter((section) => section.items.length > 0);
+
+  if (!sections.length) {
+    els.studyWorkflowLibrary.innerHTML =
+      '<p class="workflow-library-empty">Workflow를 저장하면 후속 Task Flow가 여기에 표시됩니다.</p>';
+    return;
+  }
+
+  els.studyWorkflowLibrary.innerHTML = sections
+    .map(
+      (section) => `
+      <section class="workflow-library-section">
+        <h4 class="workflow-library-section__title">${escapeHtml(section.title)}</h4>
+        <div class="workflow-library-grid">${section.items.map((workflow) => renderWorkflowLibraryCard(workflow)).join("")}</div>
+      </section>
+    `
+    )
+    .join("");
+
+  els.studyWorkflowLibrary.querySelectorAll("[data-apply-workflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      try {
+        const ref = JSON.parse(btn.dataset.applyWorkflow);
+        handleApplyWorkflowFromLibrary(ref, study);
+      } catch {
+        showToast("Workflow를 적용할 수 없습니다.");
+      }
+    });
+  });
+
+  els.studyWorkflowLibrary.querySelectorAll("[data-delete-workflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      try {
+        const ref = JSON.parse(btn.dataset.deleteWorkflow);
+        if (ref.scope === "study" && ref.studyId && confirm("이 Workflow를 삭제할까요?")) {
+          StudyMasterStore.deleteWorkflow(ref.studyId, ref.id);
+          renderStudyWorkflowLibrary(study);
+        } else if (ref.scope === "workspace" && confirm("Workspace Workflow를 삭제할까요?")) {
+          WorkspaceWorkflowStore.delete(ref.id);
+          renderStudyWorkflowLibrary(study);
+        }
+      } catch {
+        showToast("Workflow를 삭제할 수 없습니다.");
+      }
+    });
+  });
+
+  els.studyWorkflowLibrary.querySelectorAll("[data-copy-workflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      try {
+        const ref = JSON.parse(btn.dataset.copyWorkflow);
+        const preset = resolveWorkflowRecord(ref);
+        if (!preset || !study?.id) return;
+        StudyMasterStore.addWorkflow(study.id, {
+          ...preset,
+          id: undefined,
+          name: preset.name,
+          scope: "study",
+          source: "template",
+          usageCount: 0,
+          lastUsedAt: null,
+        });
+        renderStudyWorkflowLibrary(study);
+        showToast("Study Workflow Library에 복사했습니다.");
+      } catch {
+        showToast("복사할 수 없습니다.");
+      }
+    });
+  });
+}
+
+function handleApplyWorkflowFromLibrary(ref, study) {
+  const workflow = resolveWorkflowRecord(ref);
+  if (!workflow) {
+    showToast("Workflow를 찾을 수 없습니다.");
+    return;
+  }
+
+  const rootName = getWorkflowRootLabel(workflow);
+  openAddTaskModal({ task: rootName, study: study?.protocolNumber || "" });
+
+  pendingTaskDraft = null;
+  pendingWorkflowMatches = [{ workflow, ref: ref.scope === "global" ? ref : getWorkflowRef(workflow) }];
+  pendingWorkflowApplyIndex = 0;
+
+  setTimeout(() => {
+    const taskInput = document.getElementById("task");
+    if (taskInput && !taskInput.value) taskInput.value = rootName;
+  }, 0);
+}
+
+function openWorkflowSuggestModal(matches, draft) {
+  if (!els.workflowSuggestModal || !els.workflowSuggestBody) {
+    persistPendingTaskDraft(draft);
+    return;
+  }
+
+  pendingTaskDraft = draft;
+  pendingWorkflowMatches = matches;
+  pendingWorkflowApplyIndex = 0;
+
+  const cards = matches
+    .map((entry, index) => {
+      const workflow = entry.workflow || entry;
+      const meta = formatWorkflowMeta(workflow);
+      return `
+        <div class="workflow-suggest-card${index === 0 ? " workflow-suggest-card--active" : ""}" data-suggest-index="${index}">
+          <h4 class="workflow-suggest-card__title">${escapeHtml(workflow.name)}</h4>
+          ${renderWorkflowFlowPreview(workflow, { rootLabel: draft.task, compact: matches.length > 1 })}
+          <p class="workflow-suggest-card__meta">${meta.taskCount}개 Task · ${escapeHtml(meta.scopeLabel)} · ${meta.usageCount}회 적용 · ${escapeHtml(meta.lastUsedLabel)}</p>
+          <button type="button" class="btn btn--primary btn--sm workflow-suggest-card__apply" data-suggest-apply="${index}">이 Workflow 적용</button>
+        </div>
+      `;
+    })
+    .join("");
+
+  els.workflowSuggestBody.innerHTML = cards;
+  els.workflowSuggestModal.hidden = false;
+
+  els.workflowSuggestBody.querySelectorAll("[data-suggest-apply]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.suggestApply);
+      const entry = pendingWorkflowMatches[index];
+      if (!entry || !pendingTaskDraft) return;
+      const workflow = entry.workflow || entry;
+      const ref = entry.ref || getWorkflowRef(workflow);
+      closeWorkflowSuggestModal();
+      persistPendingTaskDraft(pendingTaskDraft, {
+        applyWorkflow: true,
+        workflow,
+        workflowRef: ref,
+      });
+    });
+  });
+}
+
+function closeWorkflowSuggestModal() {
+  if (els.workflowSuggestModal) els.workflowSuggestModal.hidden = true;
+}
+
+function shouldOfferWorkflowLearn(draft) {
+  if (!lastCompletedTaskContext || !draft) return false;
+  if (!draft.study || draft.study !== lastCompletedTaskContext.study) return false;
+  if (draft.task === lastCompletedTaskContext.task) return false;
+  const completedAt = new Date(lastCompletedTaskContext.completedAt).getTime();
+  if (Number.isNaN(completedAt)) return false;
+  return Date.now() - completedAt <= 7 * 24 * 60 * 60 * 1000;
+}
+
+function findWorkflowByIdAnywhere(workflowId, studyProtocol) {
+  if (!workflowId) return null;
+
+  if (studyProtocol) {
+    const study = StudyMasterStore.getByProtocol(studyProtocol);
+    if (study) {
+      const match = StudyMasterStore.getWorkflow(study.id, workflowId);
+      if (match) return match;
+    }
+  }
+
+  for (const study of StudyMasterStore.getAll()) {
+    const match = (study.workflows || []).find((w) => w.id === workflowId);
+    if (match) return normalizeWorkflowRecord({ ...match, scope: "study", studyId: study.id });
+  }
+
+  const workspaceMatch = WorkspaceWorkflowStore.getById(workflowId);
+  if (workspaceMatch) return workspaceMatch;
+
+  return getGlobalWorkflowPresets().find((w) => w.id === workflowId) || null;
+}
+
+function findRoutineByIdAnywhere(routineId, studyProtocol) {
+  if (!routineId) return null;
+  if (studyProtocol) {
+    const study = StudyMasterStore.getByProtocol(studyProtocol);
+    if (study) return StudyMasterStore.getRoutine(study.id, routineId);
+  }
+  for (const study of StudyMasterStore.getAll()) {
+    const match = (study.routines || []).find((r) => r.id === routineId);
+    if (match) return normalizeRoutineRecord({ ...match, studyId: study.id });
+  }
+  return null;
+}
+
+function resolveTaskWorkflowDisplay(task) {
+  if (!task) return null;
+
+  let workflowId = task.workflowId;
+  if (!workflowId && task.parentTaskId) {
+    const parent = tasks.find((t) => t.id === task.parentTaskId);
+    workflowId = parent?.workflowId;
+  }
+
+  if (workflowId) {
+    const workflow = findWorkflowByIdAnywhere(workflowId, task.study);
+    if (workflow) {
+      return {
+        name: workflow.name,
+        scopeLabel: WORKFLOW_SCOPE_LABELS[workflow.scope] || workflow.scope,
+        workflow,
+        viaParent: Boolean(!task.workflowId && task.parentTaskId),
+      };
+    }
+  }
+
+  if (!task.parentTaskId && task.status === "Completed" && detectVisitWorkflowRule(task.task)) {
+    const rule = detectVisitWorkflowRule(task.task);
+    return {
+      name: `${rule.label} Follow-up (Legacy)`,
+      scopeLabel: "Legacy",
+      workflow: null,
+      viaParent: false,
+    };
+  }
+
+  return null;
+}
+
+function resolveTaskRoutineDisplay(task) {
+  if (!task?.routineId) return null;
+  const routine = findRoutineByIdAnywhere(task.routineId, task.study);
+  if (!routine) return { name: "Unknown Routine", routine: null };
+  return { name: routine.name, routine };
+}
+
+function renderTaskDetailLinks(task) {
+  const workflowInfo = resolveTaskWorkflowDisplay(task);
+  const routineInfo = resolveTaskRoutineDisplay(task);
+
+  if (els.taskDetailWorkflowLink) {
+    if (workflowInfo) {
+      els.taskDetailWorkflowLink.hidden = false;
+      els.taskDetailWorkflowLink.innerHTML = `
+        <span class="task-detail-link__label">Workflow</span>
+        <span class="task-detail-link__value">${escapeHtml(workflowInfo.name)}</span>
+        <span class="task-detail-link__scope">${escapeHtml(workflowInfo.scopeLabel)}</span>
+        ${workflowInfo.viaParent ? '<span class="task-detail-link__hint">(parent Task)</span>' : ""}
+      `;
+    } else {
+      els.taskDetailWorkflowLink.hidden = true;
+      els.taskDetailWorkflowLink.innerHTML = "";
+    }
+  }
+
+  if (els.taskDetailRoutineLink) {
+    if (routineInfo) {
+      els.taskDetailRoutineLink.hidden = false;
+      els.taskDetailRoutineLink.innerHTML = `
+        <span class="task-detail-link__label">Routine</span>
+        <span class="task-detail-link__value">${escapeHtml(routineInfo.name)}</span>
+      `;
+    } else {
+      els.taskDetailRoutineLink.hidden = true;
+      els.taskDetailRoutineLink.innerHTML = "";
+    }
+  }
+}
+
+function saveWorkflowWithScope(payload, scope, studyProtocol) {
+  if (scope === "study") {
+    const study = StudyMasterStore.getByProtocol(studyProtocol);
+    if (!study) {
+      showToast("Study를 찾을 수 없습니다.");
+      return null;
+    }
+    const saved = StudyMasterStore.addWorkflow(study.id, { ...payload, scope: "study", studyId: study.id });
+    if (selectedStudyMasterId === study.id) renderStudyWorkflowLibrary(study);
+    return saved;
+  }
+
+  if (scope === "workspace") {
+    return WorkspaceWorkflowStore.add({ ...payload, scope: "workspace" });
+  }
+
+  showToast("Global 템플릿 저장은 MVP v1에서 지원하지 않습니다.");
+  return null;
+}
+
+function openWorkflowLearnModal(context) {
+  if (!els.workflowLearnModal || !els.workflowLearnBody) return;
+
+  workflowLearnContext = context;
+  const root = context.rootTask;
+  const followUp = context.followUpTask;
+  if (!root || !followUp) return;
+
+  const study = root.study ? StudyMasterStore.getByProtocol(root.study) : null;
+  const existingWorkflows = study ? StudyMasterStore.getWorkflows(study.id) : [];
+  const dueOffset =
+    root.dueDate && followUp.dueDate
+      ? Math.max(0, Math.round((parseDate(followUp.dueDate) - parseDate(root.dueDate)) / 86400000))
+      : 0;
+
+  const previewWorkflow = normalizeWorkflowRecord({
+    name: `${root.task} Follow-up`,
+    steps: [
+      {
+        taskName: followUp.task,
+        dueOffset,
+        dueUnit: "calendar",
+        priority: followUp.priority,
+      },
+    ],
+  });
+
+  const updateOptions = existingWorkflows
+    .map(
+      (workflow) =>
+        `<option value="${escapeAttr(workflow.id)}">${escapeHtml(workflow.name)} (${getWorkflowTaskCount(workflow)} Tasks)</option>`
+    )
+    .join("");
+
+  const defaultScope = study ? "study" : "workspace";
+
+  els.workflowLearnBody.innerHTML = `
+    ${renderWorkflowFlowPreview(previewWorkflow, { rootLabel: root.task })}
+    ${renderWorkflowMetaRow(previewWorkflow)}
+    <form id="workflowLearnForm" class="workflow-learn-form">
+      <fieldset class="workflow-learn-form__field">
+        <legend class="workflow-learn-form__legend">저장 방식</legend>
+        <label class="workflow-learn-form__radio">
+          <input type="radio" name="learnMode" value="update" ${existingWorkflows.length ? "checked" : "disabled"} />
+          기존 Workflow 업데이트
+        </label>
+        ${
+          existingWorkflows.length
+            ? `<select id="workflowLearnUpdateSelect" class="workflow-learn-form__select">${updateOptions}</select>`
+            : '<p class="form-hint">업데이트할 Study Workflow가 없습니다.</p>'
+        }
+        <label class="workflow-learn-form__radio">
+          <input type="radio" name="learnMode" value="new" ${existingWorkflows.length ? "" : "checked"} />
+          새 Workflow로 저장
+        </label>
+        <input type="text" id="workflowLearnNameInput" class="workflow-learn-form__input" value="${escapeAttr(`${root.task} Follow-up`)}" placeholder="Workflow 이름" />
+      </fieldset>
+      <fieldset class="workflow-learn-form__field">
+        <legend class="workflow-learn-form__legend">저장 범위 (Scope)</legend>
+        <label class="workflow-learn-form__radio">
+          <input type="radio" name="learnScope" value="study" ${defaultScope === "study" ? "checked" : ""} ${study ? "" : "disabled"} />
+          이 Study에만
+        </label>
+        <label class="workflow-learn-form__radio">
+          <input type="radio" name="learnScope" value="workspace" ${defaultScope === "workspace" ? "checked" : ""} />
+          내 Workspace
+        </label>
+        <p class="form-hint">Global 템플릿은 읽기 전용입니다. Study 또는 Workspace에 저장하세요.</p>
+      </fieldset>
+    </form>
+  `;
+
+  els.workflowLearnModal.hidden = false;
+}
+
+function closeWorkflowLearnModal() {
+  if (els.workflowLearnModal) els.workflowLearnModal.hidden = true;
+  workflowLearnContext = null;
+}
+
+function handleWorkflowLearnSave() {
+  if (!workflowLearnContext) return;
+  const root = workflowLearnContext.rootTask;
+  const followUp = workflowLearnContext.followUpTask;
+  const form = document.getElementById("workflowLearnForm");
+  if (!form) return;
+
+  const mode = form.querySelector('input[name="learnMode"]:checked')?.value || "new";
+  const scope = form.querySelector('input[name="learnScope"]:checked')?.value || "workspace";
+  const step = normalizeWorkflowStep({
+    taskName: followUp.task,
+    dueOffset:
+      root.dueDate && followUp.dueDate
+        ? Math.max(0, Math.round((parseDate(followUp.dueDate) - parseDate(root.dueDate)) / 86400000))
+        : 0,
+    dueUnit: "calendar",
+    priority: followUp.priority,
+  });
+
+  if (mode === "update" && scope === "study") {
+    const study = StudyMasterStore.getByProtocol(root.study);
+    const workflowId = document.getElementById("workflowLearnUpdateSelect")?.value;
+    if (study && workflowId) {
+      const existing = StudyMasterStore.getWorkflow(study.id, workflowId);
+      if (existing) {
+        StudyMasterStore.updateWorkflow(study.id, workflowId, {
+          steps: [...(existing.steps || []), step],
+          source: "learned",
+          trigger: "TASK_COMPLETED",
+          category: inferWorkflowCategory(existing.name, existing.tags),
+        });
+        showToast("Workflow가 업데이트되었습니다.");
+        closeWorkflowLearnModal();
+        if (selectedStudyMasterId === study.id) renderStudyWorkflowLibrary(study);
+        return;
+      }
+    }
+  }
+
+  const nameInput = document.getElementById("workflowLearnNameInput");
+  const name = nameInput?.value.trim() || `${root.task} Follow-up`;
+  const payload = {
+    name,
+    steps: [step],
+    source: "learned",
+    trigger: "TASK_COMPLETED",
+    category: inferWorkflowCategory(name),
+    tags: [root.task.toLowerCase()],
+    usageCount: 0,
+    lastUsedAt: null,
+  };
+
+  const saved = saveWorkflowWithScope(payload, scope, root.study);
+  if (saved) {
+    showToast(scope === "study" ? "Study Workflow로 저장했습니다." : "Workspace Workflow로 저장했습니다.");
+  }
+  closeWorkflowLearnModal();
+}
+
+function formatRoutineScheduleSummary(routine) {
+  const schedule = routine.schedule || {};
+  if (schedule.type === "weekly") {
+    return `매주 ${ROUTINE_WEEKDAY_LABELS[schedule.weekday] || "?"}요일`;
+  }
+  if (schedule.type === "monthly") {
+    return `매월 ${schedule.dayOfMonth}일`;
+  }
+  const offsets = (schedule.offsets || []).slice().sort((a, b) => b - a);
+  if (offsets.length) {
+    return `D-${offsets.filter((n) => n > 0).join("/D-")}${offsets.includes(0) ? "/Due" : ""}`;
+  }
+  return "마감일 기준";
+}
+
+function renderStudyRoutinesPanel(study) {
+  if (!els.studyRoutinesList) return;
+
+  const routines = StudyMasterStore.getRoutines(study.id);
+  if (!routines.length) {
+    els.studyRoutinesList.innerHTML =
+      '<p class="workflow-library-empty">Routine을 등록하면 반복 Task가 자동 생성됩니다. Training 외 자유 생성도 가능합니다.</p>';
+    return;
+  }
+
+  els.studyRoutinesList.innerHTML = routines
+    .map(
+      (routine) => `
+      <article class="routine-card">
+        <header class="routine-card__head">
+          <h4 class="routine-card__title">${escapeHtml(routine.name)}</h4>
+          <span class="routine-card__badge${routine.enabled ? "" : " routine-card__badge--off"}">${routine.enabled ? "ON" : "OFF"}</span>
+        </header>
+        <p class="routine-card__task">${escapeHtml(routine.taskTemplate.taskName)} · ${escapeHtml(routine.taskTemplate.priority)}</p>
+        <p class="routine-card__schedule">${escapeHtml(formatRoutineScheduleSummary(routine))}</p>
+        <footer class="routine-card__actions">
+          <button type="button" class="btn btn--ghost btn--sm" data-edit-routine="${escapeAttr(routine.id)}">수정</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-delete-routine="${escapeAttr(routine.id)}">삭제</button>
+        </footer>
+      </article>
+    `
+    )
+    .join("");
+
+  els.studyRoutinesList.querySelectorAll("[data-edit-routine]").forEach((btn) => {
+    btn.addEventListener("click", () => openRoutineModal(study.id, btn.dataset.editRoutine));
+  });
+  els.studyRoutinesList.querySelectorAll("[data-delete-routine]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (confirm("이 Routine을 삭제할까요?")) {
+        StudyMasterStore.deleteRoutine(study.id, btn.dataset.deleteRoutine);
+        renderStudyRoutinesPanel(study);
+      }
+    });
+  });
+}
+
+function openRoutineModal(studyId, routineId = null, presetKey = null) {
+  if (!els.routineModal || !els.routineForm) return;
+
+  const study = StudyMasterStore.getById(studyId);
+  if (!study) return;
+
+  const routine = routineId ? StudyMasterStore.getRoutine(studyId, routineId) : null;
+  const preset = presetKey ? ROUTINE_PRESETS[presetKey] : null;
+
+  document.getElementById("routineModalTitle").textContent = routine ? "Routine 수정" : "Routine 등록";
+  document.getElementById("routineId").value = routine?.id || "";
+  document.getElementById("routineStudyId").value = studyId;
+  document.getElementById("routineName").value = routine?.name || preset?.name || "";
+  document.getElementById("routineTaskName").value = routine?.taskTemplate?.taskName || preset?.taskName || "";
+  document.getElementById("routinePriority").value = routine?.taskTemplate?.priority || preset?.priority || "Medium";
+  document.getElementById("routineScheduleType").value = routine?.schedule?.type || preset?.schedule?.type || "anchor";
+  document.getElementById("routineAnchorDate").value = routine?.schedule?.anchorDate || "";
+  document.getElementById("routineOffsets").value = (routine?.schedule?.offsets || preset?.schedule?.offsets || [14, 7, 3, 0]).join(", ");
+  document.getElementById("routineWeekday").value = String(routine?.schedule?.weekday ?? preset?.schedule?.weekday ?? 1);
+  document.getElementById("routineDayOfMonth").value = String(routine?.schedule?.dayOfMonth ?? 1);
+  document.getElementById("routineEnabled").value = String(routine?.enabled !== false);
+  applyRoutineScheduleFieldsVisibility();
+
+  els.routineModal.hidden = false;
+}
+
+function closeRoutineModal() {
+  if (els.routineModal) els.routineModal.hidden = true;
+  els.routineForm?.reset();
+}
+
+function applyRoutineScheduleFieldsVisibility() {
+  const type = document.getElementById("routineScheduleType")?.value || "anchor";
+  const anchorFields = document.getElementById("routineAnchorFields");
+  const weeklyFields = document.getElementById("routineWeeklyFields");
+  const monthlyFields = document.getElementById("routineMonthlyFields");
+  if (anchorFields) anchorFields.hidden = type !== "anchor";
+  if (weeklyFields) weeklyFields.hidden = type !== "weekly";
+  if (monthlyFields) monthlyFields.hidden = type !== "monthly";
+}
+
+function handleRoutineSubmit(e) {
+  e.preventDefault();
+  const studyId = document.getElementById("routineStudyId").value;
+  const routineId = document.getElementById("routineId").value;
+  const scheduleType = document.getElementById("routineScheduleType").value;
+  const offsetsRaw = document.getElementById("routineOffsets").value || "";
+  const offsets = offsetsRaw
+    .split(/[,，\s]+/)
+    .map((n) => Number(n.trim()))
+    .filter((n) => Number.isFinite(n));
+
+  const payload = {
+    name: document.getElementById("routineName").value.trim(),
+    taskTemplate: {
+      taskName: document.getElementById("routineTaskName").value.trim(),
+      priority: document.getElementById("routinePriority").value,
+    },
+    schedule: {
+      type: scheduleType,
+      anchorDate: document.getElementById("routineAnchorDate").value,
+      offsets: offsets.length ? offsets : [14, 7, 3, 0],
+      weekday: Number(document.getElementById("routineWeekday").value),
+      dayOfMonth: Number(document.getElementById("routineDayOfMonth").value),
+    },
+    enabled: document.getElementById("routineEnabled").value === "true",
+    category: inferWorkflowCategory(document.getElementById("routineName").value.trim()),
+  };
+
+  if (!payload.name || !payload.taskTemplate.taskName) {
+    alert("Routine 이름과 Task 이름을 입력해 주세요.");
+    return;
+  }
+
+  if (routineId) {
+    StudyMasterStore.updateRoutine(studyId, routineId, payload);
+    showToast("Routine이 수정되었습니다.");
+  } else {
+    StudyMasterStore.addRoutine(studyId, payload);
+    showToast("Routine이 등록되었습니다.");
+  }
+
+  closeRoutineModal();
+  const study = StudyMasterStore.getById(studyId);
+  if (study) renderStudyRoutinesPanel(study);
+  runRoutineScheduler();
+  renderAll();
+}
+
+function taskExistsForRoutine(routineId, dueDate, taskName) {
+  return tasks.some(
+    (task) => task.routineId === routineId && task.dueDate === dueDate && task.task === taskName && task.status !== "Cancelled"
+  );
+}
+
+function computeRoutineDueDates(routine, todayStr) {
+  const schedule = routine.schedule || {};
+  const dates = new Set();
+
+  if (schedule.type === "anchor") {
+    const anchor = schedule.anchorDate || todayStr;
+    (schedule.offsets || [14, 7, 3, 0]).forEach((offset) => {
+      const due = addDaysToDate(anchor, -offset);
+      if (due >= todayStr) dates.add(due);
+    });
+    return [...dates];
+  }
+
+  if (schedule.type === "weekly") {
+    const today = parseDate(todayStr);
+    const targetDow = schedule.weekday ?? 1;
+    for (let i = 0; i < 14; i += 1) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      if (d.getDay() === targetDow) {
+        dates.add(toDateString(d));
+      }
+    }
+    return [...dates];
+  }
+
+  if (schedule.type === "monthly") {
+    const today = parseDate(todayStr);
+    const dom = schedule.dayOfMonth ?? 1;
+    for (let m = 0; m < 2; m += 1) {
+      const d = new Date(today.getFullYear(), today.getMonth() + m, dom);
+      if (toDateString(d) >= todayStr) dates.add(toDateString(d));
+    }
+    return [...dates];
+  }
+
+  return [];
+}
+
+function runRoutineScheduler() {
+  const todayStr = toDateString(getToday());
+  let created = 0;
+
+  StudyMasterStore.getAll().forEach((study) => {
+    (study.routines || []).forEach((raw) => {
+      const routine = normalizeRoutineRecord({ ...raw, studyId: study.id });
+      if (!routine.enabled || !routine.taskTemplate.taskName) return;
+
+      const dueDates = computeRoutineDueDates(routine, todayStr);
+      let routineCreated = 0;
+      dueDates.forEach((dueDate) => {
+        if (taskExistsForRoutine(routine.id, dueDate, routine.taskTemplate.taskName)) return;
+
+        TaskStore.add({
+          id: generateId(),
+          study: study.protocolNumber,
+          site: "",
+          task: routine.taskTemplate.taskName,
+          dueDate,
+          status: DEFAULT_STATUS,
+          priority: routine.taskTemplate.priority,
+          routineId: routine.id,
+          autoGenerated: true,
+          createdAt: new Date().toISOString(),
+        });
+        routineCreated += 1;
+      });
+
+      if (routineCreated > 0) {
+        StudyMasterStore.updateRoutine(study.id, routine.id, { lastMaterializedAt: new Date().toISOString() });
+        created += routineCreated;
+      }
+    });
+  });
+
+  return created;
+}
+
 function applyStudyMasterTabUi() {
   document.querySelectorAll("[data-study-tab]").forEach((btn) => {
     const tab = btn.dataset.studyTab;
@@ -3698,10 +5130,22 @@ function applyStudyMasterTabUi() {
   const newStudySystemsHint = document.getElementById("studySystemsNewStudyHint");
   const newStudyTaskRulesHint = document.getElementById("studyTaskRulesNewStudyHint");
 
+  const newStudyWorkflowLibraryHint = document.getElementById("studyWorkflowLibraryNewStudyHint");
+  const newStudyRoutinesHint = document.getElementById("studyRoutinesNewStudyHint");
+
   if (newStudySystemsHint) newStudySystemsHint.hidden = !isNewStudy || selectedStudyMasterTab !== "systems";
   if (newStudyTaskRulesHint) newStudyTaskRulesHint.hidden = !isNewStudy || selectedStudyMasterTab !== "task-rules";
+  if (newStudyWorkflowLibraryHint) {
+    newStudyWorkflowLibraryHint.hidden = !isNewStudy || selectedStudyMasterTab !== "workflow-library";
+  }
+  if (newStudyRoutinesHint) {
+    newStudyRoutinesHint.hidden = !isNewStudy || selectedStudyMasterTab !== "routines";
+  }
   if (els.newStudySystemBtn) els.newStudySystemBtn.disabled = isNewStudy;
   if (els.newStudyTaskRuleBtn) els.newStudyTaskRuleBtn.disabled = isNewStudy;
+  if (document.getElementById("newStudyRoutineBtn")) {
+    document.getElementById("newStudyRoutineBtn").disabled = isNewStudy;
+  }
   if (els.linkSiteBtn) els.linkSiteBtn.disabled = isNewStudy;
 }
 
@@ -3717,7 +5161,7 @@ function renderStudyMaster() {
         <li>
           <button type="button" class="study-master-list__item${study.id === selectedStudyMasterId ? " study-master-list__item--active" : ""}" data-study-id="${study.id}">
             <span class="study-master-list__name">${escapeHtml(study.studyName || study.protocolNumber)}</span>
-            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length}곳 · Rule ${(study.taskRules || []).length}개</span>
+            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length} · WF ${(study.workflows || []).length} · RT ${(study.routines || []).length}</span>
           </button>
         </li>
       `
@@ -3767,6 +5211,8 @@ function renderStudyMaster() {
   renderLinkedSitesTable(study);
   renderStudySystemsTable(study);
   renderStudyTaskRulesTable(study);
+  renderStudyWorkflowLibrary(study);
+  renderStudyRoutinesPanel(study);
   applyStudyMasterTabUi();
 }
 
@@ -4022,7 +5468,7 @@ function handleStudyMasterSubmit(e) {
     StudyMasterStore.updateStudy(studyId, payload);
     selectedStudyMasterId = studyId;
   } else {
-    const created = StudyMasterStore.createStudy({ ...payload, siteIds: [], systems: [], taskRules: [], customTaskNames: [] });
+    const created = StudyMasterStore.createStudy({ ...payload, siteIds: [], systems: [], taskRules: [], workflows: [], routines: [], customTaskNames: [] });
     selectedStudyMasterId = created.id;
   }
 
@@ -5150,6 +6596,14 @@ function normalizeTask(item) {
     normalized.inbox = true;
   }
 
+  if (item.workflowId) {
+    normalized.workflowId = item.workflowId;
+  }
+
+  if (item.routineId) {
+    normalized.routineId = item.routineId;
+  }
+
   return normalized;
 }
 
@@ -5297,7 +6751,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.0.0";
-const APP_BUILD = "27";
+const APP_BUILD = "31";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -6478,19 +7932,17 @@ function handleAddTask(e) {
     newTask.inbox = true;
   }
 
-  TaskStore.add(newTask);
+  const matches = findMatchingWorkflows(taskName, study).map((workflow) => ({
+    workflow,
+    ref: getWorkflowRef(workflow),
+  }));
 
-  if (window.CalendarSyncManager && newTask.dueDate) {
-    CalendarSyncManager.onTaskCreated(newTask.id);
+  if (matches.length > 0) {
+    openWorkflowSuggestModal(matches, newTask);
+    return;
   }
 
-  els.taskForm.reset();
-  addTaskPresetPriority = "Medium";
-  if (els.addTaskPriority) els.addTaskPriority.value = "Medium";
-  refreshTaskStudySiteSelects();
-  updateSiteInfoDisplays();
-  closeAddTaskModal();
-  renderAll();
+  persistPendingTaskDraft(newTask);
 }
 
 function handleEditTask(e) {
@@ -6556,6 +8008,15 @@ function handleEditTask(e) {
   if (!wasCompleted && newStatus === "Completed") {
     const completedTask = tasks.find((t) => t.id === id);
     workflowCount = runWorkflowAutomation(completedTask).length;
+    lastCompletedTaskContext = {
+      id: completedTask.id,
+      study: completedTask.study,
+      site: completedTask.site,
+      task: completedTask.task,
+      dueDate: completedTask.dueDate,
+      priority: completedTask.priority,
+      completedAt: completedTask.completedAt || new Date().toISOString(),
+    };
   }
 
   const updatedTask = tasks.find((t) => t.id === id);
@@ -6629,6 +8090,7 @@ function populateTaskDetailForm(task) {
   taskDetailChecklistDraft = (task.checklist || []).map((item) => ({ ...item }));
   renderTaskDetailChecklist();
   renderTaskDetailHistory(task);
+  renderTaskDetailLinks(task);
 
   if (els.taskDetailTitle) {
     els.taskDetailTitle.textContent = task.task || "Task";
