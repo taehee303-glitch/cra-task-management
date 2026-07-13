@@ -17,6 +17,29 @@ _(none)_
 
 ---
 
+## [1.2.0] — build 56 — 2026-07-14 — Workflow Engine (Instance-based)
+
+### Added
+
+- **WorkflowInstanceStore** — WorkflowRecord(템플릿)과 실행 중인 WorkflowInstance 분리
+- Task 필드: `workflowInstanceId`, `workflowRecordId`, `stepIndex`
+- 기존 `workflowId` 데이터 → Instance 자동 마이그레이션
+
+### Changed
+
+- Dashboard · Workflow Detail · Progress · Learning — **workflowInstanceId** 기준 조회 (이름/Legacy Rule 매칭 제거)
+- Workflow Library 적용 · Learning 저장 시 Instance 생성 후 Task 연결
+- Learning 새 Workflow 생성 시 **새 Instance** (기존 SIV Instance와 분리)
+- Cloud Sync — `workflowInstances` 소스 추가
+
+### Architecture (향후 확장)
+
+- WorkflowRecord = Template (Version / Clone / Analytics 대비)
+- WorkflowInstance = 실행 단위 (Study별 독립 Progress)
+- Task → Instance 참조로 Dependency · AI 추천 확장 용이
+
+---
+
 ## [1.1.0] — build 55 — 2026-07-14 — Workflow Learn task binding
 
 ### Fixed
