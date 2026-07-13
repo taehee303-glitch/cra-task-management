@@ -5493,20 +5493,53 @@ function getWorkflowRootTask(task) {
   return current;
 }
 
-function resolveTaskWorkflowId(task) {
+function getWorkflowRootTaskForRecord(task, workflow) {
   if (!task) return null;
-  if (task.workflowId) return task.workflowId;
+  if (!workflow) return getWorkflowRootTask(task);
 
-  const root = getWorkflowRootTask(task);
-  if (root?.workflowId) return root.workflowId;
+  const rootLabel = (workflow.rootTaskName || getWorkflowRootLabel(workflow) || "").trim().toLowerCase();
+  if (!rootLabel) return getWorkflowRootTask(task);
 
   let current = task;
   const visited = new Set();
   while (current) {
-    if (current.workflowId) return current.workflowId;
+    if ((current.task || "").trim().toLowerCase() === rootLabel) return current;
     if (!current.parentTaskId || visited.has(current.parentTaskId)) break;
     visited.add(current.id);
     current = tasks.find((t) => t.id === current.parentTaskId);
+  }
+
+  const workflowId = workflow.id;
+  if (workflowId) {
+    const match = tasks.find(
+      (item) =>
+        (item.workflowId === workflowId || resolveTaskWorkflowId(item) === workflowId) &&
+        (item.task || "").trim().toLowerCase() === rootLabel
+    );
+    if (match) return match;
+  }
+
+  return getWorkflowRootTask(task);
+}
+
+function resolveWorkflowContext(task) {
+  const workflow = resolveTaskWorkflowRecord(task);
+  const root = workflow ? getWorkflowRootTaskForRecord(task, workflow) : getWorkflowRootTask(task);
+  return { workflow, root };
+}
+
+function resolveTaskWorkflowId(task) {
+  if (!task) return null;
+  if (task.workflowId) return task.workflowId;
+
+  let current = task;
+  const visited = new Set();
+  while (current?.parentTaskId && !visited.has(current.parentTaskId)) {
+    visited.add(current.id);
+    const parent = tasks.find((t) => t.id === current.parentTaskId);
+    if (!parent) break;
+    if (parent.workflowId) return parent.workflowId;
+    current = parent;
   }
 
   return null;
@@ -5542,23 +5575,8 @@ function inferWorkflowRecordForTaskChain(task) {
 function resolveTaskWorkflowRecord(task) {
   if (!task) return null;
 
-  const root = getWorkflowRootTask(task);
-  const chainTasks = root ? [root, ...getSubtasks(root.id)] : [task];
-
-  let workflowId = null;
-  for (const chainTask of chainTasks) {
-    if (chainTask.workflowId) {
-      workflowId = chainTask.workflowId;
-      break;
-    }
-  }
-  if (!workflowId) workflowId = resolveTaskWorkflowId(task);
-
+  const workflowId = resolveTaskWorkflowId(task);
   if (workflowId) {
-    for (const chainTask of chainTasks) {
-      const workflow = findWorkflowByIdAnywhere(workflowId, chainTask.study || task.study);
-      if (workflow) return workflow;
-    }
     const workflow = findWorkflowByIdAnywhere(workflowId, task.study);
     if (workflow) return workflow;
   }
@@ -5642,11 +5660,8 @@ function getWorkflowStepProgress(task) {
 }
 
 function getWorkflowStepPosition(task) {
-  const root = getWorkflowRootTask(task);
-  if (!root) return null;
-
-  const workflow = resolveTaskWorkflowRecord(task);
-  if (!workflow) return null;
+  const { workflow, root } = resolveWorkflowContext(task);
+  if (!root || !workflow) return null;
 
   const workflowName = workflow.name?.trim() || getWorkflowRootLabel(workflow);
   if (!workflowName) return null;
@@ -5802,8 +5817,7 @@ function renderDashboardWorkflowAdjacentSteps(task, workflow, rootTask) {
 }
 
 function renderDashboardWorkflowDetailContent(task) {
-  const workflow = resolveTaskWorkflowRecord(task);
-  const root = getWorkflowRootTask(task);
+  const { workflow, root } = resolveWorkflowContext(task);
 
   if (!workflow || !root) {
     return `
@@ -5834,8 +5848,7 @@ function renderDashboardWorkflowDetailContent(task) {
 function renderWorkflowTimeline(task, options = {}) {
   const interactive = options.interactive !== false;
   const clickMode = options.clickMode || "edit";
-  const workflow = resolveTaskWorkflowRecord(task);
-  const root = getWorkflowRootTask(task);
+  const { workflow, root } = resolveWorkflowContext(task);
   if (!workflow || !root) return "";
 
   const children = getSubtasks(root.id).sort(compareTasks);
@@ -6145,6 +6158,40 @@ function saveWorkflowWithScope(payload, scope, studyProtocol) {
   return null;
 }
 
+function buildWorkflowRefFromSaved(saved, scope, studyProtocol) {
+  if (!saved?.id) return null;
+  if (scope === "study") {
+    const study = StudyMasterStore.getByProtocol(studyProtocol);
+    if (!study) return null;
+    return { scope: "study", id: saved.id, studyId: study.id };
+  }
+  if (scope === "workspace") {
+    return { scope: "workspace", id: saved.id, studyId: null };
+  }
+  return null;
+}
+
+function applyLearnedWorkflowToTaskChain(rootTaskRef, followUpTaskRef, workflow, ref) {
+  if (!workflow?.id || !rootTaskRef?.id) return;
+
+  const rootTask = tasks.find((task) => task.id === rootTaskRef.id) || rootTaskRef;
+  TaskStore.update(rootTask.id, { workflowId: workflow.id });
+
+  if (followUpTaskRef?.id) {
+    const followUpTask = tasks.find((task) => task.id === followUpTaskRef.id) || followUpTaskRef;
+    TaskStore.update(followUpTask.id, {
+      workflowId: workflow.id,
+      parentTaskId: rootTask.id,
+    });
+  }
+
+  if (ref?.scope === "study" && ref.studyId) {
+    StudyMasterStore.recordWorkflowUsage(ref.studyId, workflow.id);
+  } else if (ref?.scope === "workspace") {
+    WorkspaceWorkflowStore.recordUsage(ref.id);
+  }
+}
+
 function openWorkflowLearnModal(context) {
   if (!els.workflowLearnModal || !els.workflowLearnBody) return;
 
@@ -6251,15 +6298,24 @@ function handleWorkflowLearnSave() {
     if (study && workflowId) {
       const existing = StudyMasterStore.getWorkflow(study.id, workflowId);
       if (existing) {
-        StudyMasterStore.updateWorkflow(study.id, workflowId, {
+        const updated = StudyMasterStore.updateWorkflow(study.id, workflowId, {
           steps: [...(existing.steps || []), step],
           source: "learned",
           trigger: "TASK_COMPLETED",
           category: inferWorkflowCategory(existing.name, existing.tags),
         });
-        showToast("Workflow가 업데이트되었습니다.");
-        closeWorkflowLearnModal();
-        if (selectedStudyMasterId === study.id) renderStudyWorkflowLibrary(study);
+        if (updated) {
+          applyLearnedWorkflowToTaskChain(root, followUp, updated, {
+            scope: "study",
+            id: workflowId,
+            studyId: study.id,
+          });
+          renderAll();
+          showToast("Workflow가 업데이트되었습니다.");
+          closeWorkflowLearnModal();
+          if (selectedStudyMasterId === study.id) renderStudyWorkflowLibrary(study);
+          renderWorkflowMaster();
+        }
         return;
       }
     }
@@ -6281,6 +6337,9 @@ function handleWorkflowLearnSave() {
 
   const saved = saveWorkflowWithScope(payload, scope, root.study);
   if (saved) {
+    const ref = buildWorkflowRefFromSaved(saved, scope, root.study);
+    applyLearnedWorkflowToTaskChain(root, followUp, saved, ref);
+    renderAll();
     showToast(scope === "study" ? "Study Workflow로 저장했습니다." : "Workspace Workflow로 저장했습니다.");
   }
   closeWorkflowLearnModal();
@@ -8152,7 +8211,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "54";
+const APP_BUILD = "55";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9336,9 +9395,6 @@ function handleAddTask(e) {
   const followUpParent = pendingFollowUpParentTask;
   if (followUpParent) {
     newTask.parentTaskId = followUpParent.id;
-    const root = getWorkflowRootTask(followUpParent);
-    const workflowId = followUpParent.workflowId || root?.workflowId;
-    if (workflowId) newTask.workflowId = workflowId;
     pendingFollowUpParentTask = null;
     updateAddTaskFollowUpContextPanel();
     persistPendingTaskDraft(newTask);

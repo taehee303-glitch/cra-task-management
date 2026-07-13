@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 55 — 2026-07-14 — Workflow Learn task binding
+
+### Fixed
+
+- **Workflow Learning** — 새 Workflow 저장 시 Root Task(완료 Task) · Follow-up Task에 **새 workflowId** 연결
+- Follow-up Task가 기존 SIV 등 상위 Workflow를 계속 참조하던 문제 수정
+- Workflow 표시 시 **WorkflowRecord.rootTaskName** 기준 Root Task 탐색 (상위 parent chain과 분리)
+- `resolveTaskWorkflowId` — Task 자신 → 직계 parent 순으로 workflowId 해석
+
+---
+
 ## [1.1.0] — build 54 — 2026-07-14 — Follow-up Site prefill
 
 ### Fixed
