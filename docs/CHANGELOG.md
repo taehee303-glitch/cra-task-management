@@ -17,6 +17,21 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 39 — 2026-07-13 — Dashboard QA fixes
+
+### Fixed
+
+- **Dashboard Status Dropdown** — Portal(fixed) 방식으로 변경, 스크롤 영역에 잘리지 않음
+- **Follow-up → Add Task → Learning** — 「예」 클릭 시 새 업무 Modal 즉시 오픈, parentTaskId·workflowId 연결
+- Follow-up Task 저장 후 Workflow Learning Modal 정상 연결
+
+### Changed
+
+- Follow-up Prompt 문구: 「이 업무 이후 이어지는 다음 업무가 있나요?」
+- 후속 Task 추가 Modal에 Workflow 이름·Step 정보 표시
+
+---
+
 ## [1.1.0] — build 38 — 2026-07-13 — Dashboard execution UI polish
 
 ### Changed

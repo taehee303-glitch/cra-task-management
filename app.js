@@ -220,6 +220,8 @@ const PRIORITY_SORT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
 let currentViewName = "dashboard";
 let followUpPromptContext = null;
+let pendingFollowUpParentTask = null;
+let activeStatusPicker = null;
 let mobileDailyFilter = null;
 
 let addTaskPresetPriority = "Medium";
@@ -257,6 +259,8 @@ const els = {
   addTaskModal: document.getElementById("addTaskModal"),
   closeAddTaskModalBtn: document.getElementById("closeAddTaskModalBtn"),
   addTaskModalTitle: document.getElementById("addTaskModalTitle"),
+  addTaskFollowUpContext: document.getElementById("addTaskFollowUpContext"),
+  addTaskWorkflowHintDefault: document.getElementById("addTaskWorkflowHintDefault"),
   sidebar: document.getElementById("sidebar"),
   sidebarBackdrop: document.getElementById("sidebarBackdrop"),
   sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
@@ -943,7 +947,12 @@ async function bootstrapApp() {
   });
   els.filterStudy.addEventListener("change", renderTaskList);
   els.filterStatus.addEventListener("change", renderTaskList);
-  document.addEventListener("click", closeAllStatusDropdowns);
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-status-trigger], #statusPickerPortal, .status-picker-portal")) return;
+    closeAllStatusDropdowns();
+  });
+  window.addEventListener("scroll", handleStatusPickerDismiss, true);
+  window.addEventListener("resize", handleStatusPickerDismiss);
   els.dashboardFilterCards.forEach((card) => {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
@@ -3546,7 +3555,12 @@ function openAddTaskModal(presetOrOptions = null) {
     options = presetOrOptions;
   }
 
-  const defaultTitle = isDailyMode() && !preset ? "새 업무 등록" : preset?.title || "새 업무";
+  const isFollowUp = Boolean(options.followUp || pendingFollowUpParentTask);
+  const defaultTitle = isFollowUp
+    ? "후속 Task 추가"
+    : isDailyMode() && !preset
+      ? "새 업무 등록"
+      : preset?.title || "새 업무";
   if (els.addTaskModalTitle) {
     els.addTaskModalTitle.textContent = defaultTitle;
   }
@@ -3570,14 +3584,25 @@ function openAddTaskModal(presetOrOptions = null) {
   }
   updateSiteInfoDisplays();
   updateSiteSelectHint(els.study.value, els.siteMasterHint);
-  if (els.addTaskModal) els.addTaskModal.hidden = false;
-  updateAddTaskWorkflowHint();
+  updateAddTaskFollowUpContextPanel();
+  if (els.addTaskModal) {
+    els.addTaskModal.hidden = false;
+  }
+  if (!isFollowUp) {
+    updateAddTaskWorkflowHint();
+  } else if (els.taskWorkflowMatchHint) {
+    els.taskWorkflowMatchHint.hidden = true;
+    els.taskWorkflowMatchHint.innerHTML = "";
+  }
+  requestAnimationFrame(() => els.task?.focus());
 }
 
 function closeAddTaskModal() {
   if (!els.addTaskModal) return;
   els.addTaskModal.hidden = true;
+  pendingFollowUpParentTask = null;
   if (els.taskWorkflowMatchHint) els.taskWorkflowMatchHint.hidden = true;
+  updateAddTaskFollowUpContextPanel();
 }
 
 function handleNavAction(action) {
@@ -4662,6 +4687,61 @@ function shouldOfferWorkflowLearn(draft) {
   return Date.now() - completedAt <= 7 * 24 * 60 * 60 * 1000;
 }
 
+function buildFollowUpWorkflowContextHtml(completedTask) {
+  if (!completedTask) return "";
+  const step = getWorkflowStepPosition(completedTask);
+  const workflowInfo = resolveTaskWorkflowDisplay(completedTask);
+  const workflowName = step?.name || workflowInfo?.name || null;
+  const nextStepNum = step && step.total > 1 ? Math.min(step.current + 1, step.total) : null;
+
+  return `
+    <p class="add-task-followup-context__eyebrow">Workflow 후속 Task 추가</p>
+    <p class="add-task-followup-context__prev">완료: ${escapeHtml(completedTask.task)}</p>
+    ${
+      workflowName
+        ? `<p class="add-task-followup-context__workflow"><span class="add-task-followup-context__dot" aria-hidden="true">🟣</span> ${escapeHtml(workflowName)}</p>`
+        : ""
+    }
+    ${
+      step && step.total > 1
+        ? `<p class="add-task-followup-context__step">Step ${step.current} 완료${nextStepNum ? ` → 다음 Step ${nextStepNum} / ${step.total}` : ` / ${step.total}`}</p>`
+        : ""
+    }
+  `;
+}
+
+function updateAddTaskFollowUpContextPanel() {
+  const isFollowUp = Boolean(pendingFollowUpParentTask);
+  if (els.addTaskWorkflowHintDefault) {
+    els.addTaskWorkflowHintDefault.hidden = isFollowUp;
+  }
+  if (!els.addTaskFollowUpContext) return;
+  if (!pendingFollowUpParentTask) {
+    els.addTaskFollowUpContext.hidden = true;
+    els.addTaskFollowUpContext.innerHTML = "";
+    return;
+  }
+  els.addTaskFollowUpContext.hidden = false;
+  els.addTaskFollowUpContext.innerHTML = buildFollowUpWorkflowContextHtml(pendingFollowUpParentTask);
+}
+
+function openAddTaskModalForFollowUp(completedTask) {
+  if (!completedTask) return;
+  pendingFollowUpParentTask = completedTask;
+  openAddTaskModal({
+    study: completedTask.study || "",
+    site: completedTask.site || "",
+    priority: completedTask.priority || "Medium",
+    followUp: true,
+  });
+}
+
+function resolveFollowUpCompletedTask() {
+  if (followUpPromptContext) return followUpPromptContext;
+  if (!lastCompletedTaskContext?.id) return null;
+  return tasks.find((t) => t.id === lastCompletedTaskContext.id) || lastCompletedTaskContext;
+}
+
 function openFollowUpPromptModal(completedTask, workflowCount = 0) {
   if (!els.followUpPromptModal || !completedTask) return;
 
@@ -4669,7 +4749,7 @@ function openFollowUpPromptModal(completedTask, workflowCount = 0) {
   if (els.followUpPromptSummary) {
     const autoNote =
       workflowCount > 0 ? ` ${workflowCount}개의 후속 Task가 자동 생성되었습니다.` : "";
-    els.followUpPromptSummary.textContent = `「${completedTask.task}」 완료.${autoNote} 연결된 후속 업무가 있으면 등록해 주세요.`;
+    els.followUpPromptSummary.textContent = `「${completedTask.task}」 완료.${autoNote} 다음에 이어질 업무가 있으면 등록해 주세요.`;
   }
   els.followUpPromptModal.hidden = false;
 }
@@ -4679,16 +4759,16 @@ function closeFollowUpPromptModal() {
   if (els.followUpPromptModal) els.followUpPromptModal.hidden = true;
 }
 
-function handleFollowUpPromptYes() {
-  const completedTask = followUpPromptContext;
+function handleFollowUpPromptYes(event) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  const completedTask = resolveFollowUpCompletedTask();
   closeFollowUpPromptModal();
-  if (!completedTask) return;
-
-  openAddTaskModal({
-    study: completedTask.study || "",
-    site: completedTask.site || "",
-    priority: completedTask.priority || "Medium",
-  });
+  if (!completedTask) {
+    showToast("완료된 Task 정보를 찾을 수 없습니다.");
+    return;
+  }
+  openAddTaskModalForFollowUp(completedTask);
 }
 
 function finalizeTaskCompletion(completedTask, workflowCount = 0) {
@@ -7034,7 +7114,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "38";
+const APP_BUILD = "39";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -8215,6 +8295,18 @@ function handleAddTask(e) {
     newTask.inbox = true;
   }
 
+  const followUpParent = pendingFollowUpParentTask;
+  if (followUpParent) {
+    newTask.parentTaskId = followUpParent.id;
+    const root = getWorkflowRootTask(followUpParent);
+    const workflowId = followUpParent.workflowId || root?.workflowId;
+    if (workflowId) newTask.workflowId = workflowId;
+    pendingFollowUpParentTask = null;
+    updateAddTaskFollowUpContextPanel();
+    persistPendingTaskDraft(newTask);
+    return;
+  }
+
   const matches = findMatchingWorkflows(taskName, study).map((workflow) => ({
     workflow,
     ref: getWorkflowRef(workflow),
@@ -8624,7 +8716,89 @@ function closeAllStatusDropdowns() {
   document.querySelectorAll("[data-status-trigger]").forEach((btn) => {
     btn.setAttribute("aria-expanded", "false");
   });
+  closeStatusPickerPortal();
   closeAllPriorityDropdowns();
+}
+
+function handleStatusPickerDismiss() {
+  if (activeStatusPicker) closeAllStatusDropdowns();
+}
+
+function closeStatusPickerPortal() {
+  const portal = document.getElementById("statusPickerPortal");
+  if (portal) {
+    portal.hidden = true;
+    portal.innerHTML = "";
+  }
+  if (activeStatusPicker?.trigger) {
+    activeStatusPicker.trigger.setAttribute("aria-expanded", "false");
+  }
+  activeStatusPicker = null;
+}
+
+function shouldUseStatusPickerPortal(triggerBtn) {
+  return Boolean(triggerBtn?.closest("#viewDashboard, .dash-list, .mobile-daily, .mobile-task-feed"));
+}
+
+function positionStatusPickerPortal(triggerBtn, portal) {
+  portal.style.visibility = "hidden";
+  portal.hidden = false;
+
+  const rect = triggerBtn.getBoundingClientRect();
+  const menuHeight = portal.offsetHeight || 200;
+  const viewportH = window.innerHeight;
+  const openUpward = rect.bottom + menuHeight + 8 > viewportH && rect.top > menuHeight + 8;
+
+  portal.style.position = "fixed";
+  portal.style.zIndex = "1200";
+  portal.style.minWidth = `${Math.max(rect.width, 148)}px`;
+
+  if (openUpward) {
+    portal.style.top = "auto";
+    portal.style.bottom = `${viewportH - rect.top + 4}px`;
+  } else {
+    portal.style.top = `${rect.bottom + 4}px`;
+    portal.style.bottom = "auto";
+  }
+
+  const maxLeft = window.innerWidth - portal.offsetWidth - 8;
+  portal.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
+  portal.style.visibility = "visible";
+}
+
+function openStatusPickerPortal(taskId, triggerBtn) {
+  closeStatusPickerPortal();
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task || !triggerBtn) return;
+
+  let portal = document.getElementById("statusPickerPortal");
+  if (!portal) {
+    portal = document.createElement("div");
+    portal.id = "statusPickerPortal";
+    portal.className = "status-picker-portal";
+    portal.setAttribute("role", "listbox");
+    document.body.appendChild(portal);
+  }
+
+  portal.innerHTML = INLINE_STATUS_OPTIONS.map(
+    (status) => `
+      <button type="button" class="status-picker-portal__option${status === task.status ? " status-picker-portal__option--active" : ""}" data-status-option data-task-id="${escapeAttr(taskId)}" data-status="${escapeAttr(status)}" role="option">
+        ${escapeHtml(status)}
+      </button>
+    `
+  ).join("");
+
+  triggerBtn.setAttribute("aria-expanded", "true");
+  activeStatusPicker = { taskId, trigger: triggerBtn };
+  positionStatusPickerPortal(triggerBtn, portal);
+
+  portal.querySelectorAll("[data-status-option]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyTaskStatusChange(btn.dataset.taskId, btn.dataset.status);
+      closeAllStatusDropdowns();
+    });
+  });
 }
 
 function bindStatusDropdowns(container = els.taskCardList) {
@@ -8633,6 +8807,17 @@ function bindStatusDropdowns(container = els.taskCardList) {
   container.querySelectorAll("[data-status-trigger]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
+      const taskId = btn.dataset.statusTrigger;
+      const usePortal = shouldUseStatusPickerPortal(btn);
+
+      if (usePortal) {
+        const portal = document.getElementById("statusPickerPortal");
+        const isOpen = activeStatusPicker?.trigger === btn && portal && !portal.hidden;
+        closeAllStatusDropdowns();
+        if (!isOpen) openStatusPickerPortal(taskId, btn);
+        return;
+      }
+
       const menu = btn.closest(".status-dropdown")?.querySelector(".status-dropdown__menu");
       if (!menu) return;
 

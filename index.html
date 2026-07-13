@@ -1052,6 +1052,7 @@
         <h3 id="addTaskModalTitle">새 업무</h3>
         <button type="button" class="modal-close" id="closeAddTaskModalBtn">&times;</button>
       </div>
+      <div id="addTaskFollowUpContext" class="add-task-followup-context" hidden aria-live="polite"></div>
       <form id="taskForm" class="task-form">
         <div class="form-grid">
           <div class="form-group">
@@ -1080,7 +1081,7 @@
             <label for="task">Task</label>
             <input type="text" id="task" name="task" placeholder="예: Monitoring Visit, SIV, SDV..." required />
             <div id="taskWorkflowMatchHint" class="task-workflow-hint" hidden aria-live="polite"></div>
-            <p class="form-hint form-hint--workflow">Monitoring Visit · SIV · COV 등 입력 시 Workflow Flow를 제안합니다.</p>
+            <p class="form-hint form-hint--workflow" id="addTaskWorkflowHintDefault">Monitoring Visit · SIV · COV 등 입력 시 Workflow Flow를 제안합니다.</p>
           </div>
           <div class="form-group">
             <label for="dueDate">Due Date</label>
@@ -1190,14 +1191,14 @@
   <div class="modal-overlay" id="followUpPromptModal" hidden>
     <div class="modal modal--sheet">
       <div class="modal-header">
-        <h3>추가로 진행할 업무가 있나요?</h3>
+        <h3>이 업무 이후 이어지는 다음 업무가 있나요?</h3>
         <button type="button" class="modal-close" id="closeFollowUpPromptBtn" aria-label="닫기">&times;</button>
       </div>
       <div class="modal-body">
         <p id="followUpPromptSummary" class="form-hint"></p>
       </div>
       <div class="form-actions">
-        <button type="button" class="btn btn--primary" id="followUpPromptYesBtn">예, 추가합니다</button>
+        <button type="button" class="btn btn--primary" id="followUpPromptYesBtn">예</button>
         <button type="button" class="btn btn--ghost" id="followUpPromptNoBtn">아니오</button>
       </div>
     </div>
