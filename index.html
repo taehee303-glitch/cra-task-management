@@ -947,6 +947,18 @@
         </button>
       </nav>
 
+      <!-- Dashboard Workflow Detail (read-only Control Center) -->
+      <aside id="dashboardWorkflowPanel" class="dashboard-workflow-panel" hidden aria-label="Workflow detail">
+        <header class="dashboard-workflow-panel__header">
+          <h3 class="dashboard-workflow-panel__title" id="dashboardWorkflowTitle">Workflow</h3>
+          <button type="button" class="dashboard-workflow-panel__close" id="closeDashboardWorkflowBtn" aria-label="닫기">&times;</button>
+        </header>
+        <div class="dashboard-workflow-panel__scroll" id="dashboardWorkflowBody"></div>
+        <footer class="dashboard-workflow-panel__footer">
+          <button type="button" class="btn btn--primary dashboard-workflow-panel__edit-btn" id="dashboardWorkflowEditBtn">My Tasks에서 수정</button>
+        </footer>
+      </aside>
+
       <!-- Task Detail (PC: split panel / Mobile: fullscreen) -->
       <aside id="taskDetailPanel" class="task-detail-panel" hidden aria-label="Task detail">
         <header class="task-detail-panel__header">

@@ -4505,6 +4505,248 @@ body.body--settings-open {
   z-index: 2;
 }
 
+/* Dashboard read-only Workflow Detail split panel */
+.app-mode-management.dashboard-workflow-open .workspace__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(420px, 36vw);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.app-mode-management.dashboard-workflow-open .topbar {
+  grid-column: 1 / -1;
+}
+
+.app-mode-management.dashboard-workflow-open .main {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-mode-management.dashboard-workflow-open #dashboardWorkflowPanel:not([hidden]) {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  align-self: stretch;
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 16px rgba(15, 23, 42, 0.06);
+  z-index: 2;
+}
+
+.dashboard-workflow-panel {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  overflow: hidden;
+}
+
+.dashboard-workflow-panel[hidden] {
+  display: none !important;
+}
+
+.dashboard-workflow-panel__header {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
+}
+
+.dashboard-workflow-panel__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #5b21b6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-workflow-panel__close {
+  min-width: 36px;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.dashboard-workflow-panel__scroll {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px 16px;
+}
+
+.dashboard-workflow-panel__footer {
+  flex-shrink: 0;
+  padding: 10px 14px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: #fff;
+}
+
+.dashboard-workflow-panel__edit-btn {
+  width: 100%;
+}
+
+.dashboard-workflow-summary {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.dashboard-workflow-summary__title {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.dashboard-workflow-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  margin: 0;
+}
+
+.dashboard-workflow-summary__item dt {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.dashboard-workflow-summary__item dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.dashboard-workflow-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: #f5f3ff;
+}
+
+.dashboard-workflow-progress__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #6d28d9;
+}
+
+.dashboard-workflow-progress__value {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #5b21b6;
+}
+
+.dashboard-workflow-progress__bar {
+  flex: 1 1 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #e9d5ff;
+  overflow: hidden;
+}
+
+.dashboard-workflow-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+}
+
+.dashboard-workflow-next {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px dashed #c4b5fd;
+  border-radius: 10px;
+  background: #faf5ff;
+}
+
+.dashboard-workflow-next--done {
+  border-style: solid;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.dashboard-workflow-next__title {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #7c3aed;
+}
+
+.dashboard-workflow-next__name {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.dashboard-workflow-next__meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.dashboard-workflow-empty {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.dashboard-workflow-empty__text {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.dashboard-workflow-empty__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.dash-item--readonly.dash-item--interactive {
+  display: block;
+}
+
+.dash-item--readonly .dash-item__main {
+  width: 100%;
+  padding-right: 22px;
+}
+
+.app-mode-daily #dashboardWorkflowPanel:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 450;
+  width: 100vw;
+  max-height: 100dvh;
+}
+
 .app-mode-management .task-detail-panel__back {
   display: none;
 }

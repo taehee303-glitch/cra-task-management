@@ -224,6 +224,7 @@ let followUpPromptContext = null;
 let pendingFollowUpParentTask = null;
 let workflowDetailEditRef = null;
 let workflowDetailDraft = null;
+let dashboardWorkflowTaskId = null;
 let activeStatusPicker = null;
 let mobileDailyFilter = null;
 
@@ -252,6 +253,11 @@ const els = {
   viewInbox: document.getElementById("viewInbox"),
   viewCalendar: document.getElementById("viewCalendar"),
   viewDashboard: document.getElementById("viewDashboard"),
+  dashboardWorkflowPanel: document.getElementById("dashboardWorkflowPanel"),
+  dashboardWorkflowBody: document.getElementById("dashboardWorkflowBody"),
+  dashboardWorkflowTitle: document.getElementById("dashboardWorkflowTitle"),
+  dashboardWorkflowEditBtn: document.getElementById("dashboardWorkflowEditBtn"),
+  closeDashboardWorkflowBtn: document.getElementById("closeDashboardWorkflowBtn"),
   viewReference: document.getElementById("viewReference"),
   viewStudyMaster: document.getElementById("viewStudyMaster"),
   viewSystemMaster: document.getElementById("viewSystemMaster"),
@@ -981,6 +987,10 @@ async function bootstrapApp() {
   els.importCsvInput.addEventListener("change", handleCsvImport);
   bindEvent(els.editForm, "submit", handleEditTask);
   bindEvent(els.closeTaskDetailBtn, "click", closeTaskDetail);
+  bindEvent(els.closeDashboardWorkflowBtn, "click", closeDashboardWorkflowDetail);
+  bindEvent(els.dashboardWorkflowEditBtn, "click", () => {
+    if (dashboardWorkflowTaskId) navigateToMyTasksEdit(dashboardWorkflowTaskId);
+  });
   bindEvent(els.taskDetailBackBtn, "click", closeTaskDetail);
   bindEvent(els.cancelEditBtn, "click", closeTaskDetail);
   bindEvent(els.deleteTaskDetailBtn, "click", () => {
@@ -3496,6 +3506,7 @@ function switchView(viewName) {
   closeSidebar();
   closeMasterSheet();
   if (selectedTaskId) closeTaskDetail();
+  if (viewName !== "dashboard") closeDashboardWorkflowDetail();
 
   if (els.topbarTitle) {
     els.topbarTitle.textContent = getViewTitle(viewName);
@@ -5424,7 +5435,56 @@ function findTaskForWorkflowStepName(stepName, rootTask, children) {
   return children.find((child) => (child.task || "").trim().toLowerCase() === nameLower) || null;
 }
 
-function renderWorkflowTimeline(task) {
+function formatWorkflowStepDueHint(def, matchedTask) {
+  if (matchedTask?.dueDate) {
+    return ` (${formatDueLabel(matchedTask.dueDate)})`;
+  }
+  if (!def?.stepDef || def.kind === "root") return "";
+  const offset = def.stepDef.dueOffset;
+  if (!Number.isFinite(Number(offset)) || Number(offset) <= 0) return "";
+  const prefix = def.kind === "pre" ? "-" : "+";
+  const unit = def.stepDef.dueUnit === "business" ? " business days" : "일";
+  return ` (${prefix}${offset}${unit})`;
+}
+
+function getWorkflowProgressStats(workflow, rootTask) {
+  const children = getSubtasks(rootTask.id);
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, rootTask);
+  let completed = 0;
+  stepDefs.forEach((def) => {
+    const matched = findTaskForWorkflowStepName(def.taskName, rootTask, children);
+    if (matched?.status === "Completed") completed += 1;
+  });
+  return { completed, total: stepDefs.length };
+}
+
+function getNextWorkflowStepInfo(task, workflow, rootTask) {
+  const children = getSubtasks(rootTask.id).sort(compareTasks);
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, rootTask);
+  const currentIndex = Math.max(0, (getWorkflowStepIndexForTask(task, rootTask, workflow) || 1) - 1);
+
+  for (let index = currentIndex + 1; index < stepDefs.length; index += 1) {
+    const def = stepDefs[index];
+    const matched = findTaskForWorkflowStepName(def.taskName, rootTask, children);
+    if (matched?.status !== "Completed") {
+      return { def, matchedTask: matched, index };
+    }
+  }
+
+  for (let index = 0; index < currentIndex; index += 1) {
+    const def = stepDefs[index];
+    const matched = findTaskForWorkflowStepName(def.taskName, rootTask, children);
+    if (matched?.status !== "Completed") {
+      return { def, matchedTask: matched, index };
+    }
+  }
+
+  return null;
+}
+
+function renderWorkflowTimeline(task, options = {}) {
+  const interactive = options.interactive !== false;
+  const clickMode = options.clickMode || "edit";
   const workflow = resolveTaskWorkflowRecord(task);
   const root = getWorkflowRootTask(task);
   if (!workflow || !root) return "";
@@ -5452,10 +5512,18 @@ function renderWorkflowTimeline(task) {
         stateClass = "workflow-timeline__step--pending";
       }
 
-      const nameLabel = isCurrent ? `${def.taskName} (현재)` : def.taskName;
-      const stepInner = matchedTask
-        ? `<button type="button" class="workflow-timeline__btn" data-edit="${escapeAttr(matchedTask.id)}"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></button>`
-        : `<div class="workflow-timeline__placeholder"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></div>`;
+      const dueHint = !isDone ? formatWorkflowStepDueHint(def, matchedTask) : "";
+      const nameLabel = isCurrent ? `${def.taskName} (현재)` : `${def.taskName}${dueHint}`;
+      let stepInner;
+      if (matchedTask && interactive) {
+        const clickAttr =
+          clickMode === "dashboard"
+            ? `data-dashboard-step-task="${escapeAttr(matchedTask.id)}"`
+            : `data-edit="${escapeAttr(matchedTask.id)}"`;
+        stepInner = `<button type="button" class="workflow-timeline__btn" ${clickAttr}><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></button>`;
+      } else {
+        stepInner = `<div class="workflow-timeline__placeholder"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></div>`;
+      }
       const arrow =
         index < stepDefs.length - 1 ? '<div class="workflow-timeline__arrow" aria-hidden="true">↓</div>' : "";
 
@@ -5471,10 +5539,122 @@ function renderWorkflowTimeline(task) {
   `;
 }
 
-function bindWorkflowTimelineClicks(container) {
+function bindWorkflowTimelineClicks(container, mode = "edit") {
+  if (mode === "dashboard") {
+    container?.querySelectorAll("[data-dashboard-step-task]").forEach((btn) => {
+      btn.addEventListener("click", () => openDashboardWorkflowDetail(btn.dataset.dashboardStepTask));
+    });
+    return;
+  }
   container?.querySelectorAll(".workflow-timeline__btn[data-edit]").forEach((btn) => {
     btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
   });
+}
+
+function renderDashboardWorkflowTaskSummary(task) {
+  const studyLabel = task.study || "Study 미정";
+  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
+  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
+
+  return `
+    <section class="dashboard-workflow-summary">
+      <h4 class="dashboard-workflow-summary__title">${escapeHtml(task.task)}</h4>
+      <dl class="dashboard-workflow-summary__grid">
+        <div class="dashboard-workflow-summary__item"><dt>Study</dt><dd>${escapeHtml(studyLabel)}</dd></div>
+        <div class="dashboard-workflow-summary__item"><dt>Site</dt><dd>${escapeHtml(siteLabel)}</dd></div>
+        <div class="dashboard-workflow-summary__item"><dt>Due</dt><dd><span class="dashboard-workflow-summary__due ${dueClass}">${escapeHtml(dueLabel)}</span></dd></div>
+        <div class="dashboard-workflow-summary__item"><dt>Priority</dt><dd>${escapeHtml(task.priority || "Medium")}</dd></div>
+        <div class="dashboard-workflow-summary__item"><dt>Status</dt><dd><span class="status-badge status-badge--${statusClass(task.status)}">${escapeHtml(task.status)}</span></dd></div>
+      </dl>
+    </section>
+  `;
+}
+
+function renderDashboardWorkflowDetailContent(task) {
+  const workflow = resolveTaskWorkflowRecord(task);
+  const root = getWorkflowRootTask(task);
+  const summaryHtml = renderDashboardWorkflowTaskSummary(task);
+
+  if (!workflow || !root) {
+    return `
+      ${summaryHtml}
+      <section class="dashboard-workflow-empty">
+        <p class="dashboard-workflow-empty__text">연결된 Workflow가 없습니다.</p>
+        <p class="dashboard-workflow-empty__hint">My Tasks에서 Task를 관리하거나 Workflow Library에서 Flow를 적용할 수 있습니다.</p>
+      </section>
+    `;
+  }
+
+  const progress = getWorkflowProgressStats(workflow, root);
+  const timelineHtml = renderWorkflowTimeline(task, { clickMode: "dashboard" });
+  const nextInfo = getNextWorkflowStepInfo(task, workflow, root);
+  const nextHtml = nextInfo
+    ? `<section class="dashboard-workflow-next">
+        <h5 class="dashboard-workflow-next__title">다음 업무</h5>
+        <p class="dashboard-workflow-next__name">${escapeHtml(nextInfo.def.taskName)}</p>
+        ${
+          nextInfo.matchedTask
+            ? `<p class="dashboard-workflow-next__meta">${escapeHtml(formatDueDisplay(nextInfo.matchedTask))}</p>`
+            : `<p class="dashboard-workflow-next__meta">${escapeHtml(formatWorkflowStepDueHint(nextInfo.def, null).replace(/^\s*\(/, "").replace(/\)$/, "") || "예정")}</p>`
+        }
+      </section>`
+    : `<section class="dashboard-workflow-next dashboard-workflow-next--done">
+        <h5 class="dashboard-workflow-next__title">다음 업무</h5>
+        <p class="dashboard-workflow-next__name">모든 Workflow Step이 완료되었습니다.</p>
+      </section>`;
+
+  return `
+    ${summaryHtml}
+    <section class="dashboard-workflow-progress">
+      <span class="dashboard-workflow-progress__label">Workflow 진행률</span>
+      <span class="dashboard-workflow-progress__value">${progress.completed} / ${progress.total} 완료</span>
+      <div class="dashboard-workflow-progress__bar" role="progressbar" aria-valuenow="${progress.completed}" aria-valuemin="0" aria-valuemax="${progress.total}">
+        <span class="dashboard-workflow-progress__fill" style="width:${progress.total ? Math.round((progress.completed / progress.total) * 100) : 0}%"></span>
+      </div>
+    </section>
+    ${timelineHtml}
+    ${nextHtml}
+  `;
+}
+
+function openDashboardWorkflowDetail(taskId) {
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  dashboardWorkflowTaskId = taskId;
+  if (selectedTaskId) closeTaskDetail();
+
+  const workflow = resolveTaskWorkflowRecord(task);
+  const workflowName = workflow?.name?.trim() || getWorkflowRootLabel(workflow) || task.task;
+
+  if (els.dashboardWorkflowTitle) els.dashboardWorkflowTitle.textContent = workflowName;
+  if (els.dashboardWorkflowBody) {
+    els.dashboardWorkflowBody.innerHTML = renderDashboardWorkflowDetailContent(task);
+    bindWorkflowTimelineClicks(els.dashboardWorkflowBody, "dashboard");
+  }
+  if (els.dashboardWorkflowPanel) els.dashboardWorkflowPanel.hidden = false;
+  document.body.classList.add("dashboard-workflow-open");
+  updateDashboardWorkflowSelection();
+  els.dashboardWorkflowBody?.scrollTo(0, 0);
+}
+
+function closeDashboardWorkflowDetail() {
+  dashboardWorkflowTaskId = null;
+  if (els.dashboardWorkflowPanel) els.dashboardWorkflowPanel.hidden = true;
+  if (els.dashboardWorkflowBody) els.dashboardWorkflowBody.innerHTML = "";
+  document.body.classList.remove("dashboard-workflow-open");
+  updateDashboardWorkflowSelection();
+}
+
+function navigateToMyTasksEdit(taskId) {
+  closeDashboardWorkflowDetail();
+  switchView("tasks");
+  openTaskDetail(taskId);
+}
+
+function updateDashboardWorkflowSelection() {
+  updateTaskListSelection();
 }
 
 const DASHBOARD_TODAY_PREVIEW_LIMIT = DASHBOARD_SECTION_PREVIEW_LIMIT;
@@ -5597,7 +5777,7 @@ function renderTaskDetailLinks(task) {
     if (timelineHtml) {
       els.taskDetailWorkflowTimeline.hidden = false;
       els.taskDetailWorkflowTimeline.innerHTML = timelineHtml;
-      bindWorkflowTimelineClicks(els.taskDetailWorkflowTimeline);
+      bindWorkflowTimelineClicks(els.taskDetailWorkflowTimeline, "edit");
     } else {
       els.taskDetailWorkflowTimeline.hidden = true;
       els.taskDetailWorkflowTimeline.innerHTML = "";
@@ -7676,7 +7856,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "48";
+const APP_BUILD = "49";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9045,6 +9225,7 @@ function openTaskDetail(id) {
   const task = tasks.find((t) => t.id === id);
   if (!task) return;
 
+  closeDashboardWorkflowDetail();
   selectedTaskId = id;
   populateTaskDetailForm(task);
 
@@ -9088,13 +9269,15 @@ function unlockTaskDetailBodyScroll() {
 
 function updateTaskListSelection() {
   document.querySelectorAll("[data-task-id]").forEach((el) => {
-    el.classList.toggle("is-selected", selectedTaskId && el.dataset.taskId === selectedTaskId);
+    const isTaskEditSelected = selectedTaskId && el.dataset.taskId === selectedTaskId;
+    const isDashboardSelected = dashboardWorkflowTaskId && el.dataset.taskId === dashboardWorkflowTaskId;
+    el.classList.toggle("is-selected", isTaskEditSelected);
+    if (el.classList.contains("dash-item")) {
+      el.classList.toggle("dash-item--selected", Boolean(isDashboardSelected));
+    }
   });
   document.querySelectorAll(".mobile-task-card[data-edit]").forEach((el) => {
     el.classList.toggle("is-selected", selectedTaskId && el.dataset.edit === selectedTaskId);
-  });
-  document.querySelectorAll(".dash-item[data-task-id]").forEach((el) => {
-    el.classList.toggle("dash-item--selected", selectedTaskId && el.dataset.taskId === selectedTaskId);
   });
 }
 
@@ -9785,7 +9968,12 @@ function renderDashboardEmptyMsg(text) {
 
 function bindDashboardTaskActions() {
   if (!els.viewDashboard) return;
-  bindTaskListActions(els.viewDashboard);
+  els.viewDashboard.querySelectorAll("[data-dashboard-workflow]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openDashboardWorkflowDetail(btn.dataset.dashboardWorkflow);
+    });
+  });
   els.viewDashboard.querySelectorAll(".dash-more-btn[data-dashboard-filter]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -9816,8 +10004,8 @@ function renderDashItem(task, type, options = {}) {
 
   if (compact) {
     return `
-    <article class="dash-item dash-item--interactive dash-item--compact dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-item__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
+    <article class="dash-item dash-item--interactive dash-item--compact dash-item--readonly dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-item__main dash-item__main--readonly" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
         <div class="dash-item__head">
           <div class="dash-item__title-wrap">
             ${criticalBadge}
@@ -9831,12 +10019,6 @@ function renderDashItem(task, type, options = {}) {
         </div>
         <span class="dash-item__chevron" aria-hidden="true">›</span>
       </button>
-      <div class="dash-item__actions dash-item__actions--compact">
-        ${renderInlineStatusDropdown(task, { compact: true })}
-        <button type="button" class="dash-item__complete dash-item__complete--icon" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-          <span class="dash-item__complete-icon" aria-hidden="true">✓</span>
-        </button>
-      </div>
     </article>
   `;
   }
@@ -10001,6 +10183,22 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
 
 function renderAll() {
   renderDashboard();
+  if (dashboardWorkflowTaskId && currentViewName === "dashboard" && els.dashboardWorkflowPanel && !els.dashboardWorkflowPanel.hidden) {
+    const task = tasks.find((t) => t.id === dashboardWorkflowTaskId);
+    if (task) {
+      const workflow = resolveTaskWorkflowRecord(task);
+      if (els.dashboardWorkflowTitle) {
+        els.dashboardWorkflowTitle.textContent =
+          workflow?.name?.trim() || getWorkflowRootLabel(workflow) || task.task;
+      }
+      if (els.dashboardWorkflowBody) {
+        els.dashboardWorkflowBody.innerHTML = renderDashboardWorkflowDetailContent(task);
+        bindWorkflowTimelineClicks(els.dashboardWorkflowBody, "dashboard");
+      }
+    } else {
+      closeDashboardWorkflowDetail();
+    }
+  }
   if (isDailyMode()) {
     renderMobileDailyHome();
   } else {

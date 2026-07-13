@@ -17,6 +17,22 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 49 — 2026-07-13 — Dashboard Read / My Tasks Manage
+
+### Added
+
+- **Dashboard Workflow Detail (읽기 전용)** — Task 클릭 시 Edit 대신 Workflow Context 패널
+  - 현재 Task 정보 · Workflow Timeline · 진행률 · 다음 업무 · **My Tasks에서 수정** 버튼
+- Timeline pending Step에 due offset 표시 (예: `○ Expense Claim (+2일)`)
+
+### Changed
+
+- **Dashboard = Read** — Status/완료 버튼 제거, 카드 클릭 → Workflow Detail
+- **My Tasks = Manage** — 모든 수정 기능 유지 (Status, Due, Priority, Study, 삭제)
+- Timeline Step 클릭: Dashboard에서는 동일 패널 내 Step 전환, My Tasks에서는 Edit 이동
+
+---
+
 ## [1.1.0] — build 48 — 2026-07-13 — Workflow Timeline UX Sprint
 
 ### Added
