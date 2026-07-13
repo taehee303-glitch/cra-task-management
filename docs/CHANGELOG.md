@@ -17,6 +17,23 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 51 — 2026-07-13 — Dashboard Execute + Workflow Master
+
+### Added
+
+- **Master Data → Workflow** — Global Templates · Workspace · Study Workflows 통합 관리
+- **GlobalWorkflowStore** — Global Template 생성·수정·삭제 (Study Library와 동일 Editor)
+- **Dashboard Workflow Detail Execute** — Status 변경 · 완료 처리 (Due/Priority 등은 My Tasks 전용)
+
+### Changed
+
+- **Study Workflow Library** — 적용·Study 복사만 (편집/삭제는 Workflow Master로 이동)
+- **Workflow Step 자동 정렬** — Due Offset 기준 (pre: 큰 offset 먼저 → root → post: 작은 offset 순)
+- 저장·Timeline·Library·Dashboard·Task Detail 전 화면 동일 순서 적용
+- Dashboard Workflow Detail — Workflow 확인 + Status/Complete 실행, "My Tasks에서 수정" 유지
+
+---
+
 ## [1.1.0] — build 49 — 2026-07-13 — Dashboard Read / My Tasks Manage
 
 ### Added

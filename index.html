@@ -90,6 +90,10 @@
           <span class="sidebar__icon" aria-hidden="true">🖥️</span>
           <span class="sidebar__label">System</span>
         </button>
+        <button type="button" class="sidebar__item sidebar__item--secondary" data-view="workflow-master">
+          <span class="sidebar__icon" aria-hidden="true">🟣</span>
+          <span class="sidebar__label">Workflow</span>
+        </button>
         <div class="sidebar__divider" role="separator"></div>
         <button type="button" class="sidebar__item sidebar__item--settings" data-nav-action="settings">
           <span class="sidebar__icon" aria-hidden="true">⚙️</span>
@@ -777,6 +781,25 @@
         </section>
       </div>
 
+      <!-- Workflow Master View -->
+      <div id="viewWorkflowMaster" class="view-panel" hidden>
+        <section class="workflow-master-section">
+          <div class="workflow-master-header">
+            <div>
+              <h2 class="section-title section-title--pc">Workflow</h2>
+              <p class="section-desc section-desc--pc">Global · Workspace · Study Workflow를 통합 관리합니다. Study Library는 적용·복사 전용입니다.</p>
+            </div>
+            <button type="button" class="btn btn--primary btn--sm" id="newWorkflowMasterBtn">+ Workflow</button>
+          </div>
+          <div class="workflow-master-tabs" role="tablist" aria-label="Workflow scope">
+            <button type="button" class="workflow-master-tabs__btn workflow-master-tabs__btn--active" data-workflow-tab="global" role="tab">Global Templates</button>
+            <button type="button" class="workflow-master-tabs__btn" data-workflow-tab="workspace" role="tab">Workspace Workflows</button>
+            <button type="button" class="workflow-master-tabs__btn" data-workflow-tab="study" role="tab">Study Workflows</button>
+          </div>
+          <div id="workflowMasterPanel" class="workflow-master-panel"></div>
+        </section>
+      </div>
+
       <!-- Site Master View -->
       <div id="viewSiteMaster" class="view-panel" hidden>
         <section class="study-master-section">
@@ -947,7 +970,7 @@
         </button>
       </nav>
 
-      <!-- Dashboard Workflow Detail (read-only Control Center) -->
+      <!-- Dashboard Workflow Detail (Execute + read summary) -->
       <aside id="dashboardWorkflowPanel" class="dashboard-workflow-panel" hidden aria-label="Workflow detail">
         <header class="dashboard-workflow-panel__header">
           <h3 class="dashboard-workflow-panel__title" id="dashboardWorkflowTitle">Workflow</h3>
@@ -1135,6 +1158,7 @@
       <button type="button" class="action-sheet__item" data-view="study-master">📚 Study</button>
       <button type="button" class="action-sheet__item" data-view="site-master">🏥 Site</button>
       <button type="button" class="action-sheet__item" data-view="system-master">🖥️ System</button>
+      <button type="button" class="action-sheet__item" data-view="workflow-master">🟣 Workflow</button>
       <button type="button" class="action-sheet__item" data-nav-action="settings">⚙️ Settings</button>
       <button type="button" class="action-sheet__item action-sheet__item--cancel" data-nav-action="close-master">닫기</button>
     </div>

@@ -1,5 +1,6 @@
 const STORAGE_KEY = "cra-tasks";
 const WORKSPACE_WORKFLOWS_KEY = "cra-workspace-workflows";
+const GLOBAL_WORKFLOWS_KEY = "cra-global-workflows";
 const STUDY_MASTER_KEY = "cra-study-master";
 const SITE_MASTER_KEY = "cra-site-master";
 const SYSTEM_MASTER_KEY = "cra-system-master";
@@ -11,7 +12,7 @@ const URGENT_DAYS = 3;
 const PRIORITIES = ["Critical", "High", "Medium", "Low"];
 const STATUSES = ["Open", "In Progress", "On Hold", "Completed", "Cancelled"];
 const DEFAULT_STATUS = "Open";
-const INLINE_STATUS_OPTIONS = ["Open", "In Progress", "Completed", "On Hold"];
+const INLINE_STATUS_OPTIONS = ["Open", "In Progress", "On Hold", "Completed"];
 const TASK_RULE_DEFAULT_STATUSES = ["Open", "In Progress"];
 
 const TASK_RULE_PRESET_TASK_NAMES = [
@@ -202,11 +203,12 @@ const VIEW_TITLES = {
   "study-master": "Study",
   "site-master": "Site",
   "system-master": "System",
+  "workflow-master": "Workflow",
 };
 
 const DAILY_PRIMARY_VIEWS = ["dashboard", "tasks", "inbox", "calendar", "reference"];
 const FAB_VIEWS = ["dashboard", "tasks", "inbox", "calendar"];
-const MASTER_VIEWS = ["study-master", "site-master", "system-master"];
+const MASTER_VIEWS = ["study-master", "site-master", "system-master", "workflow-master"];
 const MOBILE_BREAKPOINT = window.matchMedia("(max-width: 768px)");
 
 const MOBILE_FILTER_LABELS = {
@@ -225,6 +227,7 @@ let pendingFollowUpParentTask = null;
 let workflowDetailEditRef = null;
 let workflowDetailDraft = null;
 let dashboardWorkflowTaskId = null;
+let selectedWorkflowMasterTab = "global";
 let activeStatusPicker = null;
 let mobileDailyFilter = null;
 
@@ -262,6 +265,9 @@ const els = {
   viewStudyMaster: document.getElementById("viewStudyMaster"),
   viewSystemMaster: document.getElementById("viewSystemMaster"),
   viewSiteMaster: document.getElementById("viewSiteMaster"),
+  viewWorkflowMaster: document.getElementById("viewWorkflowMaster"),
+  workflowMasterPanel: document.getElementById("workflowMasterPanel"),
+  newWorkflowMasterBtn: document.getElementById("newWorkflowMasterBtn"),
   navButtons: document.querySelectorAll("[data-view]"),
   taskCardList: document.getElementById("taskCardList"),
   taskQuickFilterBtns: document.querySelectorAll("[data-quick-filter]"),
@@ -479,6 +485,7 @@ function loadAllFromLocalStorage() {
   SiteMasterStore.load();
   SystemMasterStore.load();
   WorkspaceWorkflowStore.load();
+  GlobalWorkflowStore.load();
 }
 
 function refreshAfterCloudSync() {
@@ -487,6 +494,7 @@ function refreshAfterCloudSync() {
   renderAll();
   renderStudyMaster();
   renderSystemMaster();
+  renderWorkflowMaster();
   refreshTaskStudySiteSelects();
 }
 
@@ -565,6 +573,15 @@ function registerCloudSyncSources() {
       applyPayload: (items) => {
         WorkspaceWorkflowStore.workflows = Array.isArray(items) ? items.map(normalizeWorkflowRecord) : [];
         localStorage.setItem(WORKSPACE_WORKFLOWS_KEY, JSON.stringify(WorkspaceWorkflowStore.workflows));
+      },
+    },
+    globalWorkflows: {
+      kind: "array",
+      localStorageKey: GLOBAL_WORKFLOWS_KEY,
+      getPayload: () => GlobalWorkflowStore.workflows,
+      applyPayload: (items) => {
+        GlobalWorkflowStore.workflows = Array.isArray(items) ? items.map((w) => normalizeWorkflowRecord({ ...w, scope: "global" })) : [];
+        localStorage.setItem(GLOBAL_WORKFLOWS_KEY, JSON.stringify(GlobalWorkflowStore.workflows));
       },
     },
   });
@@ -708,6 +725,7 @@ async function bootstrapApp() {
   try {
     renderStudyMaster();
     renderSystemMaster();
+    renderWorkflowMaster();
     refreshTaskStudySiteSelects();
   } catch (err) {
     console.warn("Master 화면 초기화 중 일부 오류:", err);
@@ -952,6 +970,10 @@ async function bootstrapApp() {
   bindEvent(document.getElementById("routineScheduleType"), "change", applyRoutineScheduleFieldsVisibility);
 
   els.newSystemMasterBtn?.addEventListener("click", openNewSystemMasterForm);
+  bindEvent(els.newWorkflowMasterBtn, "click", handleNewWorkflowMaster);
+  document.querySelectorAll("[data-workflow-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => switchWorkflowMasterTab(btn.dataset.workflowTab));
+  });
   els.systemMasterForm?.addEventListener("submit", handleSystemMasterSubmit);
   els.deleteSystemMasterBtn?.addEventListener("click", handleDeleteSystemMaster);
   els.systemMasterSearch?.addEventListener("input", renderSystemMaster);
@@ -2674,11 +2696,32 @@ function inferWorkflowCategory(name, tags = []) {
   return "General";
 }
 
+function sortWorkflowStepsByDueOffset(preSteps = [], postSteps = []) {
+  return {
+    preSteps: [...preSteps].sort((a, b) => (Number(b.dueOffset) || 0) - (Number(a.dueOffset) || 0)),
+    steps: [...postSteps].sort((a, b) => (Number(a.dueOffset) || 0) - (Number(b.dueOffset) || 0)),
+  };
+}
+
+function sortFlowStepsByDueOffset(flowSteps) {
+  const rootIndex = flowSteps.findIndex((step) => step.kind === "root");
+  if (rootIndex < 0) return flowSteps;
+  const pre = flowSteps.slice(0, rootIndex);
+  const root = flowSteps[rootIndex];
+  const post = flowSteps.slice(rootIndex + 1);
+  pre.sort((a, b) => (Number(b.dueOffset) || 0) - (Number(a.dueOffset) || 0));
+  post.sort((a, b) => (Number(a.dueOffset) || 0) - (Number(b.dueOffset) || 0));
+  return [...pre, root, ...post];
+}
+
 function normalizeWorkflowRecord(workflow) {
-  const preSteps = Array.isArray(workflow?.preSteps)
+  const preStepsRaw = Array.isArray(workflow?.preSteps)
     ? workflow.preSteps.map(normalizeWorkflowStep).filter((s) => s.taskName)
     : [];
-  const steps = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
+  const stepsRaw = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
+  const sorted = sortWorkflowStepsByDueOffset(preStepsRaw, stepsRaw);
+  const preSteps = sorted.preSteps;
+  const steps = sorted.steps;
   const tags = Array.isArray(workflow?.tags)
     ? [...new Set(workflow.tags.map((tag) => String(tag).trim()).filter(Boolean))]
     : [];
@@ -2712,7 +2755,7 @@ function normalizeWorkflowRecord(workflow) {
   return normalized;
 }
 
-function getGlobalWorkflowPresets() {
+function getBuiltInGlobalWorkflowPresets() {
   return WORKFLOW_VISIT_RULES.map((rule) =>
     normalizeWorkflowRecord({
       id: `global-preset-${rule.key}`,
@@ -2730,6 +2773,75 @@ function getGlobalWorkflowPresets() {
       })),
     })
   );
+}
+
+const GlobalWorkflowStore = {
+  workflows: [],
+
+  load() {
+    try {
+      const raw = localStorage.getItem(GLOBAL_WORKFLOWS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        this.workflows = Array.isArray(parsed)
+          ? parsed.map((w) => normalizeWorkflowRecord({ ...w, scope: "global" }))
+          : [];
+      } else {
+        this.workflows = getBuiltInGlobalWorkflowPresets();
+        this.persist();
+      }
+    } catch {
+      this.workflows = getBuiltInGlobalWorkflowPresets();
+    }
+  },
+
+  persist() {
+    localStorage.setItem(GLOBAL_WORKFLOWS_KEY, JSON.stringify(this.workflows));
+    notifyCloudSync("globalWorkflows");
+  },
+
+  getAll() {
+    return [...this.workflows];
+  },
+
+  getById(id) {
+    return this.workflows.find((workflow) => workflow.id === id) || null;
+  },
+
+  add(data) {
+    const workflow = normalizeWorkflowRecord({
+      ...data,
+      scope: "global",
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    });
+    this.workflows.push(workflow);
+    this.persist();
+    return workflow;
+  },
+
+  update(id, data) {
+    const idx = this.workflows.findIndex((workflow) => workflow.id === id);
+    if (idx === -1) return null;
+    this.workflows[idx] = normalizeWorkflowRecord({
+      ...this.workflows[idx],
+      ...data,
+      id,
+      scope: "global",
+      updatedAt: new Date().toISOString(),
+    });
+    this.persist();
+    return this.workflows[idx];
+  },
+
+  delete(id) {
+    this.workflows = this.workflows.filter((workflow) => workflow.id !== id);
+    this.persist();
+  },
+};
+
+function getGlobalWorkflowPresets() {
+  return GlobalWorkflowStore.getAll();
 }
 
 function legacyTaskRulesToWorkflows(study) {
@@ -3502,6 +3614,7 @@ function switchView(viewName) {
   els.viewStudyMaster.hidden = viewName !== "study-master";
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
+  els.viewWorkflowMaster.hidden = viewName !== "workflow-master";
 
   closeSidebar();
   closeMasterSheet();
@@ -3525,6 +3638,9 @@ function switchView(viewName) {
   if (viewName === "site-master") {
     renderSiteMaster();
     syncMasterMobileDetail("site-master");
+  }
+  if (viewName === "workflow-master") {
+    switchWorkflowMasterTab(selectedWorkflowMasterTab);
   }
   if (viewName === "dashboard") renderDashboard();
   if (viewName === "calendar") renderCalendarView();
@@ -4394,7 +4510,7 @@ function getWorkflowRef(workflow) {
 function resolveWorkflowRecord(ref) {
   if (!ref) return null;
   if (ref.scope === "global") {
-    return getGlobalWorkflowPresets().find((workflow) => workflow.id === ref.id) || null;
+    return GlobalWorkflowStore.getById(ref.id);
   }
   if (ref.scope === "workspace") {
     return WorkspaceWorkflowStore.getById(ref.id);
@@ -4554,15 +4670,28 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
   const refJson = escapeAttr(JSON.stringify(ref));
   const isGlobal = workflow.scope === "global";
   const isLegacy = workflow.source === "legacy-taskRules";
+  const libraryMode = Boolean(options.libraryMode);
 
-  const actions = options.readonly
-    ? `<button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>`
-    : `
-      <button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>
-      ${!isGlobal && !isLegacy ? `<button type="button" class="btn btn--ghost btn--sm" data-edit-workflow="${refJson}">편집</button>` : ""}
-      ${!isGlobal && !isLegacy ? `<button type="button" class="btn btn--ghost btn--sm" data-delete-workflow="${refJson}">삭제</button>` : ""}
-      ${isGlobal ? `<button type="button" class="btn btn--ghost btn--sm" data-copy-workflow="${refJson}">Study에 복사</button>` : ""}
+  let actions;
+  if (libraryMode) {
+    actions = `<button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>`;
+    if (isGlobal || workflow.scope === "workspace") {
+      actions += `<button type="button" class="btn btn--ghost btn--sm" data-copy-workflow="${refJson}">Study에 복사</button>`;
+    }
+  } else {
+    actions = `
+      <button type="button" class="btn btn--ghost btn--sm" data-edit-workflow="${refJson}">편집</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-delete-workflow="${refJson}">삭제</button>
     `;
+    if (options.showApply) {
+      actions = `<button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>${actions}`;
+    }
+  }
+
+  const studyBadge =
+    options.studyLabel && !libraryMode
+      ? `<span class="workflow-library-card__study">${escapeHtml(options.studyLabel)}</span>`
+      : "";
 
   return `
     <article class="workflow-library-card">
@@ -4570,6 +4699,7 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
         <h4 class="workflow-library-card__title">${escapeHtml(workflow.name)}</h4>
         <span class="workflow-library-card__scope">${escapeHtml(meta.scopeLabel)}</span>
       </header>
+      ${studyBadge}
       ${renderWorkflowFlowPreview(workflow, { compact: true, rootLabel: getWorkflowRootLabel(workflow) })}
       ${renderWorkflowMetaRow(workflow)}
       <footer class="workflow-library-card__actions">${actions}</footer>
@@ -4585,35 +4715,40 @@ function renderStudyWorkflowLibrary(study) {
       normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })
     )
   );
-  const legacyWorkflows = legacyTaskRulesToWorkflows(study);
   const workspaceWorkflows = sortWorkflowsForDisplay(WorkspaceWorkflowStore.getAll());
-  const globalPresets = getGlobalWorkflowPresets();
+  const globalPresets = sortWorkflowsForDisplay(getGlobalWorkflowPresets());
 
   const sections = [
     { title: "Study Workflow", items: studyWorkflows },
-    { title: "Legacy Task Rules", items: legacyWorkflows },
     { title: "Workspace", items: workspaceWorkflows },
     { title: "Global Template", items: globalPresets },
   ].filter((section) => section.items.length > 0);
 
   if (!sections.length) {
     els.studyWorkflowLibrary.innerHTML =
-      '<p class="workflow-library-empty">Workflow를 저장하면 후속 Task Flow가 여기에 표시됩니다.</p>';
+      '<p class="workflow-library-empty">적용 가능한 Workflow가 없습니다. Master Data → Workflow에서 등록하거나 Global Template을 복사하세요.</p>';
     return;
   }
 
-  els.studyWorkflowLibrary.innerHTML = sections
-    .map(
-      (section) => `
+  els.studyWorkflowLibrary.innerHTML = `
+    <p class="form-hint workflow-library-hint">Study Library는 Workflow 적용·복사만 제공합니다. 편집은 Master Data → Workflow에서 진행하세요.</p>
+    ${sections
+      .map(
+        (section) => `
       <section class="workflow-library-section">
         <h4 class="workflow-library-section__title">${escapeHtml(section.title)}</h4>
-        <div class="workflow-library-grid">${section.items.map((workflow) => renderWorkflowLibraryCard(workflow)).join("")}</div>
+        <div class="workflow-library-grid">${section.items.map((workflow) => renderWorkflowLibraryCard(workflow, { libraryMode: true })).join("")}</div>
       </section>
     `
-    )
-    .join("");
+      )
+      .join("")}
+  `;
 
-  els.studyWorkflowLibrary.querySelectorAll("[data-apply-workflow]").forEach((btn) => {
+  bindWorkflowLibraryCardActions(els.studyWorkflowLibrary, study);
+}
+
+function bindWorkflowLibraryCardActions(container, study = null) {
+  container?.querySelectorAll("[data-apply-workflow]").forEach((btn) => {
     btn.addEventListener("click", () => {
       try {
         const ref = JSON.parse(btn.dataset.applyWorkflow);
@@ -4624,35 +4759,27 @@ function renderStudyWorkflowLibrary(study) {
     });
   });
 
-  els.studyWorkflowLibrary.querySelectorAll("[data-edit-workflow]").forEach((btn) => {
+  container?.querySelectorAll("[data-edit-workflow]").forEach((btn) => {
     btn.addEventListener("click", () => {
       try {
-        const ref = JSON.parse(btn.dataset.editWorkflow);
-        openWorkflowDetailModal(ref);
+        openWorkflowDetailModal(JSON.parse(btn.dataset.editWorkflow));
       } catch {
         showToast("Workflow를 편집할 수 없습니다.");
       }
     });
   });
 
-  els.studyWorkflowLibrary.querySelectorAll("[data-delete-workflow]").forEach((btn) => {
+  container?.querySelectorAll("[data-delete-workflow]").forEach((btn) => {
     btn.addEventListener("click", () => {
       try {
-        const ref = JSON.parse(btn.dataset.deleteWorkflow);
-        if (ref.scope === "study" && ref.studyId && confirm("이 Workflow를 삭제할까요?")) {
-          StudyMasterStore.deleteWorkflow(ref.studyId, ref.id);
-          renderStudyWorkflowLibrary(study);
-        } else if (ref.scope === "workspace" && confirm("Workspace Workflow를 삭제할까요?")) {
-          WorkspaceWorkflowStore.delete(ref.id);
-          renderStudyWorkflowLibrary(study);
-        }
+        handleDeleteWorkflowRef(JSON.parse(btn.dataset.deleteWorkflow));
       } catch {
         showToast("Workflow를 삭제할 수 없습니다.");
       }
     });
   });
 
-  els.studyWorkflowLibrary.querySelectorAll("[data-copy-workflow]").forEach((btn) => {
+  container?.querySelectorAll("[data-copy-workflow]").forEach((btn) => {
     btn.addEventListener("click", () => {
       try {
         const ref = JSON.parse(btn.dataset.copyWorkflow);
@@ -4676,8 +4803,121 @@ function renderStudyWorkflowLibrary(study) {
   });
 }
 
+function handleDeleteWorkflowRef(ref) {
+  if (!ref || !confirm("이 Workflow를 삭제할까요?")) return;
+
+  if (ref.scope === "global") {
+    GlobalWorkflowStore.delete(ref.id);
+    renderWorkflowMaster();
+    showToast("Global Workflow가 삭제되었습니다.");
+    return;
+  }
+  if (ref.scope === "workspace") {
+    WorkspaceWorkflowStore.delete(ref.id);
+    renderWorkflowMaster();
+    showToast("Workspace Workflow가 삭제되었습니다.");
+    return;
+  }
+  if (ref.scope === "study" && ref.studyId) {
+    StudyMasterStore.deleteWorkflow(ref.studyId, ref.id);
+    renderWorkflowMaster();
+    const study = StudyMasterStore.getById(ref.studyId);
+    if (study && selectedStudyMasterId === ref.studyId) renderStudyWorkflowLibrary(study);
+    showToast("Study Workflow가 삭제되었습니다.");
+  }
+}
+
+function switchWorkflowMasterTab(tab) {
+  selectedWorkflowMasterTab = tab || "global";
+  document.querySelectorAll("[data-workflow-tab]").forEach((btn) => {
+    btn.classList.toggle("workflow-master-tabs__btn--active", btn.dataset.workflowTab === selectedWorkflowMasterTab);
+  });
+  if (els.newWorkflowMasterBtn) {
+    els.newWorkflowMasterBtn.hidden = selectedWorkflowMasterTab === "study";
+  }
+  renderWorkflowMaster();
+}
+
+function getStudyWorkflowEntries() {
+  const entries = [];
+  StudyMasterStore.getAll().forEach((study) => {
+    (study.workflows || []).forEach((workflow) => {
+      entries.push({
+        workflow: normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id }),
+        studyLabel: study.protocolNumber,
+        ref: { scope: "study", id: workflow.id, studyId: study.id },
+      });
+    });
+  });
+  return entries.sort((a, b) => a.studyLabel.localeCompare(b.studyLabel, "ko"));
+}
+
+function renderWorkflowMaster() {
+  if (!els.workflowMasterPanel) return;
+
+  let items = [];
+  let emptyMsg = "";
+
+  if (selectedWorkflowMasterTab === "global") {
+    items = sortWorkflowsForDisplay(GlobalWorkflowStore.getAll()).map((workflow) => ({
+      workflow,
+      studyLabel: null,
+    }));
+    emptyMsg = "Global Template가 없습니다. + Workflow로 추가하세요.";
+  } else if (selectedWorkflowMasterTab === "workspace") {
+    items = sortWorkflowsForDisplay(WorkspaceWorkflowStore.getAll()).map((workflow) => ({
+      workflow,
+      studyLabel: null,
+    }));
+    emptyMsg = "Workspace Workflow가 없습니다. + Workflow로 추가하세요.";
+  } else {
+    items = getStudyWorkflowEntries().map((entry) => ({
+      workflow: entry.workflow,
+      studyLabel: entry.studyLabel,
+    }));
+    emptyMsg = "Study Workflow가 없습니다. Study Master 또는 Workflow 적용으로 추가하세요.";
+  }
+
+  if (!items.length) {
+    els.workflowMasterPanel.innerHTML = `<p class="workflow-library-empty">${escapeHtml(emptyMsg)}</p>`;
+    return;
+  }
+
+  els.workflowMasterPanel.innerHTML = `<div class="workflow-library-grid">${items
+    .map(({ workflow, studyLabel }) =>
+      renderWorkflowLibraryCard(workflow, { libraryMode: false, studyLabel })
+    )
+    .join("")}</div>`;
+
+  bindWorkflowLibraryCardActions(els.workflowMasterPanel);
+}
+
+function handleNewWorkflowMaster() {
+  if (selectedWorkflowMasterTab === "global") {
+    const workflow = GlobalWorkflowStore.add({
+      name: "New Global Workflow",
+      rootTaskName: "Root Task",
+      preSteps: [],
+      steps: [],
+      source: "manual",
+    });
+    openWorkflowDetailModal({ scope: "global", id: workflow.id, studyId: null });
+    return;
+  }
+  if (selectedWorkflowMasterTab === "workspace") {
+    const workflow = WorkspaceWorkflowStore.add({
+      name: "New Workspace Workflow",
+      rootTaskName: "Root Task",
+      preSteps: [],
+      steps: [],
+      source: "manual",
+    });
+    openWorkflowDetailModal({ scope: "workspace", id: workflow.id, studyId: null });
+  }
+}
+
 function canEditWorkflowRef(ref) {
-  if (!ref || ref.scope === "global") return false;
+  if (!ref) return false;
   const workflow = resolveWorkflowRecord(ref);
   return Boolean(workflow && workflow.source !== "legacy-taskRules");
 }
@@ -4704,7 +4944,7 @@ function workflowRecordToFlowSteps(workflow) {
   (workflow.steps || []).forEach((step) => {
     flowSteps.push({ kind: "post", ...normalizeWorkflowStep(step) });
   });
-  return flowSteps;
+  return sortFlowStepsByDueOffset(flowSteps);
 }
 
 function normalizeFlowStepKinds(flowSteps) {
@@ -4737,7 +4977,8 @@ function flowStepsToWorkflowPayload(flowSteps) {
     else steps.push(normalized);
   });
 
-  return { preSteps, steps, rootTaskName };
+  const sorted = sortWorkflowStepsByDueOffset(preSteps, steps);
+  return { preSteps: sorted.preSteps, steps: sorted.steps, rootTaskName };
 }
 
 function renderWorkflowDetailStepRow(step, index, total) {
@@ -4947,13 +5188,18 @@ function handleWorkflowDetailSave() {
 
   const ref = workflowDetailEditRef;
   let saved = null;
-  if (ref.scope === "study" && ref.studyId) {
+  if (ref.scope === "global") {
+    saved = GlobalWorkflowStore.update(ref.id, payload);
+    renderWorkflowMaster();
+  } else if (ref.scope === "study" && ref.studyId) {
     saved = StudyMasterStore.updateWorkflow(ref.studyId, ref.id, payload);
     if (saved && selectedStudyMasterId === ref.studyId) {
       renderStudyWorkflowLibrary(StudyMasterStore.getById(ref.studyId));
     }
+    renderWorkflowMaster();
   } else if (ref.scope === "workspace") {
     saved = WorkspaceWorkflowStore.update(ref.id, payload);
+    renderWorkflowMaster();
     const study = selectedStudyMasterId && selectedStudyMasterId !== "new"
       ? StudyMasterStore.getById(selectedStudyMasterId)
       : null;
@@ -5190,7 +5436,7 @@ function findWorkflowByIdAnywhere(workflowId, studyProtocol) {
   const workspaceMatch = WorkspaceWorkflowStore.getById(workflowId);
   if (workspaceMatch) return workspaceMatch;
 
-  return getGlobalWorkflowPresets().find((w) => w.id === workflowId) || null;
+  return GlobalWorkflowStore.getById(workflowId) || getGlobalWorkflowPresets().find((w) => w.id === workflowId) || null;
 }
 
 function getWorkflowRootTask(task) {
@@ -5337,21 +5583,13 @@ function sortWorkflowsForDisplay(items) {
 }
 
 function getWorkflowStepIndexForTask(task, root, workflow) {
-  const preCount = workflow?.preSteps?.length || 0;
-  if (task.id === root.id) return preCount + 1;
-
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
   const taskName = (task.task || "").trim().toLowerCase();
-  const steps = workflow?.steps || [];
-  for (let i = 0; i < steps.length; i++) {
-    if ((steps[i].taskName || "").trim().toLowerCase() === taskName) {
-      return preCount + 2 + i;
-    }
-  }
-
-  const children = getSubtasks(root.id).sort(compareTasks);
-  const childIndex = children.findIndex((child) => child.id === task.id);
-  if (childIndex < 0) return null;
-  return preCount + 2 + childIndex;
+  const index = stepDefs.findIndex((def) => {
+    if (def.kind === "root" && task.id === root.id) return true;
+    return (def.taskName || "").trim().toLowerCase() === taskName;
+  });
+  return index >= 0 ? index + 1 : null;
 }
 
 function getWorkflowStepProgress(task) {
@@ -5565,20 +5803,48 @@ function renderDashboardWorkflowTaskSummary(task) {
         <div class="dashboard-workflow-summary__item"><dt>Site</dt><dd>${escapeHtml(siteLabel)}</dd></div>
         <div class="dashboard-workflow-summary__item"><dt>Due</dt><dd><span class="dashboard-workflow-summary__due ${dueClass}">${escapeHtml(dueLabel)}</span></dd></div>
         <div class="dashboard-workflow-summary__item"><dt>Priority</dt><dd>${escapeHtml(task.priority || "Medium")}</dd></div>
-        <div class="dashboard-workflow-summary__item"><dt>Status</dt><dd><span class="status-badge status-badge--${statusClass(task.status)}">${escapeHtml(task.status)}</span></dd></div>
       </dl>
     </section>
   `;
+}
+
+function renderDashboardWorkflowExecuteBar(task) {
+  const isDone = task.status === "Completed";
+  return `
+    <section class="dashboard-workflow-execute" aria-label="업무 실행">
+      <div class="dashboard-workflow-execute__status">
+        <span class="dashboard-workflow-execute__label">Status</span>
+        ${renderInlineStatusDropdown(task, { compact: true })}
+      </div>
+      <button type="button" class="dashboard-workflow-execute__complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <span class="dashboard-workflow-execute__complete-icon" aria-hidden="true">✓</span>
+        <span>완료</span>
+      </button>
+    </section>
+  `;
+}
+
+function bindDashboardWorkflowExecuteActions(container) {
+  if (!container) return;
+  container.querySelectorAll("[data-complete]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyTaskStatusChange(btn.dataset.complete, "Completed");
+    });
+  });
+  bindStatusDropdowns(container);
 }
 
 function renderDashboardWorkflowDetailContent(task) {
   const workflow = resolveTaskWorkflowRecord(task);
   const root = getWorkflowRootTask(task);
   const summaryHtml = renderDashboardWorkflowTaskSummary(task);
+  const executeHtml = renderDashboardWorkflowExecuteBar(task);
 
   if (!workflow || !root) {
     return `
       ${summaryHtml}
+      ${executeHtml}
       <section class="dashboard-workflow-empty">
         <p class="dashboard-workflow-empty__text">연결된 Workflow가 없습니다.</p>
         <p class="dashboard-workflow-empty__hint">My Tasks에서 Task를 관리하거나 Workflow Library에서 Flow를 적용할 수 있습니다.</p>
@@ -5606,6 +5872,7 @@ function renderDashboardWorkflowDetailContent(task) {
 
   return `
     ${summaryHtml}
+    ${executeHtml}
     <section class="dashboard-workflow-progress">
       <span class="dashboard-workflow-progress__label">Workflow 진행률</span>
       <span class="dashboard-workflow-progress__value">${progress.completed} / ${progress.total} 완료</span>
@@ -5632,6 +5899,7 @@ function openDashboardWorkflowDetail(taskId) {
   if (els.dashboardWorkflowBody) {
     els.dashboardWorkflowBody.innerHTML = renderDashboardWorkflowDetailContent(task);
     bindWorkflowTimelineClicks(els.dashboardWorkflowBody, "dashboard");
+    bindDashboardWorkflowExecuteActions(els.dashboardWorkflowBody);
   }
   if (els.dashboardWorkflowPanel) els.dashboardWorkflowPanel.hidden = false;
   document.body.classList.add("dashboard-workflow-open");
@@ -7856,7 +8124,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "49";
+const APP_BUILD = "51";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9490,7 +9758,9 @@ function closeStatusPickerPortal() {
 }
 
 function shouldUseStatusPickerPortal(triggerBtn) {
-  return Boolean(triggerBtn?.closest("#viewDashboard, .dash-list, .mobile-daily, .mobile-task-feed"));
+  return Boolean(
+    triggerBtn?.closest("#viewDashboard, .dash-list, .mobile-daily, .mobile-task-feed, #dashboardWorkflowPanel")
+  );
 }
 
 function positionStatusPickerPortal(triggerBtn, portal) {
@@ -10194,6 +10464,7 @@ function renderAll() {
       if (els.dashboardWorkflowBody) {
         els.dashboardWorkflowBody.innerHTML = renderDashboardWorkflowDetailContent(task);
         bindWorkflowTimelineClicks(els.dashboardWorkflowBody, "dashboard");
+        bindDashboardWorkflowExecuteActions(els.dashboardWorkflowBody);
       }
     } else {
       closeDashboardWorkflowDetail();
