@@ -17,6 +17,29 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 38 — 2026-07-13 — Dashboard execution UI polish
+
+### Changed
+
+- **Dashboard 레이아웃** — Today's Progress → 오늘 마감(실행 존) → 이번 주 → D-1 → 지연 → 최근 완료
+- **Task 카드 디자인** — Due 칩 · Priority · › 상세 affordance · 녹색 완료 버튼
+- **오늘 마감 섹션** — 실행 가이드 헤더, 더 넓은 목록 영역
+- **Today's Progress Hero** — 진행 상태별 색상(진행 중/완료/없음), CTA 추가
+- Mobile — Status·완료 버튼 가로 배치, 터치 영역 확대
+
+---
+
+## [1.1.0] — build 37 — 2026-07-13 — Dashboard task execution
+
+### Changed
+
+- **Dashboard Task 카드** — 클릭 시 Task Detail 패널 오픈 (PC: split / Mobile: fullscreen)
+- Dashboard 카드에서 Status 드롭다운·완료(✓) 버튼으로 즉시 상태 변경
+- Completed 변경 시 Follow-up Prompt → Learning Modal 흐름 유지
+- 저장·상태 변경 후 Dashboard(Today's Progress 포함) 즉시 갱신
+
+---
+
 ## [1.1.0] — build 36 — 2026-07-13 — Prevention-first Dashboard & Today's Progress
 
 ### Changed

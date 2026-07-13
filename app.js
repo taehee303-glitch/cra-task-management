@@ -7034,7 +7034,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "36";
+const APP_BUILD = "38";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -8291,12 +8291,16 @@ function handleEditTask(e) {
   if (!wasCompleted && newStatus === "Completed") {
     const completedTask = tasks.find((t) => t.id === id);
     workflowCount = runWorkflowAutomation(completedTask).length;
+    if (currentViewName === "dashboard") {
+      closeTaskDetail();
+    } else {
+      const updatedTask = tasks.find((t) => t.id === id);
+      if (updatedTask) populateTaskDetailForm(updatedTask);
+    }
     finalizeTaskCompletion(completedTask, workflowCount);
-  }
-
-  const updatedTask = tasks.find((t) => t.id === id);
-  if (updatedTask) {
-    populateTaskDetailForm(updatedTask);
+  } else {
+    const updatedTask = tasks.find((t) => t.id === id);
+    if (updatedTask) populateTaskDetailForm(updatedTask);
   }
   renderAll();
 
@@ -8434,6 +8438,9 @@ function updateTaskListSelection() {
   });
   document.querySelectorAll(".mobile-task-card[data-edit]").forEach((el) => {
     el.classList.toggle("is-selected", selectedTaskId && el.dataset.edit === selectedTaskId);
+  });
+  document.querySelectorAll(".dash-item[data-task-id]").forEach((el) => {
+    el.classList.toggle("dash-item--selected", selectedTaskId && el.dataset.taskId === selectedTaskId);
   });
 }
 
@@ -8664,6 +8671,9 @@ function applyTaskStatusChange(taskId, newStatus) {
   if (!wasCompleted && newStatus === "Completed") {
     const completedTask = tasks.find((task) => task.id === taskId);
     workflowCount = runWorkflowAutomation(completedTask).length;
+    if (currentViewName === "dashboard" && selectedTaskId === taskId) {
+      closeTaskDetail();
+    }
     finalizeTaskCompletion(completedTask, workflowCount);
   }
 
@@ -8884,9 +8894,23 @@ function renderTodayProgressHero() {
     if (progress.total === 0) {
       els.todayProgressRemaining.textContent = "오늘 예정된 업무가 없습니다";
     } else if (progress.remaining === 0) {
-      els.todayProgressRemaining.textContent = "오늘 업무를 모두 완료했습니다";
+      els.todayProgressRemaining.textContent = "오늘 업무를 모두 완료했습니다 🎉";
     } else {
       els.todayProgressRemaining.textContent = `남은 업무 ${progress.remaining}건`;
+    }
+  }
+  if (els.todayProgressHero) {
+    els.todayProgressHero.classList.remove(
+      "today-progress-hero--done",
+      "today-progress-hero--empty",
+      "today-progress-hero--active"
+    );
+    if (progress.total === 0) {
+      els.todayProgressHero.classList.add("today-progress-hero--empty");
+    } else if (progress.remaining === 0) {
+      els.todayProgressHero.classList.add("today-progress-hero--done");
+    } else {
+      els.todayProgressHero.classList.add("today-progress-hero--active");
     }
   }
 }
@@ -8968,6 +8992,13 @@ function renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks) {
       ? recentCompleted.map((task) => renderDashItem(task, "recent")).join("")
       : '<p class="empty-msg">최근 완료 업무가 없습니다.</p>';
   }
+
+  bindDashboardTaskActions();
+}
+
+function bindDashboardTaskActions() {
+  if (!els.viewDashboard) return;
+  bindTaskListActions(els.viewDashboard);
 }
 
 function compareAttentionTasks(a, b) {
@@ -8981,18 +9012,33 @@ function renderDashItem(task, type) {
   const dueClass = getDueDateDisplayClass(task.dueDate, task.status);
   const dueLabel = formatDueLabel(task.dueDate);
   const criticalClass = task.priority === "Critical" ? " dash-item--critical" : "";
-  const criticalBadge = task.priority === "Critical" ? '<span class="critical-badge">Critical</span> ' : "";
+  const isDone = task.status === "Completed";
+  const selectedClass = selectedTaskId === task.id ? " dash-item--selected" : "";
+  const priorityChip =
+    task.priority === "Critical"
+      ? '<span class="critical-badge">Critical</span>'
+      : `<span class="dash-item__priority dash-item__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>`;
 
   return `
-    <div class="dash-item dash-item--${type}${criticalClass}">
-      <div class="dash-item-title">
-        ${criticalBadge}${escapeHtml(task.task)}
+    <article class="dash-item dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-item__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
+        <div class="dash-item__top">
+          <span class="dash-item__due-chip ${dueClass}">${escapeHtml(dueLabel)}</span>
+          ${priorityChip}
+        </div>
+        <div class="dash-item-title">${escapeHtml(task.task)}</div>
         ${renderTaskContextMeta(task)}
+        <div class="dash-item-meta">${escapeHtml(task.study || "Study 미정")} · ${escapeHtml(task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정")}</div>
+        <span class="dash-item__chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="dash-item__actions">
+        ${renderInlineStatusDropdown(task)}
+        <button type="button" class="dash-item__complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+          <span class="dash-item__complete-icon" aria-hidden="true">✓</span>
+          <span class="dash-item__complete-label">완료</span>
+        </button>
       </div>
-      ${renderSourceVisitHtml(task)}
-      <div class="dash-item-meta">${escapeHtml(task.study)} · ${escapeHtml(getStandardSiteName(task.site))} · ${escapeHtml(task.status)}</div>
-      <div class="dash-item-due ${dueClass}">${escapeHtml(dueLabel)}</div>
-    </div>
+    </article>
   `;
 }
 
