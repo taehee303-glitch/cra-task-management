@@ -180,7 +180,8 @@ const TASK_QUICK_FILTER_LABELS = {
   open: "Open",
   "in-progress": "In Progress",
   completed: "완료",
-  week: "이번 주 마감",
+  week: "이번 주 준비",
+  "next-week": "다음 주 예정",
   all: "전체 업무",
 };
 
@@ -234,7 +235,7 @@ const els = {
   statOverdue: document.getElementById("statOverdue"),
   statWeekDue: document.getElementById("statWeekDue"),
   statTodayDue: document.getElementById("statTodayDue"),
-  statD1Due: document.getElementById("statD1Due"),
+  statNextWeekDue: document.getElementById("statNextWeekDue"),
   todayProgressHero: document.getElementById("todayProgressHero"),
   todayProgressPercent: document.getElementById("todayProgressPercent"),
   todayProgressCount: document.getElementById("todayProgressCount"),
@@ -383,10 +384,8 @@ const els = {
   taskDetailHistory: document.getElementById("taskDetailHistory"),
   attentionTodayCount: document.getElementById("attentionTodayCount"),
   attentionOverdueCount: document.getElementById("attentionOverdueCount"),
-  attentionD1Count: document.getElementById("attentionD1Count"),
   attentionTodayList: document.getElementById("attentionTodayList"),
   attentionOverdueList: document.getElementById("attentionOverdueList"),
-  attentionD1List: document.getElementById("attentionD1List"),
   reminderStatusBadge: document.getElementById("reminderStatusBadge"),
   openSettingsBtn: document.getElementById("openSettingsBtn"),
   settingsModal: document.getElementById("settingsModal"),
@@ -435,8 +434,10 @@ const els = {
   taskDetailWorkflowSteps: document.getElementById("taskDetailWorkflowSteps"),
   taskDetailWorkflowStepsList: document.getElementById("taskDetailWorkflowStepsList"),
   tasksWorkflowStrip: document.getElementById("tasksWorkflowStrip"),
-  dashboardWeekDueList: document.getElementById("dashboardWeekDueList"),
-  dashboardWeekDueCount: document.getElementById("dashboardWeekDueCount"),
+  dashboardWeekPrepList: document.getElementById("dashboardWeekPrepList"),
+  dashboardWeekPrepCount: document.getElementById("dashboardWeekPrepCount"),
+  dashboardNextWeekList: document.getElementById("dashboardNextWeekList"),
+  dashboardNextWeekCount: document.getElementById("dashboardNextWeekCount"),
   dashboardRecentCompletedList: document.getElementById("dashboardRecentCompletedList"),
   dashboardRecentCompletedCount: document.getElementById("dashboardRecentCompletedCount"),
   referenceSearchInput: document.getElementById("referenceSearchInput"),
@@ -5212,15 +5213,29 @@ function setDashCardEmptyState(listEl, isEmpty) {
   if (card) card.classList.toggle("dash-card--empty", isEmpty);
 }
 
-function getDashboardWeekDueTasks() {
+function isDueNextWeek(dueDateStr) {
+  if (!dueDateStr) return false;
+  const { start, end } = getWeekRangeWithOffset(1);
+  const due = parseDate(dueDateStr);
+  return due >= start && due <= end;
+}
+
+function getDashboardWeekPrepTasks() {
+  const todayStr = toDateString(getToday());
   return tasks
     .filter((task) => {
       if (!isActive(task) || !task.dueDate || !isDueThisWeek(task.dueDate)) return false;
-      const days = daysUntilDue(task.dueDate);
-      return days >= 2;
+      return task.dueDate !== todayStr;
     })
     .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate))
-    .slice(0, 12);
+    .slice(0, 8);
+}
+
+function getDashboardNextWeekTasks() {
+  return tasks
+    .filter((task) => isActive(task) && task.dueDate && isDueNextWeek(task.dueDate))
+    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate))
+    .slice(0, 8);
 }
 
 function getRecentlyCompletedTasks(limit = 6) {
@@ -7399,7 +7414,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "44";
+const APP_BUILD = "45";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9215,11 +9230,12 @@ function getDashboardStats() {
   const completed = workTasks.filter(isCompleted).length;
   const overdue = activeTasks.filter((t) => daysUntilDue(t.dueDate) < 0).length;
   const weekDue = activeTasks.filter((t) => isDueThisWeek(t.dueDate)).length;
+  const weekPrep = getDashboardWeekPrepTasks().length;
   const todayDue = activeTasks.filter((t) => t.dueDate === todayStr).length;
-  const d1Due = activeTasks.filter((t) => daysUntilDue(t.dueDate) === 1).length;
+  const nextWeekDue = getDashboardNextWeekTasks().length;
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  return { total, completed, overdue, weekDue, todayDue, d1Due, completionRate };
+  return { total, completed, overdue, weekDue, weekPrep, todayDue, nextWeekDue, completionRate };
 }
 
 function matchesTaskQuickFilter(task) {
@@ -9254,7 +9270,12 @@ function matchesTaskQuickFilter(task) {
   }
 
   if (taskQuickFilter === "week") {
-    return isActive(task) && isDueThisWeek(task.dueDate);
+    const todayStr = toDateString(getToday());
+    return isActive(task) && isDueThisWeek(task.dueDate) && task.dueDate !== todayStr;
+  }
+
+  if (taskQuickFilter === "next-week") {
+    return isActive(task) && isDueNextWeek(task.dueDate);
   }
 
   return true;
@@ -9406,9 +9427,9 @@ function renderDashboard() {
   els.statTotal.textContent = stats.total;
   els.statCompleted.textContent = stats.completed;
   els.statOverdue.textContent = stats.overdue;
-  els.statWeekDue.textContent = stats.weekDue;
+  if (els.statWeekDue) els.statWeekDue.textContent = stats.weekPrep;
   if (els.statTodayDue) els.statTodayDue.textContent = stats.todayDue;
-  if (els.statD1Due) els.statD1Due.textContent = stats.d1Due;
+  if (els.statNextWeekDue) els.statNextWeekDue.textContent = stats.nextWeekDue;
   renderTodayProgressHero();
   renderOverallProgress(stats);
 
@@ -9420,29 +9441,15 @@ function renderDashboard() {
     .filter((t) => t.dueDate === todayStr)
     .sort((a, b) => compareAttentionTasks(a, b));
 
-  const d1Tasks = activeTasks
-    .filter((t) => daysUntilDue(t.dueDate) === 1)
-    .sort((a, b) => compareAttentionTasks(a, b));
-
-  renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks);
+  renderDashboardTaskSections(todayTasks, overdueTasks);
   updateReminderStatusBadge();
   updateDashboardCardFilterUi();
 }
 
-function renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks) {
-  const weekDueTasks = getDashboardWeekDueTasks();
-  const recentCompleted = getRecentlyCompletedTasks();
-
-  if (els.dashboardWeekDueCount) {
-    els.dashboardWeekDueCount.textContent = String(weekDueTasks.length);
-    els.dashboardWeekDueCount.hidden = weekDueTasks.length === 0;
-  }
-  if (els.dashboardWeekDueList) {
-    els.dashboardWeekDueList.innerHTML = weekDueTasks.length
-      ? weekDueTasks.map((task) => renderDashItem(task, "week")).join("")
-      : renderDashboardEmptyMsg("이번 주에 미리 준비할 업무가 없습니다.");
-    setDashCardEmptyState(els.dashboardWeekDueList, weekDueTasks.length === 0);
-  }
+function renderDashboardTaskSections(todayTasks, overdueTasks) {
+  const weekPrepTasks = getDashboardWeekPrepTasks();
+  const nextWeekTasks = getDashboardNextWeekTasks();
+  const recentCompleted = getRecentlyCompletedTasks(5);
 
   if (els.attentionTodayCount) {
     els.attentionTodayCount.textContent = String(todayTasks.length);
@@ -9450,20 +9457,31 @@ function renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks) {
   }
   if (els.attentionTodayList) {
     els.attentionTodayList.innerHTML = todayTasks.length
-      ? todayTasks.map((t) => renderDashItem(t, "attention-today")).join("")
+      ? todayTasks.map((t) => renderDashItem(t, "time-today")).join("")
       : renderDashboardEmptyMsg("오늘 마감 업무가 없습니다.");
     setDashCardEmptyState(els.attentionTodayList, todayTasks.length === 0);
   }
 
-  if (els.attentionD1Count) {
-    els.attentionD1Count.textContent = String(d1Tasks.length);
-    els.attentionD1Count.hidden = d1Tasks.length === 0;
+  if (els.dashboardWeekPrepCount) {
+    els.dashboardWeekPrepCount.textContent = String(weekPrepTasks.length);
+    els.dashboardWeekPrepCount.hidden = weekPrepTasks.length === 0;
   }
-  if (els.attentionD1List) {
-    els.attentionD1List.innerHTML = d1Tasks.length
-      ? d1Tasks.map((t) => renderDashItem(t, "attention-d1")).join("")
-      : renderDashboardEmptyMsg("D-1 업무가 없습니다.");
-    setDashCardEmptyState(els.attentionD1List, d1Tasks.length === 0);
+  if (els.dashboardWeekPrepList) {
+    els.dashboardWeekPrepList.innerHTML = weekPrepTasks.length
+      ? weekPrepTasks.map((task) => renderDashItem(task, "time-week")).join("")
+      : renderDashboardEmptyMsg("이번 주 준비 업무가 없습니다.");
+    setDashCardEmptyState(els.dashboardWeekPrepList, weekPrepTasks.length === 0);
+  }
+
+  if (els.dashboardNextWeekCount) {
+    els.dashboardNextWeekCount.textContent = String(nextWeekTasks.length);
+    els.dashboardNextWeekCount.hidden = nextWeekTasks.length === 0;
+  }
+  if (els.dashboardNextWeekList) {
+    els.dashboardNextWeekList.innerHTML = nextWeekTasks.length
+      ? nextWeekTasks.map((task) => renderDashItem(task, "time-next-week")).join("")
+      : renderDashboardEmptyMsg("다음 주 예정 업무가 없습니다.");
+    setDashCardEmptyState(els.dashboardNextWeekList, nextWeekTasks.length === 0);
   }
 
   if (els.dashboardRecentCompletedCount) {
@@ -9472,7 +9490,7 @@ function renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks) {
   }
   if (els.dashboardRecentCompletedList) {
     els.dashboardRecentCompletedList.innerHTML = recentCompleted.length
-      ? recentCompleted.map((task) => renderDashItem(task, "recent")).join("")
+      ? recentCompleted.map((task) => renderDashItem(task, "time-recent")).join("")
       : renderDashboardEmptyMsg("최근 완료 업무가 없습니다.");
     setDashCardEmptyState(els.dashboardRecentCompletedList, recentCompleted.length === 0);
   }
@@ -9483,7 +9501,7 @@ function renderDashboardTaskSections(todayTasks, d1Tasks, overdueTasks) {
   }
   if (els.attentionOverdueList) {
     els.attentionOverdueList.innerHTML = overdueTasks.length
-      ? overdueTasks.map((t) => renderDashItem(t, "attention-overdue")).join("")
+      ? overdueTasks.map((t) => renderDashItem(t, "time-overdue")).join("")
       : renderDashboardEmptyMsg("지연된 업무가 없습니다.");
     setDashCardEmptyState(els.attentionOverdueList, overdueTasks.length === 0);
   }

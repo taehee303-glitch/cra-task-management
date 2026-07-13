@@ -17,6 +17,22 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 45 — 2026-07-13 — Time-based Dashboard
+
+### Added
+
+- **다음 주 예정** 섹션 — Visit · Training · IRB · Query 등 다음 주 Due Task + Workflow Context Chip
+- KPI Quick Filter **다음 주** (D-1 필터 대체)
+
+### Changed
+
+- **Time-based Dashboard** 순서: Progress → 오늘 → 이번 주 준비 → 다음 주 → 최근 완료 → 지연
+- D-1 별도 섹션 제거 → **이번 주 준비**에 통합 (내일~주말)
+- **색상 계층**: 오늘(보라 강조) · 이번 주(주황) · 다음 주(파랑) · 완료(초록) · 지연(빨강)
+- Section 리스트 max-height 축소로 한 화면 가시성 개선
+
+---
+
 ## [1.1.0] — build 44 — 2026-07-13 — Dashboard readability pass
 
 ### Changed
