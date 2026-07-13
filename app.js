@@ -3061,6 +3061,26 @@ function getWorkflowRootTaskForRecord(task, workflow) {
 }
 
 function migrateTasksToWorkflowInstances() {
+  repairBrokenWorkflowInstanceLinks();
+  migrateTasksWithDirectWorkflowId();
+  migrateTasksInheritParentInstance();
+  migrateMisassignedLearnedFollowUps();
+  migrateInferredWorkflowChains();
+}
+
+function repairBrokenWorkflowInstanceLinks() {
+  tasks.forEach((task) => {
+    if (task.workflowInstanceId && !WorkflowInstanceStore.getById(task.workflowInstanceId)) {
+      TaskStore.update(task.id, {
+        workflowInstanceId: null,
+        workflowRecordId: null,
+        stepIndex: null,
+      });
+    }
+  });
+}
+
+function migrateTasksWithDirectWorkflowId() {
   const instanceByKey = new Map();
 
   tasks
@@ -3084,6 +3104,171 @@ function migrateTasksToWorkflowInstances() {
 
       assignTaskToWorkflowInstance(task.id, instance, workflow);
     });
+}
+
+function migrateTasksInheritParentInstance() {
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < tasks.length + 1) {
+    changed = false;
+    guard += 1;
+    tasks.forEach((task) => {
+      if (task.workflowInstanceId || !task.parentTaskId) return;
+
+      const parent = tasks.find((item) => item.id === task.parentTaskId);
+      if (!parent?.workflowInstanceId) return;
+
+      const instance = WorkflowInstanceStore.getById(parent.workflowInstanceId);
+      if (!instance) return;
+
+      const workflow = findWorkflowRecordById(instance.workflowRecordId, task.study || parent.study);
+      if (!workflow) return;
+
+      assignTaskToWorkflowInstance(task.id, instance, workflow);
+      changed = true;
+    });
+  }
+}
+
+function getAllDescendantTasks(parentId) {
+  const descendants = [];
+  const queue = getSubtasks(parentId);
+  const seen = new Set();
+
+  while (queue.length) {
+    const child = queue.shift();
+    if (!child || seen.has(child.id)) continue;
+    seen.add(child.id);
+    descendants.push(child);
+    queue.push(...getSubtasks(child.id));
+  }
+
+  return descendants;
+}
+
+function pickSingleWorkflowMatchForMigration(matches, root, chainTasks) {
+  if (!matches.length || !root) return null;
+
+  const childNames = new Set(
+    chainTasks.map((task) => (task.task || "").trim().toLowerCase()).filter(Boolean)
+  );
+  const ranked = matches
+    .map((workflow) => {
+      const stepNames = [...(workflow.preSteps || []), ...(workflow.steps || [])]
+        .map((step) => (step.taskName || "").trim().toLowerCase())
+        .filter(Boolean);
+      const rootLabel = (workflow.rootTaskName || getWorkflowRootLabel(workflow) || "")
+        .trim()
+        .toLowerCase();
+      let score = 0;
+      if (rootLabel && (root.task || "").trim().toLowerCase() === rootLabel) score += 10;
+      const overlap = stepNames.filter((name) => childNames.has(name)).length;
+      score += overlap * 2;
+      return { workflow, score, overlap };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!ranked.length) return null;
+  if (ranked.length === 1) return ranked[0].workflow;
+  if (ranked[0].score > ranked[1].score) return ranked[0].workflow;
+  return null;
+}
+
+function findLearnedWorkflowForFollowUp(parentTask, followUpTask) {
+  if (!parentTask?.task || !followUpTask?.task) return null;
+
+  const study = StudyMasterStore.getByProtocol(followUpTask.study || parentTask.study);
+  if (!study) return null;
+
+  const parentName = parentTask.task.trim().toLowerCase();
+  const followUpName = followUpTask.task.trim().toLowerCase();
+  const matches = (study.workflows || []).filter((workflow) => {
+    if (workflow.source !== "learned") return false;
+    const rootLabel = (workflow.rootTaskName || "").trim().toLowerCase();
+    if (rootLabel !== parentName) return false;
+    return (workflow.steps || []).some(
+      (step) => (step.taskName || "").trim().toLowerCase() === followUpName
+    );
+  });
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function migrateMisassignedLearnedFollowUps() {
+  tasks.forEach((task) => {
+    if (!task.parentTaskId) return;
+
+    const parent = tasks.find((item) => item.id === task.parentTaskId);
+    if (!parent) return;
+
+    const learnedWorkflow = findLearnedWorkflowForFollowUp(parent, task);
+    if (!learnedWorkflow) return;
+
+    const instance = task.workflowInstanceId ? WorkflowInstanceStore.getById(task.workflowInstanceId) : null;
+    const instanceRoot = instance ? tasks.find((item) => item.id === instance.rootTaskId) : null;
+    const parentName = parent.task.trim().toLowerCase();
+    const instanceRootName = (instanceRoot?.task || "").trim().toLowerCase();
+
+    if (
+      instance &&
+      instance.workflowRecordId === learnedWorkflow.id &&
+      instance.rootTaskId === parent.id
+    ) {
+      return;
+    }
+
+    if (instance && instanceRootName === parentName && instance.workflowRecordId === learnedWorkflow.id) {
+      return;
+    }
+
+    let correctInstance = WorkflowInstanceStore.findByRootAndRecord(parent.id, learnedWorkflow.id);
+    if (!correctInstance) {
+      correctInstance = createWorkflowInstance(learnedWorkflow, parent, { startedAt: parent.createdAt });
+    }
+
+    assignTaskToWorkflowInstance(parent.id, correctInstance, learnedWorkflow);
+    assignTaskToWorkflowInstance(task.id, correctInstance, learnedWorkflow);
+  });
+}
+
+  const rootIds = new Set();
+  tasks.forEach((task) => {
+    if (task.workflowInstanceId) return;
+    const root = getWorkflowRootTask(task);
+    if (root) rootIds.add(root.id);
+  });
+
+  rootIds.forEach((rootId) => {
+    const root = tasks.find((task) => task.id === rootId);
+    if (!root) return;
+
+    const chainTasks = [root, ...getAllDescendantTasks(root.id)];
+    if (chainTasks.every((task) => task.workflowInstanceId)) return;
+
+    const matches = findMatchingWorkflows(root.task, root.study);
+    const workflow = pickSingleWorkflowMatchForMigration(matches, root, chainTasks);
+    if (!workflow) return;
+
+    const instanceRoot = getWorkflowRootTaskForRecord(root, workflow);
+    if (!instanceRoot) return;
+
+    let instance = WorkflowInstanceStore.findByRootAndRecord(instanceRoot.id, workflow.id);
+    if (!instance) {
+      instance = createWorkflowInstance(workflow, instanceRoot, { startedAt: instanceRoot.createdAt });
+    }
+
+    chainTasks.forEach((task) => {
+      if (!task.workflowInstanceId) {
+        assignTaskToWorkflowInstance(task.id, instance, workflow);
+      }
+    });
+  });
+}
+
+function resolveWorkflowTaskRef(taskRef) {
+  if (!taskRef?.id) return null;
+  return tasks.find((task) => task.id === taskRef.id) || null;
 }
 
 function legacyTaskRulesToWorkflows(study) {
@@ -4912,9 +5097,13 @@ function persistPendingTaskDraft(draft, options = {}) {
   }
 
   if (options.checkLearnContext !== false && !options.applyWorkflow && shouldOfferWorkflowLearn(draft)) {
+    const savedFollowUp = tasks.find((task) => task.id === draft.id) || draft;
+    const savedRoot = lastCompletedTaskContext?.id
+      ? tasks.find((task) => task.id === lastCompletedTaskContext.id) || lastCompletedTaskContext
+      : lastCompletedTaskContext;
     openWorkflowLearnModal({
-      rootTask: lastCompletedTaskContext,
-      followUpTask: draft,
+      rootTask: savedRoot,
+      followUpTask: savedFollowUp,
     });
   }
 
@@ -5719,7 +5908,7 @@ function resolveWorkflowContext(task) {
 
   const workflow = findWorkflowRecordById(instance.workflowRecordId, instance.studyProtocol || task?.study);
   const root = getWorkflowRootTaskForInstance(instance);
-  if (!workflow || !root) return { instance, workflow: workflow || null, root: root || null };
+  if (!workflow || !root) return { instance: null, workflow: null, root: null };
   return { instance, workflow, root };
 }
 
@@ -6310,7 +6499,12 @@ function buildWorkflowRefFromSaved(saved, scope, studyProtocol) {
 function applyLearnedWorkflowToTaskChain(rootTaskRef, followUpTaskRef, workflow, ref, options = {}) {
   if (!workflow?.id || !rootTaskRef?.id) return;
 
-  const rootTask = tasks.find((task) => task.id === rootTaskRef.id) || rootTaskRef;
+  const rootTask = resolveWorkflowTaskRef(rootTaskRef);
+  if (!rootTask) {
+    showToast("Workflow Root Task를 찾을 수 없습니다.");
+    return;
+  }
+
   let instance = null;
   if (options.reuseInstance) {
     instance = WorkflowInstanceStore.findByRootAndRecord(rootTask.id, workflow.id);
@@ -6322,9 +6516,15 @@ function applyLearnedWorkflowToTaskChain(rootTaskRef, followUpTaskRef, workflow,
   assignTaskToWorkflowInstance(rootTask.id, instance, workflow);
 
   if (followUpTaskRef?.id) {
-    const followUpTask = tasks.find((task) => task.id === followUpTaskRef.id) || followUpTaskRef;
+    const followUpTask = resolveWorkflowTaskRef(followUpTaskRef);
+    if (!followUpTask) {
+      showToast("Follow-up Task를 찾을 수 없습니다.");
+      return;
+    }
     assignTaskToWorkflowInstance(followUpTask.id, instance, workflow);
-    TaskStore.update(followUpTask.id, { parentTaskId: rootTask.id });
+    if (followUpTask.parentTaskId !== rootTask.id) {
+      TaskStore.update(followUpTask.id, { parentTaskId: rootTask.id });
+    }
   }
 
   if (ref?.scope === "study" && ref.studyId) {
@@ -6378,7 +6578,7 @@ function openWorkflowLearnModal(context) {
       <fieldset class="workflow-learn-form__field">
         <legend class="workflow-learn-form__legend">저장 방식</legend>
         <label class="workflow-learn-form__radio">
-          <input type="radio" name="learnMode" value="update" ${existingWorkflows.length ? "checked" : "disabled"} />
+          <input type="radio" name="learnMode" value="update" ${existingWorkflows.length ? "" : "disabled"} />
           기존 Workflow 업데이트
         </label>
         ${
@@ -6387,7 +6587,7 @@ function openWorkflowLearnModal(context) {
             : '<p class="form-hint">업데이트할 Study Workflow가 없습니다.</p>'
         }
         <label class="workflow-learn-form__radio">
-          <input type="radio" name="learnMode" value="new" ${existingWorkflows.length ? "" : "checked"} />
+          <input type="radio" name="learnMode" value="new" checked />
           새 Workflow로 저장
         </label>
         <input type="text" id="workflowLearnNameInput" class="workflow-learn-form__input" value="${escapeAttr(`${root.task} Follow-up`)}" placeholder="Workflow 이름" />
@@ -6417,10 +6617,14 @@ function closeWorkflowLearnModal() {
 
 function handleWorkflowLearnSave() {
   if (!workflowLearnContext) return;
-  const root = workflowLearnContext.rootTask;
-  const followUp = workflowLearnContext.followUpTask;
+  const root = resolveWorkflowTaskRef(workflowLearnContext.rootTask);
+  const followUp = resolveWorkflowTaskRef(workflowLearnContext.followUpTask);
   const form = document.getElementById("workflowLearnForm");
-  if (!form) return;
+  if (!form || !root || !followUp) {
+    showToast("Workflow Learning 대상 Task를 찾을 수 없습니다.");
+    closeWorkflowLearnModal();
+    return;
+  }
 
   const mode = form.querySelector('input[name="learnMode"]:checked')?.value || "new";
   const scope = form.querySelector('input[name="learnScope"]:checked')?.value || "workspace";
@@ -6480,7 +6684,7 @@ function handleWorkflowLearnSave() {
   const saved = saveWorkflowWithScope(payload, scope, root.study);
   if (saved) {
     const ref = buildWorkflowRefFromSaved(saved, scope, root.study);
-    applyLearnedWorkflowToTaskChain(root, followUp, saved, ref);
+    applyLearnedWorkflowToTaskChain(root, followUp, saved, ref, { reuseInstance: false });
     renderAll();
     showToast(scope === "study" ? "Study Workflow로 저장했습니다." : "Workspace Workflow로 저장했습니다.");
   }
@@ -8326,6 +8530,7 @@ function handleStorageSync(e) {
     if (!Array.isArray(parsed)) return;
 
     tasks = parsed.filter(isValidTask).map(normalizeTask);
+    migrateTasksToWorkflowInstances();
     renderAll();
   } catch (err) {
     console.warn("다른 탭의 데이터 동기화에 실패했습니다:", err);
@@ -8365,7 +8570,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "56";
+const APP_BUILD = "57";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

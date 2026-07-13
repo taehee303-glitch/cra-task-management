@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.2.0] — build 57 — 2026-07-14 — Workflow Engine stabilization
+
+### Fixed
+
+- **Learning 기본값** — 새 Workflow 저장이 기본 선택 (기존 SIV Workflow에 잘못 연결되던 문제)
+- **Learning 저장** — 새 WorkflowInstance 생성 후 Root · Follow-up Task에 `workflowInstanceId` 확실히 연결
+- **Migration 강화** — `workflowId` 직접 연결 · Parent Instance 상속 · Learned Follow-up 재연결 · Legacy Chain 추론(1회성) 4단계
+- 깨진 `workflowInstanceId` 참조 자동 복구
+- Dashboard Chip · Workflow Detail — `workflowInstanceId`만 사용 (불완전 Instance는 미표시)
+
+---
+
 ## [1.2.0] — build 56 — 2026-07-14 — Workflow Engine (Instance-based)
 
 ### Added
