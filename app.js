@@ -5696,28 +5696,99 @@ function getWorkflowProgressStats(workflow, rootTask) {
   return { completed, total: stepDefs.length };
 }
 
-function getNextWorkflowStepInfo(task, workflow, rootTask) {
+function getAdjacentWorkflowStepInfo(task, workflow, rootTask) {
   const children = getSubtasks(rootTask.id).sort(compareTasks);
   const stepDefs = buildWorkflowTimelineStepDefs(workflow, rootTask);
   const currentIndex = Math.max(0, (getWorkflowStepIndexForTask(task, rootTask, workflow) || 1) - 1);
 
-  for (let index = currentIndex + 1; index < stepDefs.length; index += 1) {
-    const def = stepDefs[index];
-    const matched = findTaskForWorkflowStepName(def.taskName, rootTask, children);
-    if (matched?.status !== "Completed") {
-      return { def, matchedTask: matched, index };
+  const buildEntry = (def, index) => {
+    if (!def || index < 0 || index >= stepDefs.length) return null;
+    return {
+      def,
+      matchedTask: findTaskForWorkflowStepName(def.taskName, rootTask, children),
+      index,
+    };
+  };
+
+  return {
+    current: buildEntry(stepDefs[currentIndex], currentIndex),
+    prev: buildEntry(stepDefs[currentIndex - 1], currentIndex - 1),
+    next: buildEntry(stepDefs[currentIndex + 1], currentIndex + 1),
+    currentIndex,
+    total: stepDefs.length,
+  };
+}
+
+function renderDashboardWorkflowAdjacentSteps(task, workflow, rootTask) {
+  const adjacent = getAdjacentWorkflowStepInfo(task, workflow, rootTask);
+  if (!adjacent.current) return "";
+
+  const renderStepRow = (label, entry, variant) => {
+    if (!entry) {
+      return `
+        <div class="dashboard-workflow-adjacent__row dashboard-workflow-adjacent__row--${variant} dashboard-workflow-adjacent__row--empty">
+          <span class="dashboard-workflow-adjacent__label">${escapeHtml(label)}</span>
+          <span class="dashboard-workflow-adjacent__empty">—</span>
+        </div>
+      `;
     }
+
+    const meta = entry.matchedTask
+      ? formatDueDisplay(entry.matchedTask)
+      : formatWorkflowStepDueHint(entry.def, null).replace(/^\s*\(/, "").replace(/\)$/, "") || "";
+
+    return `
+      <div class="dashboard-workflow-adjacent__row dashboard-workflow-adjacent__row--${variant}">
+        <span class="dashboard-workflow-adjacent__label">${escapeHtml(label)}</span>
+        <div class="dashboard-workflow-adjacent__content">
+          <span class="dashboard-workflow-adjacent__name">${escapeHtml(entry.def.taskName)}</span>
+          ${meta ? `<span class="dashboard-workflow-adjacent__meta">${escapeHtml(meta)}</span>` : ""}
+        </div>
+      </div>
+    `;
+  };
+
+  return `
+    <section class="dashboard-workflow-adjacent">
+      <div class="dashboard-workflow-adjacent__position">
+        <span class="dashboard-workflow-adjacent__position-label">현재 위치</span>
+        <span class="dashboard-workflow-adjacent__position-value">${adjacent.currentIndex + 1} / ${adjacent.total}</span>
+      </div>
+      ${renderStepRow("이전", adjacent.prev, "prev")}
+      ${renderStepRow("현재", adjacent.current, "current")}
+      ${renderStepRow("다음", adjacent.next, "next")}
+    </section>
+  `;
+}
+
+function renderDashboardWorkflowDetailContent(task) {
+  const workflow = resolveTaskWorkflowRecord(task);
+  const root = getWorkflowRootTask(task);
+
+  if (!workflow || !root) {
+    return `
+      <section class="dashboard-workflow-empty">
+        <p class="dashboard-workflow-empty__text">연결된 Workflow가 없습니다.</p>
+        <p class="dashboard-workflow-empty__hint">My Tasks에서 Task를 관리하거나 Workflow Library에서 Flow를 적용할 수 있습니다.</p>
+      </section>
+    `;
   }
 
-  for (let index = 0; index < currentIndex; index += 1) {
-    const def = stepDefs[index];
-    const matched = findTaskForWorkflowStepName(def.taskName, rootTask, children);
-    if (matched?.status !== "Completed") {
-      return { def, matchedTask: matched, index };
-    }
-  }
+  const progress = getWorkflowProgressStats(workflow, root);
+  const adjacentHtml = renderDashboardWorkflowAdjacentSteps(task, workflow, root);
+  const timelineHtml = renderWorkflowTimeline(task, { clickMode: "dashboard" });
 
-  return null;
+  return `
+    <section class="dashboard-workflow-progress">
+      <span class="dashboard-workflow-progress__label">Workflow 진행률</span>
+      <span class="dashboard-workflow-progress__value">${progress.completed} / ${progress.total} 완료</span>
+      <div class="dashboard-workflow-progress__bar" role="progressbar" aria-valuenow="${progress.completed}" aria-valuemin="0" aria-valuemax="${progress.total}">
+        <span class="dashboard-workflow-progress__fill" style="width:${progress.total ? Math.round((progress.completed / progress.total) * 100) : 0}%"></span>
+      </div>
+    </section>
+    ${adjacentHtml}
+    ${timelineHtml}
+  `;
 }
 
 function renderWorkflowTimeline(task, options = {}) {
@@ -5789,102 +5860,6 @@ function bindWorkflowTimelineClicks(container, mode = "edit") {
   });
 }
 
-function renderDashboardWorkflowTaskSummary(task) {
-  const studyLabel = task.study || "Study 미정";
-  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
-  const dueLabel = task.dueDate ? formatDueLabel(task.dueDate) : "미정";
-  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
-
-  return `
-    <section class="dashboard-workflow-summary">
-      <h4 class="dashboard-workflow-summary__title">${escapeHtml(task.task)}</h4>
-      <dl class="dashboard-workflow-summary__grid">
-        <div class="dashboard-workflow-summary__item"><dt>Study</dt><dd>${escapeHtml(studyLabel)}</dd></div>
-        <div class="dashboard-workflow-summary__item"><dt>Site</dt><dd>${escapeHtml(siteLabel)}</dd></div>
-        <div class="dashboard-workflow-summary__item"><dt>Due</dt><dd><span class="dashboard-workflow-summary__due ${dueClass}">${escapeHtml(dueLabel)}</span></dd></div>
-        <div class="dashboard-workflow-summary__item"><dt>Priority</dt><dd>${escapeHtml(task.priority || "Medium")}</dd></div>
-      </dl>
-    </section>
-  `;
-}
-
-function renderDashboardWorkflowExecuteBar(task) {
-  const isDone = task.status === "Completed";
-  return `
-    <section class="dashboard-workflow-execute" aria-label="업무 실행">
-      <div class="dashboard-workflow-execute__status">
-        <span class="dashboard-workflow-execute__label">Status</span>
-        ${renderInlineStatusDropdown(task, { compact: true })}
-      </div>
-      <button type="button" class="dashboard-workflow-execute__complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-        <span class="dashboard-workflow-execute__complete-icon" aria-hidden="true">✓</span>
-        <span>완료</span>
-      </button>
-    </section>
-  `;
-}
-
-function bindDashboardWorkflowExecuteActions(container) {
-  if (!container) return;
-  container.querySelectorAll("[data-complete]").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      applyTaskStatusChange(btn.dataset.complete, "Completed");
-    });
-  });
-  bindStatusDropdowns(container);
-}
-
-function renderDashboardWorkflowDetailContent(task) {
-  const workflow = resolveTaskWorkflowRecord(task);
-  const root = getWorkflowRootTask(task);
-  const summaryHtml = renderDashboardWorkflowTaskSummary(task);
-  const executeHtml = renderDashboardWorkflowExecuteBar(task);
-
-  if (!workflow || !root) {
-    return `
-      ${summaryHtml}
-      ${executeHtml}
-      <section class="dashboard-workflow-empty">
-        <p class="dashboard-workflow-empty__text">연결된 Workflow가 없습니다.</p>
-        <p class="dashboard-workflow-empty__hint">My Tasks에서 Task를 관리하거나 Workflow Library에서 Flow를 적용할 수 있습니다.</p>
-      </section>
-    `;
-  }
-
-  const progress = getWorkflowProgressStats(workflow, root);
-  const timelineHtml = renderWorkflowTimeline(task, { clickMode: "dashboard" });
-  const nextInfo = getNextWorkflowStepInfo(task, workflow, root);
-  const nextHtml = nextInfo
-    ? `<section class="dashboard-workflow-next">
-        <h5 class="dashboard-workflow-next__title">다음 업무</h5>
-        <p class="dashboard-workflow-next__name">${escapeHtml(nextInfo.def.taskName)}</p>
-        ${
-          nextInfo.matchedTask
-            ? `<p class="dashboard-workflow-next__meta">${escapeHtml(formatDueDisplay(nextInfo.matchedTask))}</p>`
-            : `<p class="dashboard-workflow-next__meta">${escapeHtml(formatWorkflowStepDueHint(nextInfo.def, null).replace(/^\s*\(/, "").replace(/\)$/, "") || "예정")}</p>`
-        }
-      </section>`
-    : `<section class="dashboard-workflow-next dashboard-workflow-next--done">
-        <h5 class="dashboard-workflow-next__title">다음 업무</h5>
-        <p class="dashboard-workflow-next__name">모든 Workflow Step이 완료되었습니다.</p>
-      </section>`;
-
-  return `
-    ${summaryHtml}
-    ${executeHtml}
-    <section class="dashboard-workflow-progress">
-      <span class="dashboard-workflow-progress__label">Workflow 진행률</span>
-      <span class="dashboard-workflow-progress__value">${progress.completed} / ${progress.total} 완료</span>
-      <div class="dashboard-workflow-progress__bar" role="progressbar" aria-valuenow="${progress.completed}" aria-valuemin="0" aria-valuemax="${progress.total}">
-        <span class="dashboard-workflow-progress__fill" style="width:${progress.total ? Math.round((progress.completed / progress.total) * 100) : 0}%"></span>
-      </div>
-    </section>
-    ${timelineHtml}
-    ${nextHtml}
-  `;
-}
-
 function openDashboardWorkflowDetail(taskId) {
   const task = tasks.find((t) => t.id === taskId);
   if (!task) return;
@@ -5899,7 +5874,6 @@ function openDashboardWorkflowDetail(taskId) {
   if (els.dashboardWorkflowBody) {
     els.dashboardWorkflowBody.innerHTML = renderDashboardWorkflowDetailContent(task);
     bindWorkflowTimelineClicks(els.dashboardWorkflowBody, "dashboard");
-    bindDashboardWorkflowExecuteActions(els.dashboardWorkflowBody);
   }
   if (els.dashboardWorkflowPanel) els.dashboardWorkflowPanel.hidden = false;
   document.body.classList.add("dashboard-workflow-open");
@@ -8124,7 +8098,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "51";
+const APP_BUILD = "52";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10244,6 +10218,13 @@ function bindDashboardTaskActions() {
       openDashboardWorkflowDetail(btn.dataset.dashboardWorkflow);
     });
   });
+  els.viewDashboard.querySelectorAll("[data-complete]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyTaskStatusChange(btn.dataset.complete, "Completed");
+    });
+  });
+  bindStatusDropdowns(els.viewDashboard);
   els.viewDashboard.querySelectorAll(".dash-more-btn[data-dashboard-filter]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -10274,8 +10255,8 @@ function renderDashItem(task, type, options = {}) {
 
   if (compact) {
     return `
-    <article class="dash-item dash-item--interactive dash-item--compact dash-item--readonly dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-item__main dash-item__main--readonly" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
+    <article class="dash-item dash-item--interactive dash-item--compact dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-item__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
         <div class="dash-item__head">
           <div class="dash-item__title-wrap">
             ${criticalBadge}
@@ -10289,6 +10270,13 @@ function renderDashItem(task, type, options = {}) {
         </div>
         <span class="dash-item__chevron" aria-hidden="true">›</span>
       </button>
+      <div class="dash-item__actions">
+        ${renderInlineStatusDropdown(task, { compact: true })}
+        <button type="button" class="dash-item__complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+          <span class="dash-item__complete-icon" aria-hidden="true">✓</span>
+          <span class="dash-item__complete-label">완료</span>
+        </button>
+      </div>
     </article>
   `;
   }
@@ -10464,7 +10452,6 @@ function renderAll() {
       if (els.dashboardWorkflowBody) {
         els.dashboardWorkflowBody.innerHTML = renderDashboardWorkflowDetailContent(task);
         bindWorkflowTimelineClicks(els.dashboardWorkflowBody, "dashboard");
-        bindDashboardWorkflowExecuteActions(els.dashboardWorkflowBody);
       }
     } else {
       closeDashboardWorkflowDetail();

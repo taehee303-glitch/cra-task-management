@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 52 — 2026-07-13 — Dashboard Execute on cards only
+
+### Changed
+
+- **Dashboard 카드** — Status 변경 · 완료 버튼 복원 (카드 오른쪽에서 업무 실행)
+- **Workflow Detail** — Workflow 확인 전용 (진행률 · 현재 위치 · 이전/다음 · Timeline), Status UI 제거
+- 역할 분리: Dashboard = Execute · Workflow Detail = 확인 · My Tasks = Manage
+
+---
+
 ## [1.1.0] — build 51 — 2026-07-13 — Dashboard Execute + Workflow Master
 
 ### Added
