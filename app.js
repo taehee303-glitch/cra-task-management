@@ -450,6 +450,8 @@ const els = {
   referenceCloudSyncBtn: document.getElementById("referenceCloudSyncBtn"),
   referenceCloudSyncLabel: document.getElementById("referenceCloudSyncLabel"),
   addTaskPriority: document.getElementById("addTaskPriority"),
+  task: document.getElementById("task"),
+  dueDate: document.getElementById("dueDate"),
   bottomNav: document.getElementById("bottomNav"),
   masterSheet: document.getElementById("masterSheet"),
   bottomNavBtns: document.querySelectorAll(".bottom-nav [data-view]"),
@@ -3593,12 +3595,14 @@ function openAddTaskModal(presetOrOptions = null) {
   const priority = preset?.priority || options.priority || "Medium";
   addTaskPresetPriority = priority;
   if (els.addTaskPriority) els.addTaskPriority.value = priority;
-  if (preset?.task) {
+  if (preset?.task && els.task) {
     els.task.value = preset.task;
-  } else if (options.task) {
+  } else if (options.task && els.task) {
     els.task.value = options.task;
   }
-  els.dueDate.value = options.dueDate || toDateString(getToday());
+  if (els.dueDate) {
+    els.dueDate.value = options.dueDate || toDateString(getToday());
+  }
   refreshTaskStudySiteSelects();
   if (options.study) {
     els.study.value = options.study;
@@ -4995,13 +4999,11 @@ function openAddTaskModalForFollowUp(completedTask) {
     workflowId: completedTask.workflowId || null,
     parentTaskId: completedTask.parentTaskId || null,
   };
-  requestAnimationFrame(() => {
-    openAddTaskModal({
-      study: pendingFollowUpParentTask.study,
-      site: pendingFollowUpParentTask.site,
-      priority: pendingFollowUpParentTask.priority,
-      followUp: true,
-    });
+  openAddTaskModal({
+    study: pendingFollowUpParentTask.study,
+    site: pendingFollowUpParentTask.site,
+    priority: pendingFollowUpParentTask.priority,
+    followUp: true,
   });
 }
 
@@ -7390,7 +7392,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "40";
+const APP_BUILD = "41";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

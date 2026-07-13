@@ -17,6 +17,15 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 41 — 2026-07-13 — Follow-up Add Task modal fix
+
+### Fixed
+
+- **Follow-up → Add Task Modal** — `els.task` / `els.dueDate` 참조 누락으로 `openAddTaskModal`이 예외 발생하며 Modal이 열리지 않던 문제 수정
+- Add Task form 필드 접근에 null-safe 처리 추가
+
+---
+
 ## [1.1.0] — build 40 — 2026-07-13 — Workflow Library editor + follow-up fix
 
 ### Added
