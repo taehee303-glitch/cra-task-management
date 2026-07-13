@@ -5740,6 +5740,33 @@ body.body--settings-open {
   margin-top: 0.25rem;
 }
 
+.task-context-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+.task-context-meta__workflow {
+  color: #6366f1;
+  font-weight: 500;
+}
+
+.task-context-meta__routine {
+  color: #059669;
+  font-weight: 500;
+}
+
+.dash-item-title .task-context-meta,
+.task-card__title + .task-context-meta,
+.mobile-task-card__title + .task-context-meta {
+  margin-top: 0.15rem;
+}
+
 .task-context-chip {
   display: inline-flex;
   align-items: center;

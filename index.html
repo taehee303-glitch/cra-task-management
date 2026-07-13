@@ -150,19 +150,6 @@
             <div id="mobileTaskFeed" class="mobile-task-feed" aria-live="polite"></div>
           </section>
 
-          <section class="mobile-daily__section" id="mobileWorkflowSection" hidden>
-            <div class="mobile-daily__section-head">
-              <h3 class="mobile-daily__section-title">진행 중인 Workflow</h3>
-              <span class="mobile-daily__section-badge" id="mobileWorkflowCount">0</span>
-            </div>
-            <div id="mobileWorkflowList" class="workflow-active-list" aria-live="polite"></div>
-          </section>
-
-          <section class="mobile-daily__section" id="mobileRoutineSection" hidden>
-            <h3 class="mobile-daily__section-title">예정된 Routine</h3>
-            <div id="mobileRoutinePreviewList" class="routine-preview-list" aria-live="polite"></div>
-          </section>
-
           <section class="mobile-daily__section" id="mobileUpcomingSection">
             <h3 class="mobile-daily__section-title">곧 마감되는 업무</h3>
             <div id="mobileUpcomingList" class="mobile-upcoming"></div>
@@ -236,8 +223,6 @@
               </select>
             </div>
           </div>
-
-          <div id="tasksWorkflowStrip" class="tasks-workflow-strip" hidden aria-live="polite"></div>
 
           <div id="taskCardList" class="task-card-list task-card-list--inline" aria-live="polite"></div>
           <div class="table-wrap task-table-wrap task-table-wrap--inline" id="taskTableWrap" hidden>
@@ -381,18 +366,8 @@
         <section class="dashboard">
           <header class="dashboard__header">
             <h2 class="section-title">Dashboard</h2>
-            <p class="dashboard__tagline">Track tasks. Build workflows.</p>
+            <p class="dashboard__tagline">오늘 해야 할 Task를 한눈에 확인하세요.</p>
           </header>
-
-          <section class="dashboard-workflow-section dashboard-workflow-section--hero" aria-labelledby="dashboardWorkflowActiveHeading">
-            <div class="dashboard-workflow-section__head">
-              <h3 class="dashboard-workflow-section__title" id="dashboardWorkflowActiveHeading">진행 중인 Workflow</h3>
-              <span class="dashboard-workflow-section__badge" id="dashboardWorkflowActiveCount">0</span>
-            </div>
-            <div id="dashboardWorkflowActiveList" class="workflow-active-list">
-              <p class="empty-msg">진행 중인 Workflow가 없습니다. MV/SIV/COV 또는 Workflow 적용으로 Task Flow를 시작하세요.</p>
-            </div>
-          </section>
 
           <section class="attention-panel">
             <div class="attention-panel__header">
@@ -477,7 +452,7 @@
             </div>
           </div>
 
-          <div class="dashboard-grid dashboard-grid--workflow">
+          <div class="dashboard-grid">
             <section class="dash-card dash-card--week-list">
               <div class="dash-card-header">
                 <span class="dash-icon">📆</span>
@@ -500,16 +475,6 @@
             </section>
           </div>
 
-          <section class="dash-card dash-card--routine-preview">
-            <div class="dash-card-header">
-              <span class="dash-icon">🔁</span>
-              <h3>예정된 Routine</h3>
-              <button type="button" class="btn btn--ghost btn--sm" id="dashboardRoutineManageBtn">Routine 관리</button>
-            </div>
-            <div id="dashboardRoutinePreviewList" class="routine-preview-list">
-              <p class="empty-msg">등록된 Routine이 없습니다. Study → Routine 탭에서 반복 업무를 등록하세요.</p>
-            </div>
-          </section>
         </section>
       </div>
 

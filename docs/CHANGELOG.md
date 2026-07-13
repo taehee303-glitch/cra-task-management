@@ -17,6 +17,19 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 35 — 2026-07-13 — Task-centric Dashboard & My Tasks
+
+### Changed
+
+- **Dashboard / My Tasks / Mobile Home:** Workflow·Routine을 별도 섹션이 아닌 Task 속성(보조 Context)으로 표시
+  - Workflow: `🟣 {이름} (현재/전체)` — 단일 단계는 진행률 생략
+  - Routine: `🔁 {Routine 이름}` badge
+- Dashboard Active Workflow hero, Routine preview, My Tasks Workflow strip 제거
+- Mobile Home의 진행 중 Workflow / 예정 Routine 섹션 제거
+- Dashboard tagline: 오늘 해야 할 Task 중심
+
+---
+
 ## [1.1.0] — build 34 — 2026-07-13 — Task-first UX
 
 ### Changed
