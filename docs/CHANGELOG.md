@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 44 — 2026-07-13 — Dashboard readability pass
+
+### Changed
+
+- **Task 카드 스캔 패턴** — Task 이름 우선(좌) · Due 칩(우) · Study/Site 보조 정보 분리
+- Priority는 Critical만 표시해 시각적 노이즈 감소
+- Section별 헤더 색상 악센트(이번 주/오늘/D-1/지연)로 구역 구분 강화
+- Status·Context Chip·KPI 숫자 가독성 개선 (font-weight, contrast, tabular nums)
+
+---
+
 ## [1.1.0] — build 43 — 2026-07-13 — Dashboard density polish
 
 ### Changed

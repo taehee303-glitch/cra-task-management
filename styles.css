@@ -1841,14 +1841,17 @@ body.body--settings-open {
 }
 
 .dash-list {
-  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
   max-height: 320px;
   overflow-y: auto;
 }
 
 .dash-list--execute {
   max-height: min(52vh, 420px);
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
 }
 
 .dash-list--compact {
@@ -1857,9 +1860,9 @@ body.body--settings-open {
 
 .dash-item {
   padding: 0;
-  border-radius: 12px;
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 0;
+  border: 1px solid #e2e8f0;
   background: #ffffff;
   overflow: hidden;
 }
@@ -1905,13 +1908,35 @@ body.body--settings-open {
   display: block;
   flex: 1;
   min-width: 0;
-  padding: 12px 28px 12px 14px;
+  padding: 10px 26px 10px 12px;
   border: none;
   background: transparent;
   text-align: left;
   cursor: pointer;
   font: inherit;
   color: inherit;
+}
+
+.dash-item__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.dash-item__title-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dash-item__critical {
+  flex-shrink: 0;
+  margin: 0;
 }
 
 .dash-item__main:focus-visible {
@@ -1931,12 +1956,16 @@ body.body--settings-open {
 .dash-item__due-chip {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.72rem;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
   font-weight: 700;
+  letter-spacing: 0.01em;
   background: #f1f5f9;
   color: #475569;
+  white-space: nowrap;
+}
 }
 
 .dash-item__due-chip.due-date--overdue {
@@ -1998,10 +2027,12 @@ body.body--settings-open {
 
 .dash-item__actions .status-dropdown__trigger {
   min-height: 36px;
-  min-width: 88px;
+  min-width: 84px;
   padding: 6px 8px;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 700;
   justify-content: center;
+  letter-spacing: 0.01em;
 }
 
 .dash-item__complete {
@@ -2048,16 +2079,32 @@ body.body--settings-open {
 }
 
 .dash-item-title {
-  font-weight: 700;
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 0.94rem;
   line-height: 1.35;
-  margin-bottom: 4px;
-  padding-right: 4px;
+  color: #0f172a;
+  margin: 0;
+  padding: 0;
+  word-break: break-word;
 }
 
 .dash-item-meta {
-  font-size: 0.8rem;
-  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.76rem;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.dash-item-meta__sep {
+  color: #cbd5e1;
+}
+
+.dash-item--attention-today .dash-item-title {
+  font-weight: 700;
+  color: #1e3a8a;
 }
 
 .dash-item-due {
@@ -6567,9 +6614,108 @@ body.body--settings-open {
   margin-top: 0.15rem;
 }
 
-.dash-item-title + .task-context-chips,
-.dash-item__main .task-context-chips {
-  margin-top: 0.2rem;
+.dashboard--readable {
+  --dash-section-accent: #64748b;
+}
+
+.dashboard--readable .dashboard-stack .dash-card {
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.dashboard--readable .dashboard-stack .dash-card-header {
+  border-bottom: 1px solid #eef2f7;
+}
+
+.dashboard--readable .dash-card--week-list > .dash-card-header {
+  border-left: 3px solid #64748b;
+  background: #f8fafc;
+}
+
+.dashboard--readable .dash-card--execute > .dash-card-header {
+  border-left: 3px solid #2563eb;
+  background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%);
+}
+
+.dashboard--readable .dash-card--execute > .dash-card-header h3 {
+  color: #1e3a8a;
+}
+
+.dashboard--readable .dash-card--attention-d1 > .dash-card-header {
+  border-left: 3px solid #d97706;
+  background: #fffbeb;
+}
+
+.dashboard--readable .dash-card--recent > .dash-card-header {
+  border-left: 3px solid #94a3b8;
+  background: #f8fafc;
+}
+
+.dashboard--readable .dash-card--attention-overdue > .dash-card-header {
+  border-left: 3px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+.dashboard--readable .dash-card--attention-overdue:not(.dash-card--empty) > .dash-card-header {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.dashboard--readable .dash-card--attention-overdue:not(.dash-card--empty) > .dash-card-header h3 {
+  color: #991b1b;
+}
+
+.dashboard--readable .today-progress-hero--compact .today-progress-hero__percent {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.dashboard--readable .today-progress-hero--compact .today-progress-hero__meta {
+  color: #475569;
+}
+
+.dashboard--readable .task-context-chips {
+  margin-top: 0.3rem;
+  gap: 0.3rem;
+}
+
+.dashboard--readable .task-context-chip {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+}
+
+.dashboard--readable .stats-grid--dashboard-footer .stat-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.dashboard--readable .stats-grid--dashboard-footer .stat-card__value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.dashboard--readable .stats-grid--dashboard-footer .stat-card__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.01em;
+}
+
+.dashboard--readable .stats-grid--dashboard-footer .stat-card__icon {
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+.dash-item--recent {
+  border-left: 3px solid #cbd5e1;
+}
+
+.dash-item--recent .dash-item-title {
+  font-weight: 600;
+  color: #475569;
 }
 
 .task-context-chip {

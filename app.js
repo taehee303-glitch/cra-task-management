@@ -7399,7 +7399,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "43";
+const APP_BUILD = "44";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9509,21 +9509,23 @@ function renderDashItem(task, type) {
   const criticalClass = task.priority === "Critical" ? " dash-item--critical" : "";
   const isDone = task.status === "Completed";
   const selectedClass = selectedTaskId === task.id ? " dash-item--selected" : "";
-  const priorityChip =
-    task.priority === "Critical"
-      ? '<span class="critical-badge">Critical</span>'
-      : `<span class="dash-item__priority dash-item__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>`;
+  const studyLabel = task.study || "Study 미정";
+  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
+  const criticalBadge =
+    task.priority === "Critical" ? '<span class="critical-badge dash-item__critical">Critical</span>' : "";
 
   return `
     <article class="dash-item dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
       <button type="button" class="dash-item__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
-        <div class="dash-item__top">
+        <div class="dash-item__head">
+          <div class="dash-item__title-wrap">
+            ${criticalBadge}
+            <span class="dash-item-title">${escapeHtml(task.task)}</span>
+          </div>
           <span class="dash-item__due-chip ${dueClass}">${escapeHtml(dueLabel)}</span>
-          ${priorityChip}
         </div>
-        <div class="dash-item-title">${escapeHtml(task.task)}</div>
+        <div class="dash-item-meta"><span class="dash-item-meta__study">${escapeHtml(studyLabel)}</span><span class="dash-item-meta__sep" aria-hidden="true">·</span><span class="dash-item-meta__site">${escapeHtml(siteLabel)}</span></div>
         ${renderTaskContextMeta(task)}
-        <div class="dash-item-meta">${escapeHtml(task.study || "Study 미정")} · ${escapeHtml(task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정")}</div>
         <span class="dash-item__chevron" aria-hidden="true">›</span>
       </button>
       <div class="dash-item__actions">
