@@ -5167,30 +5167,46 @@ function getWorkflowStepPosition(task) {
   if (!root) return null;
 
   const workflowInfo = resolveTaskWorkflowDisplay(task) || resolveTaskWorkflowDisplay(root);
+  const workflow = workflowInfo?.workflow || null;
   const children = getSubtasks(root.id).sort(compareTasks);
-  const steps = [root, ...children];
-  const currentIndex = steps.findIndex((step) => step.id === task.id);
-  if (currentIndex < 0) return null;
-  if (!workflowInfo && !root.workflowId && children.length === 0) return null;
 
-  const definedSteps =
-    (workflowInfo?.workflow?.preSteps?.length || 0) + (workflowInfo?.workflow?.steps?.length || 0);
-  const total = Math.max(steps.length, definedSteps > 0 ? definedSteps + 1 : steps.length);
+  if (!workflow && !workflowInfo && !root.workflowId && children.length === 0) return null;
+
+  const displayName = workflow
+    ? workflow.name || getWorkflowRootLabel(workflow)
+    : workflowInfo?.name;
+  if (!displayName || displayName === "Workflow") return null;
+
+  const preCount = workflow?.preSteps?.length || 0;
+  let current;
+  if (task.id === root.id) {
+    current = preCount + 1;
+  } else {
+    const childIndex = children.findIndex((child) => child.id === task.id);
+    if (childIndex < 0) return null;
+    current = preCount + 1 + childIndex + 1;
+  }
+
+  const total = workflow
+    ? computeWorkflowStepCount(workflow)
+    : Math.max(children.length + 1, current);
 
   return {
-    name: workflowInfo?.name || "Workflow",
-    current: currentIndex + 1,
+    name: displayName,
+    current,
     total,
+    workflow,
   };
 }
 
-function renderTaskContextMeta(task) {
+function renderTaskContextMeta(task, options = {}) {
   const chips = [];
   const step = getWorkflowStepPosition(task);
   const routineInfo = resolveTaskRoutineDisplay(task);
+  const inline = Boolean(options.inline);
 
   if (step) {
-    const progress = step.total > 1 ? ` ${step.current}/${step.total}` : "";
+    const progress = step.total > 1 ? ` (${step.current}/${step.total})` : "";
     chips.push(
       `<span class="task-context-chip task-context-chip--workflow" title="Workflow">🟣 ${escapeHtml(step.name)}${progress}</span>`
     );
@@ -5201,11 +5217,23 @@ function renderTaskContextMeta(task) {
     );
   }
   if (!chips.length) return "";
-  return `<div class="task-context-chips">${chips.join("")}</div>`;
+  const className = inline ? "task-context-chips task-context-chips--inline" : "task-context-chips";
+  return `<div class="${className}">${chips.join("")}</div>`;
 }
 
-function renderDashboardEmptyMsg(text) {
-  return `<p class="empty-msg empty-msg--compact">✓ ${escapeHtml(text)}</p>`;
+const DASHBOARD_TODAY_PREVIEW_LIMIT = 5;
+const DASHBOARD_SECTION_PREVIEW_LIMIT = 3;
+
+function renderDashboardMoreButton(filter, remaining) {
+  if (!remaining || remaining <= 0 || !filter) return "";
+  return `<button type="button" class="dash-more-btn" data-dashboard-filter="${escapeAttr(filter)}">+ ${remaining}개 더 보기</button>`;
+}
+
+function renderDashboardSectionTasks(taskList, type, filter, limit, compact = true) {
+  const visible = taskList.slice(0, limit);
+  const remaining = Math.max(0, taskList.length - visible.length);
+  const itemsHtml = visible.map((task) => renderDashItem(task, type, { compact })).join("");
+  return `${itemsHtml}${renderDashboardMoreButton(filter, remaining)}`;
 }
 
 function setDashCardEmptyState(listEl, isEmpty) {
@@ -5227,26 +5255,24 @@ function getDashboardWeekPrepTasks() {
       if (!isActive(task) || !task.dueDate || !isDueThisWeek(task.dueDate)) return false;
       return task.dueDate !== todayStr;
     })
-    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate))
-    .slice(0, 8);
+    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate));
 }
 
 function getDashboardNextWeekTasks() {
   return tasks
     .filter((task) => isActive(task) && task.dueDate && isDueNextWeek(task.dueDate))
-    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate))
-    .slice(0, 8);
+    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate));
 }
 
-function getRecentlyCompletedTasks(limit = 6) {
-  return tasks
+function getRecentlyCompletedTasks(limit = null) {
+  const sorted = tasks
     .filter((task) => task.status === "Completed")
     .sort((a, b) => {
       const aDate = a.completedAt || a.dueDate || a.createdAt || "";
       const bDate = b.completedAt || b.dueDate || b.createdAt || "";
       return bDate.localeCompare(aDate);
-    })
-    .slice(0, limit);
+    });
+  return limit ? sorted.slice(0, limit) : sorted;
 }
 
 function navigateToStudyWorkflowLibrary(studyProtocol) {
@@ -7414,7 +7440,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "45";
+const APP_BUILD = "46";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9449,7 +9475,7 @@ function renderDashboard() {
 function renderDashboardTaskSections(todayTasks, overdueTasks) {
   const weekPrepTasks = getDashboardWeekPrepTasks();
   const nextWeekTasks = getDashboardNextWeekTasks();
-  const recentCompleted = getRecentlyCompletedTasks(5);
+  const recentCompleted = getRecentlyCompletedTasks();
 
   if (els.attentionTodayCount) {
     els.attentionTodayCount.textContent = String(todayTasks.length);
@@ -9457,7 +9483,7 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.attentionTodayList) {
     els.attentionTodayList.innerHTML = todayTasks.length
-      ? todayTasks.map((t) => renderDashItem(t, "time-today")).join("")
+      ? renderDashboardSectionTasks(todayTasks, "time-today", "today", DASHBOARD_TODAY_PREVIEW_LIMIT)
       : renderDashboardEmptyMsg("오늘 마감 업무가 없습니다.");
     setDashCardEmptyState(els.attentionTodayList, todayTasks.length === 0);
   }
@@ -9468,7 +9494,7 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.dashboardWeekPrepList) {
     els.dashboardWeekPrepList.innerHTML = weekPrepTasks.length
-      ? weekPrepTasks.map((task) => renderDashItem(task, "time-week")).join("")
+      ? renderDashboardSectionTasks(weekPrepTasks, "time-week", "week", DASHBOARD_SECTION_PREVIEW_LIMIT)
       : renderDashboardEmptyMsg("이번 주 준비 업무가 없습니다.");
     setDashCardEmptyState(els.dashboardWeekPrepList, weekPrepTasks.length === 0);
   }
@@ -9479,7 +9505,7 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.dashboardNextWeekList) {
     els.dashboardNextWeekList.innerHTML = nextWeekTasks.length
-      ? nextWeekTasks.map((task) => renderDashItem(task, "time-next-week")).join("")
+      ? renderDashboardSectionTasks(nextWeekTasks, "time-next-week", "next-week", DASHBOARD_SECTION_PREVIEW_LIMIT)
       : renderDashboardEmptyMsg("다음 주 예정 업무가 없습니다.");
     setDashCardEmptyState(els.dashboardNextWeekList, nextWeekTasks.length === 0);
   }
@@ -9490,7 +9516,7 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.dashboardRecentCompletedList) {
     els.dashboardRecentCompletedList.innerHTML = recentCompleted.length
-      ? recentCompleted.map((task) => renderDashItem(task, "time-recent")).join("")
+      ? renderDashboardSectionTasks(recentCompleted, "time-recent", "completed", DASHBOARD_SECTION_PREVIEW_LIMIT)
       : renderDashboardEmptyMsg("최근 완료 업무가 없습니다.");
     setDashCardEmptyState(els.dashboardRecentCompletedList, recentCompleted.length === 0);
   }
@@ -9501,7 +9527,7 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.attentionOverdueList) {
     els.attentionOverdueList.innerHTML = overdueTasks.length
-      ? overdueTasks.map((t) => renderDashItem(t, "time-overdue")).join("")
+      ? renderDashboardSectionTasks(overdueTasks, "time-overdue", "overdue", DASHBOARD_SECTION_PREVIEW_LIMIT)
       : renderDashboardEmptyMsg("지연된 업무가 없습니다.");
     setDashCardEmptyState(els.attentionOverdueList, overdueTasks.length === 0);
   }
@@ -9509,9 +9535,19 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   bindDashboardTaskActions();
 }
 
+function renderDashboardEmptyMsg(text) {
+  return `<p class="empty-msg empty-msg--compact">✓ ${escapeHtml(text)}</p>`;
+}
+
 function bindDashboardTaskActions() {
   if (!els.viewDashboard) return;
   bindTaskListActions(els.viewDashboard);
+  els.viewDashboard.querySelectorAll(".dash-more-btn[data-dashboard-filter]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handleDashboardCardFilterClick(btn.dataset.dashboardFilter);
+    });
+  });
 }
 
 function compareAttentionTasks(a, b) {
@@ -9521,7 +9557,8 @@ function compareAttentionTasks(a, b) {
   return a.study.localeCompare(b.study, "ko");
 }
 
-function renderDashItem(task, type) {
+function renderDashItem(task, type, options = {}) {
+  const compact = Boolean(options.compact);
   const dueClass = getDueDateDisplayClass(task.dueDate, task.status);
   const dueLabel = formatDueLabel(task.dueDate);
   const criticalClass = task.priority === "Critical" ? " dash-item--critical" : "";
@@ -9529,8 +9566,36 @@ function renderDashItem(task, type) {
   const selectedClass = selectedTaskId === task.id ? " dash-item--selected" : "";
   const studyLabel = task.study || "Study 미정";
   const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
+  const contextMeta = renderTaskContextMeta(task, { inline: compact });
   const criticalBadge =
     task.priority === "Critical" ? '<span class="critical-badge dash-item__critical">Critical</span>' : "";
+
+  if (compact) {
+    return `
+    <article class="dash-item dash-item--interactive dash-item--compact dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-item__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
+        <div class="dash-item__head">
+          <div class="dash-item__title-wrap">
+            ${criticalBadge}
+            <span class="dash-item-title">${escapeHtml(task.task)}</span>
+          </div>
+          <span class="dash-item__due-chip ${dueClass}">${escapeHtml(dueLabel)}</span>
+        </div>
+        <div class="dash-item__sub">
+          <span class="dash-item-meta"><span class="dash-item-meta__study">${escapeHtml(studyLabel)}</span><span class="dash-item-meta__sep" aria-hidden="true">·</span><span class="dash-item-meta__site">${escapeHtml(siteLabel)}</span></span>
+          ${contextMeta}
+        </div>
+        <span class="dash-item__chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="dash-item__actions dash-item__actions--compact">
+        ${renderInlineStatusDropdown(task)}
+        <button type="button" class="dash-item__complete dash-item__complete--icon" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+          <span class="dash-item__complete-icon" aria-hidden="true">✓</span>
+        </button>
+      </div>
+    </article>
+  `;
+  }
 
   return `
     <article class="dash-item dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
@@ -9543,7 +9608,7 @@ function renderDashItem(task, type) {
           <span class="dash-item__due-chip ${dueClass}">${escapeHtml(dueLabel)}</span>
         </div>
         <div class="dash-item-meta"><span class="dash-item-meta__study">${escapeHtml(studyLabel)}</span><span class="dash-item-meta__sep" aria-hidden="true">·</span><span class="dash-item-meta__site">${escapeHtml(siteLabel)}</span></div>
-        ${renderTaskContextMeta(task)}
+        ${contextMeta}
         <span class="dash-item__chevron" aria-hidden="true">›</span>
       </button>
       <div class="dash-item__actions">

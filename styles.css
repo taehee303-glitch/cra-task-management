@@ -2011,7 +2011,6 @@ body.body--settings-open {
   color: #475569;
   white-space: nowrap;
 }
-}
 
 .dash-item__due-chip.due-date--overdue {
   background: var(--danger-bg);
@@ -6739,6 +6738,128 @@ body.body--settings-open {
 
 .dashboard--time .dash-card--empty {
   opacity: 0.82;
+}
+
+/* Summary dashboard — no inner scroll (My Tasks handles long lists) */
+.dashboard--time .dash-list,
+.dashboard--time .dash-list--time,
+.dashboard--time .dash-list--execute,
+.dashboard--time .dash-list--execute.dash-list--time,
+.dashboard--time .dash-list--compact,
+.dashboard--time .dash-list--compact.dash-list--time {
+  max-height: none;
+  overflow: visible;
+}
+
+.dashboard--time .dash-list {
+  gap: 4px;
+  padding: 6px 8px 8px;
+}
+
+.dash-item--compact.dash-item--interactive {
+  border-radius: 8px;
+}
+
+.dash-item--compact .dash-item__main {
+  padding: 6px 20px 6px 10px;
+}
+
+.dash-item--compact .dash-item__head {
+  margin-bottom: 1px;
+  align-items: center;
+}
+
+.dash-item--compact .dash-item-title {
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
+.dash-item--compact .dash-item__sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.dash-item--compact .dash-item-meta {
+  font-size: 0.68rem;
+  margin: 0;
+}
+
+.dash-item--compact .dash-item__due-chip {
+  padding: 2px 6px;
+  font-size: 0.64rem;
+}
+
+.dash-item--compact .dash-item__chevron {
+  font-size: 1rem;
+  right: 6px;
+}
+
+.dash-item__actions--compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 0;
+  min-width: auto;
+}
+
+.dash-item__actions--compact .status-dropdown__trigger {
+  min-height: 28px;
+  min-width: 68px;
+  padding: 3px 6px;
+  font-size: 0.66rem;
+}
+
+.dash-item__complete--icon {
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 7px;
+}
+
+.dash-item__complete--icon .dash-item__complete-icon {
+  font-size: 0.9rem;
+}
+
+.task-context-chips--inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-top: 0;
+}
+
+.task-context-chips--inline .task-context-chip {
+  font-size: 0.64rem;
+  padding: 1px 5px;
+}
+
+.dash-more-btn {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 6px 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.dash-more-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #334155;
+}
+
+.dash-more-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .stat-card--next-week.stat-card--filter.stat-card--active {

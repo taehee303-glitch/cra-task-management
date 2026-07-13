@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 46 — 2026-07-13 — Dashboard Control Center UX
+
+### Changed
+
+- **Dashboard 요약화** — 섹션 내부 스크롤(Double Scroll) 제거
+- **이번 주 준비 · 다음 주 · 최근 완료 · 지연** — 최대 3건 미리보기 + `+ N개 더 보기` → My Tasks 해당 필터
+- **오늘 마감** — 최대 5건 미리보기 + 더 보기 (실행 구역)
+- **Compact Task Card** — 패딩·액션 축소로 한 화면 정보 밀도 개선
+- **Workflow 표시** — `Workflow 1/6` 대신 WorkflowRecord 이름 + `(현재/전체)` (예: `🟣 CTMS Update Follow-up (2/2)`)
+
+---
+
 ## [1.1.0] — build 45 — 2026-07-13 — Time-based Dashboard
 
 ### Added
