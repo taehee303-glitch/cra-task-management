@@ -3510,6 +3510,21 @@ body.body--settings-open {
   letter-spacing: -0.02em;
 }
 
+.sidebar__brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.sidebar__brand-tagline {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4338ca;
+}
+
 .sidebar__brand-icon {
   font-size: 1.35rem;
 }
@@ -5615,4 +5630,407 @@ body.body--settings-open {
 .task-detail-link__hint {
   font-size: 0.78rem;
   color: var(--text-muted, #64748b);
+}
+
+.task-detail-link--action {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.task-detail-link--action:hover {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.task-detail-link__action {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4338ca;
+}
+
+.dashboard__header {
+  margin-bottom: 0.75rem;
+}
+
+.dashboard__tagline {
+  margin: 0.25rem 0 0;
+  font-size: 0.92rem;
+  color: var(--text-muted, #64748b);
+}
+
+.dashboard-workflow-section {
+  margin-top: 0;
+}
+
+.dashboard-workflow-section--hero {
+  margin-bottom: 1rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #eef2ff 0%, #ffffff 72%);
+  box-shadow: 0 1px 0 rgba(67, 56, 202, 0.06);
+}
+
+.dashboard-workflow-section--hero .dashboard-workflow-section__title {
+  font-size: 1.05rem;
+  color: #312e81;
+}
+
+.dashboard-workflow-section--hero .workflow-active-list {
+  max-height: min(42vh, 320px);
+  overflow-y: auto;
+}
+
+.dashboard-workflow-section--hero .empty-msg {
+  margin: 0;
+  color: #4338ca;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.dashboard-workflow-section__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.dashboard-workflow-section__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.dashboard-workflow-section__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.dashboard-grid--workflow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.dash-card--routine-preview {
+  margin-top: 1rem;
+}
+
+.badge--muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.task-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.task-context-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.task-context-chip--workflow {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.task-context-chip--routine {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.task-context-chip--progress {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.task-context-chip--followup {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.task-card .task-context-chips .auto-generated-badge,
+.task-card .task-context-chips .workflow-complete-badge,
+.mobile-task-card .task-context-chips .auto-generated-badge,
+.mobile-task-card .task-context-chips .workflow-complete-badge {
+  margin: 0;
+  font-size: 0.65rem;
+}
+
+.tasks-workflow-strip {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem;
+  border: 1px solid #e0e7ff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+}
+
+.tasks-workflow-strip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.tasks-workflow-strip__title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #312e81;
+}
+
+.tasks-workflow-strip__list,
+.workflow-active-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.workflow-active-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.workflow-active-card:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 1px 0 rgba(67, 56, 202, 0.08);
+}
+
+.workflow-active-card__title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.workflow-active-card__meta,
+.workflow-active-card__next {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+}
+
+.workflow-active-card__next {
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.workflow-active-card__next--done {
+  color: #047857;
+}
+
+.routine-preview-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.routine-preview-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.routine-preview-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.routine-preview-item__name {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.routine-preview-item__task {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+}
+
+.routine-preview-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  font-size: 0.76rem;
+  color: var(--text-muted, #64748b);
+}
+
+.routine-preview-item__due {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.routine-preview-item__status {
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.routine-preview-item__status--ready {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.routine-preview-item__status--pending {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.task-workflow-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+  font-size: 0.82rem;
+}
+
+.task-workflow-hint__text {
+  color: #312e81;
+}
+
+.task-workflow-hint__note {
+  width: 100%;
+  font-size: 0.76rem;
+  color: #4338ca;
+}
+
+.form-hint--workflow {
+  margin-top: 0.35rem;
+  color: #4338ca;
+}
+
+.task-detail-workflow-preview {
+  margin-bottom: 0.55rem;
+}
+
+.task-detail-workflow-steps {
+  margin-top: 0.65rem;
+}
+
+.task-detail-workflow-steps__title {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+}
+
+.task-detail-workflow-steps__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.task-detail-workflow-steps__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-detail-workflow-steps__item--done .task-detail-workflow-steps__btn {
+  background: #f8fafc;
+  opacity: 0.85;
+}
+
+.task-detail-workflow-steps__status {
+  flex: 0 0 auto;
+  width: 1rem;
+  text-align: center;
+  font-weight: 700;
+  color: #4338ca;
+}
+
+.task-detail-workflow-steps__item--done .task-detail-workflow-steps__status {
+  color: #047857;
+}
+
+.task-detail-workflow-steps__name {
+  flex: 1;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.task-detail-workflow-steps__due {
+  font-size: 0.76rem;
+  color: var(--text-muted, #64748b);
+}
+
+.mobile-daily__section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.mobile-daily__section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.study-master-list__wf,
+.study-master-list__rt {
+  font-weight: 700;
+  color: #4338ca;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid--workflow {
+    grid-template-columns: 1fr;
+  }
 }

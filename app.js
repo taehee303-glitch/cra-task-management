@@ -407,6 +407,24 @@ const els = {
   mobileFilteredList: document.getElementById("mobileFilteredList"),
   mobileFilteredTitle: document.getElementById("mobileFilteredTitle"),
   mobileTodayActionSection: document.getElementById("mobileTodayActionSection"),
+  mobileWorkflowSection: document.getElementById("mobileWorkflowSection"),
+  mobileWorkflowList: document.getElementById("mobileWorkflowList"),
+  mobileWorkflowCount: document.getElementById("mobileWorkflowCount"),
+  mobileRoutineSection: document.getElementById("mobileRoutineSection"),
+  mobileRoutinePreviewList: document.getElementById("mobileRoutinePreviewList"),
+  taskWorkflowMatchHint: document.getElementById("taskWorkflowMatchHint"),
+  taskDetailWorkflowPreview: document.getElementById("taskDetailWorkflowPreview"),
+  taskDetailWorkflowSteps: document.getElementById("taskDetailWorkflowSteps"),
+  taskDetailWorkflowStepsList: document.getElementById("taskDetailWorkflowStepsList"),
+  tasksWorkflowStrip: document.getElementById("tasksWorkflowStrip"),
+  dashboardWeekDueList: document.getElementById("dashboardWeekDueList"),
+  dashboardWeekDueCount: document.getElementById("dashboardWeekDueCount"),
+  dashboardRecentCompletedList: document.getElementById("dashboardRecentCompletedList"),
+  dashboardRecentCompletedCount: document.getElementById("dashboardRecentCompletedCount"),
+  dashboardRoutinePreviewList: document.getElementById("dashboardRoutinePreviewList"),
+  dashboardWorkflowActiveList: document.getElementById("dashboardWorkflowActiveList"),
+  dashboardWorkflowActiveCount: document.getElementById("dashboardWorkflowActiveCount"),
+  dashboardRoutineManageBtn: document.getElementById("dashboardRoutineManageBtn"),
   referenceSearchInput: document.getElementById("referenceSearchInput"),
   referenceSearchResults: document.getElementById("referenceSearchResults"),
   referenceMainContent: document.getElementById("referenceMainContent"),
@@ -716,7 +734,9 @@ async function bootstrapApp() {
     populateSiteSelect(els.site, els.study.value);
     updateSiteInfoDisplays();
     updateSiteSelectHint(els.study.value, els.siteMasterHint);
+    updateAddTaskWorkflowHint();
   });
+  els.task?.addEventListener("input", updateAddTaskWorkflowHint);
   els.site.addEventListener("change", updateSiteInfoDisplays);
   els.siteInfoToggleBtn?.addEventListener("click", toggleTaskSiteInfo);
   document.getElementById("editStudy").addEventListener("change", () => {
@@ -875,6 +895,14 @@ async function bootstrapApp() {
   bindEvent(els.routineForm, "submit", handleRoutineSubmit);
   bindEvent(document.getElementById("closeRoutineModalBtn"), "click", closeRoutineModal);
   bindEvent(document.getElementById("cancelRoutineBtn"), "click", closeRoutineModal);
+  els.taskDetailWorkflowLink?.addEventListener("click", () => {
+    const protocol = els.taskDetailWorkflowLink.dataset.studyProtocol;
+    if (protocol) navigateToStudyWorkflowLibrary(protocol);
+  });
+  els.taskDetailRoutineLink?.addEventListener("click", () => {
+    const protocol = els.taskDetailRoutineLink?.dataset.studyProtocol;
+    navigateToStudyRoutineTab(protocol);
+  });
   bindEvent(els.routineModal, "click", (e) => {
     if (e.target === els.routineModal) closeRoutineModal();
   });
@@ -904,6 +932,7 @@ async function bootstrapApp() {
   els.dashboardFilterCards.forEach((card) => {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
+  els.dashboardRoutineManageBtn?.addEventListener("click", () => navigateToStudyRoutineTab());
   els.searchInput.addEventListener("input", renderTaskList);
   els.exportCsvBtn.addEventListener("click", exportTasksToCsv);
   els.importCsvBtn.addEventListener("click", () => els.importCsvInput.click());
@@ -3115,6 +3144,7 @@ function renderMobileTaskCard(task) {
       <span class="priority-badge priority-badge--${priorityClass(task.priority)} priority-badge--xs">${escapeHtml(task.priority)}</span>
       <span class="mobile-task-card__body">
         <span class="mobile-task-card__title">${escapeHtml(task.task)}</span>
+        ${renderTaskContextChips(task)}
         <span class="mobile-task-card__meta">${escapeHtml(studyLabel)} · ${escapeHtml(siteLabel)}</span>
       </span>
       <span class="mobile-task-card__due ${dueClass}">${escapeHtml(dueText)}</span>
@@ -3394,8 +3424,30 @@ function renderMobileDailyHome() {
   updateMobileFilterUi();
   renderMobileFilteredList();
   renderMobileTaskFeed();
+  renderMobileWorkflowSection();
+  renderMobileRoutinePreview();
   renderMobileUpcoming();
   renderMobileRecentCompleted();
+}
+
+function renderMobileWorkflowSection() {
+  const activeRoots = getActiveWorkflowRoots();
+  if (els.mobileWorkflowCount) els.mobileWorkflowCount.textContent = String(activeRoots.length);
+  if (els.mobileWorkflowSection) els.mobileWorkflowSection.hidden = activeRoots.length === 0;
+  if (!els.mobileWorkflowList) return;
+  els.mobileWorkflowList.innerHTML = activeRoots.length
+    ? activeRoots.slice(0, 4).map((task) => renderWorkflowActiveCard(task)).join("")
+    : "";
+  bindWorkflowActiveCardClicks(els.mobileWorkflowList);
+}
+
+function renderMobileRoutinePreview() {
+  const routinePreview = getRoutinePreviewEntries(4);
+  if (els.mobileRoutineSection) els.mobileRoutineSection.hidden = routinePreview.length === 0;
+  if (!els.mobileRoutinePreviewList) return;
+  els.mobileRoutinePreviewList.innerHTML = routinePreview.length
+    ? routinePreview.map((entry) => renderRoutinePreviewItem(entry)).join("")
+    : "";
 }
 
 function switchView(viewName) {
@@ -3529,11 +3581,13 @@ function openAddTaskModal(presetKey = null) {
   refreshTaskStudySiteSelects();
   updateSiteInfoDisplays();
   if (els.addTaskModal) els.addTaskModal.hidden = false;
+  updateAddTaskWorkflowHint();
 }
 
 function closeAddTaskModal() {
   if (!els.addTaskModal) return;
   els.addTaskModal.hidden = true;
+  if (els.taskWorkflowMatchHint) els.taskWorkflowMatchHint.hidden = true;
   closeFabMenu();
 }
 
@@ -4456,11 +4510,13 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
 function renderStudyWorkflowLibrary(study) {
   if (!els.studyWorkflowLibrary) return;
 
-  const studyWorkflows = (study.workflows || []).map((workflow) =>
-    normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })
+  const studyWorkflows = sortWorkflowsForDisplay(
+    (study.workflows || []).map((workflow) =>
+      normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })
+    )
   );
   const legacyWorkflows = legacyTaskRulesToWorkflows(study);
-  const workspaceWorkflows = WorkspaceWorkflowStore.getAll();
+  const workspaceWorkflows = sortWorkflowsForDisplay(WorkspaceWorkflowStore.getAll());
   const globalPresets = getGlobalWorkflowPresets();
 
   const sections = [
@@ -4693,22 +4749,278 @@ function resolveTaskRoutineDisplay(task) {
   return { name: routine.name, routine };
 }
 
+function sortWorkflowsForDisplay(items) {
+  return [...items].sort((a, b) => {
+    const usageDiff = (b.usageCount || 0) - (a.usageCount || 0);
+    if (usageDiff !== 0) return usageDiff;
+    const aUsed = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0;
+    const bUsed = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0;
+    return bUsed - aUsed;
+  });
+}
+
+function getWorkflowRootTask(task) {
+  if (!task) return null;
+  if (!task.parentTaskId) return task;
+  return tasks.find((t) => t.id === task.parentTaskId) || task;
+}
+
+function getWorkflowStepProgress(task) {
+  const root = getWorkflowRootTask(task);
+  if (!root) return null;
+  const children = getSubtasks(root.id);
+  if (!children.length) return null;
+  const completed = children.filter((child) => child.status === "Completed").length;
+  return { root, completed, total: children.length };
+}
+
+function isActiveWorkflowRoot(task) {
+  if (task.parentTaskId || !isActive(task)) return false;
+  const children = getSubtasks(task.id);
+  if (!children.length) return false;
+  return children.some((child) => isActive(child)) || Boolean(resolveTaskWorkflowDisplay(task));
+}
+
+function getActiveWorkflowRoots() {
+  return tasks.filter(isActiveWorkflowRoot).sort(compareTasks);
+}
+
+function getDashboardWeekDueTasks() {
+  const todayStr = toDateString(getToday());
+  return tasks
+    .filter((task) => isActive(task) && task.dueDate && isDueThisWeek(task.dueDate) && task.dueDate !== todayStr)
+    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate))
+    .slice(0, 8);
+}
+
+function getRecentlyCompletedTasks(limit = 6) {
+  return tasks
+    .filter((task) => task.status === "Completed")
+    .sort((a, b) => {
+      const aDate = a.completedAt || a.dueDate || a.createdAt || "";
+      const bDate = b.completedAt || b.dueDate || b.createdAt || "";
+      return bDate.localeCompare(aDate);
+    })
+    .slice(0, limit);
+}
+
+function getRoutinePreviewEntries(limit = 6) {
+  const todayStr = toDateString(getToday());
+  const items = [];
+
+  StudyMasterStore.getAll().forEach((study) => {
+    (study.routines || []).forEach((raw) => {
+      const routine = normalizeRoutineRecord({ ...raw, studyId: study.id });
+      if (!routine.enabled || !routine.taskTemplate.taskName) return;
+
+      computeRoutineDueDates(routine, todayStr)
+        .slice(0, 2)
+        .forEach((dueDate) => {
+          items.push({
+            routine,
+            study: study.protocolNumber,
+            taskName: routine.taskTemplate.taskName,
+            dueDate,
+            materialized: taskExistsForRoutine(routine.id, dueDate, routine.taskTemplate.taskName),
+          });
+        });
+    });
+  });
+
+  return items.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, limit);
+}
+
+function renderTaskContextChips(task) {
+  const chips = [];
+  const workflowInfo = resolveTaskWorkflowDisplay(task);
+  const routineInfo = resolveTaskRoutineDisplay(task);
+  const progress = getWorkflowStepProgress(task);
+
+  if (workflowInfo && !task.parentTaskId) {
+    chips.push(
+      `<span class="task-context-chip task-context-chip--workflow" title="Workflow">${escapeHtml(workflowInfo.name)}</span>`
+    );
+  }
+  if (routineInfo) {
+    chips.push(
+      `<span class="task-context-chip task-context-chip--routine" title="Routine">${escapeHtml(routineInfo.name)}</span>`
+    );
+  }
+  if (progress && !task.parentTaskId) {
+    chips.push(
+      `<span class="task-context-chip task-context-chip--progress">${progress.completed}/${progress.total} steps</span>`
+    );
+  }
+  if (task.parentTaskId) {
+    chips.push('<span class="task-context-chip task-context-chip--followup">Follow-up</span>');
+  } else if (isAutoGeneratedTask(task) && !routineInfo) {
+    chips.push(renderAutoGeneratedBadge());
+  }
+  if (isWorkflowComplete(task)) chips.push(renderWorkflowCompleteBadge());
+  if (!chips.length) return "";
+  return `<div class="task-context-chips">${chips.join("")}</div>`;
+}
+
+function renderWorkflowActiveCard(rootTask) {
+  const progress = getWorkflowStepProgress(rootTask);
+  const workflowInfo = resolveTaskWorkflowDisplay(rootTask);
+  const label = workflowInfo?.name || rootTask.task;
+  const progressText = progress ? `${progress.completed}/${progress.total} steps` : "";
+  const nextChild = getSubtasks(rootTask.id).find((child) => isActive(child));
+
+  return `
+    <button type="button" class="workflow-active-card" data-edit="${escapeAttr(rootTask.id)}">
+      <span class="workflow-active-card__title">${escapeHtml(label)}</span>
+      <span class="workflow-active-card__meta">${escapeHtml(rootTask.study || "Study 미정")}${progressText ? ` · ${progressText}` : ""}</span>
+      ${
+        nextChild
+          ? `<span class="workflow-active-card__next">Next: ${escapeHtml(nextChild.task)}</span>`
+          : '<span class="workflow-active-card__next workflow-active-card__next--done">모든 후속 Task 완료</span>'
+      }
+    </button>
+  `;
+}
+
+function renderRoutinePreviewItem(entry) {
+  const dueLabel = formatDueLabel(entry.dueDate);
+  const statusLabel = entry.materialized ? "Task 생성됨" : "예정";
+  return `
+    <div class="routine-preview-item">
+      <div class="routine-preview-item__main">
+        <span class="routine-preview-item__name">${escapeHtml(entry.routine.name)}</span>
+        <span class="routine-preview-item__task">${escapeHtml(entry.taskName)}</span>
+      </div>
+      <div class="routine-preview-item__meta">
+        <span>${escapeHtml(entry.study)}</span>
+        <span class="routine-preview-item__due">${escapeHtml(dueLabel)}</span>
+        <span class="routine-preview-item__status routine-preview-item__status--${entry.materialized ? "ready" : "pending"}">${statusLabel}</span>
+      </div>
+    </div>
+  `;
+}
+
+function bindWorkflowActiveCardClicks(container) {
+  container?.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
+  });
+}
+
+function navigateToStudyWorkflowLibrary(studyProtocol) {
+  const study = StudyMasterStore.getByProtocol(studyProtocol);
+  if (!study) {
+    showToast("Study를 찾을 수 없습니다.");
+    return;
+  }
+  closeTaskDetail();
+  closeAddTaskModal();
+  selectedStudyMasterId = study.id;
+  selectedStudyMasterTab = "workflow-library";
+  switchView("study-master");
+  renderStudyMaster();
+}
+
+function navigateToStudyRoutineTab(studyProtocol) {
+  let study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+  if (!study) {
+    study =
+      StudyMasterStore.getAll().find((item) => (item.routines || []).length > 0) || StudyMasterStore.getAll()[0];
+  }
+  if (!study) {
+    showToast("Routine을 등록할 Study를 먼저 선택하세요.");
+    switchView("study-master");
+    return;
+  }
+  closeTaskDetail();
+  selectedStudyMasterId = study.id;
+  selectedStudyMasterTab = "routines";
+  switchView("study-master");
+  renderStudyMaster();
+}
+
+function updateAddTaskWorkflowHint() {
+  if (!els.taskWorkflowMatchHint) return;
+  const taskName = els.task?.value?.trim() || "";
+  const study = els.study?.value || "";
+  if (!taskName) {
+    els.taskWorkflowMatchHint.hidden = true;
+    els.taskWorkflowMatchHint.innerHTML = "";
+    return;
+  }
+
+  const matches = findMatchingWorkflows(taskName, study);
+  if (!matches.length) {
+    els.taskWorkflowMatchHint.hidden = true;
+    els.taskWorkflowMatchHint.innerHTML = "";
+    return;
+  }
+
+  const top = matches[0];
+  els.taskWorkflowMatchHint.hidden = false;
+  els.taskWorkflowMatchHint.innerHTML = `
+    <span class="task-workflow-hint__icon" aria-hidden="true">🔗</span>
+    <span class="task-workflow-hint__text"><strong>${escapeHtml(top.name)}</strong> Workflow 매칭 · ${getWorkflowTaskCount(top)} Tasks</span>
+    <span class="task-workflow-hint__note">저장 시 Flow Preview와 함께 적용 여부를 선택할 수 있습니다.</span>
+  `;
+}
+
+function renderTasksWorkflowStrip() {
+  if (!els.tasksWorkflowStrip || isDailyMode()) return;
+  const activeRoots = getActiveWorkflowRoots();
+  if (!activeRoots.length) {
+    els.tasksWorkflowStrip.hidden = true;
+    els.tasksWorkflowStrip.innerHTML = "";
+    return;
+  }
+
+  els.tasksWorkflowStrip.hidden = false;
+  els.tasksWorkflowStrip.innerHTML = `
+    <div class="tasks-workflow-strip__head">
+      <span class="tasks-workflow-strip__title">🔗 진행 중인 Workflow ${activeRoots.length}건</span>
+      <button type="button" class="btn btn--ghost btn--sm" data-open-dashboard>Dashboard에서 보기</button>
+    </div>
+    <div class="tasks-workflow-strip__list">${activeRoots.slice(0, 3).map((task) => renderWorkflowActiveCard(task)).join("")}</div>
+  `;
+
+  els.tasksWorkflowStrip.querySelector("[data-open-dashboard]")?.addEventListener("click", () => {
+    switchView("dashboard");
+  });
+  bindWorkflowActiveCardClicks(els.tasksWorkflowStrip);
+}
+
 function renderTaskDetailLinks(task) {
   const workflowInfo = resolveTaskWorkflowDisplay(task);
   const routineInfo = resolveTaskRoutineDisplay(task);
+  const rootTask = getWorkflowRootTask(task);
+  const children = rootTask ? getSubtasks(rootTask.id) : [];
+
+  if (els.taskDetailWorkflowPreview) {
+    if (workflowInfo?.workflow) {
+      els.taskDetailWorkflowPreview.hidden = false;
+      els.taskDetailWorkflowPreview.innerHTML = renderWorkflowFlowPreview(workflowInfo.workflow, {
+        compact: true,
+        rootLabel: getWorkflowRootLabel(workflowInfo.workflow),
+      });
+    } else {
+      els.taskDetailWorkflowPreview.hidden = true;
+      els.taskDetailWorkflowPreview.innerHTML = "";
+    }
+  }
 
   if (els.taskDetailWorkflowLink) {
     if (workflowInfo) {
       els.taskDetailWorkflowLink.hidden = false;
+      els.taskDetailWorkflowLink.dataset.studyProtocol = task.study || "";
       els.taskDetailWorkflowLink.innerHTML = `
         <span class="task-detail-link__label">Workflow</span>
         <span class="task-detail-link__value">${escapeHtml(workflowInfo.name)}</span>
         <span class="task-detail-link__scope">${escapeHtml(workflowInfo.scopeLabel)}</span>
         ${workflowInfo.viaParent ? '<span class="task-detail-link__hint">(parent Task)</span>' : ""}
+        <span class="task-detail-link__action">Library 열기 →</span>
       `;
     } else {
       els.taskDetailWorkflowLink.hidden = true;
       els.taskDetailWorkflowLink.innerHTML = "";
+      delete els.taskDetailWorkflowLink.dataset.studyProtocol;
     }
   }
 
@@ -4718,10 +5030,39 @@ function renderTaskDetailLinks(task) {
       els.taskDetailRoutineLink.innerHTML = `
         <span class="task-detail-link__label">Routine</span>
         <span class="task-detail-link__value">${escapeHtml(routineInfo.name)}</span>
+        <span class="task-detail-link__action">Routine 관리 →</span>
       `;
+      els.taskDetailRoutineLink.dataset.studyProtocol = task.study || "";
     } else {
       els.taskDetailRoutineLink.hidden = true;
       els.taskDetailRoutineLink.innerHTML = "";
+      delete els.taskDetailRoutineLink.dataset.studyProtocol;
+    }
+  }
+
+  if (els.taskDetailWorkflowSteps && els.taskDetailWorkflowStepsList) {
+    if (children.length > 0) {
+      els.taskDetailWorkflowSteps.hidden = false;
+      els.taskDetailWorkflowStepsList.innerHTML = children
+        .map((child) => {
+          const done = child.status === "Completed";
+          return `
+            <li class="task-detail-workflow-steps__item${done ? " task-detail-workflow-steps__item--done" : ""}">
+              <button type="button" class="task-detail-workflow-steps__btn" data-edit="${escapeAttr(child.id)}">
+                <span class="task-detail-workflow-steps__status">${done ? "✓" : "○"}</span>
+                <span class="task-detail-workflow-steps__name">${escapeHtml(child.task)}</span>
+                <span class="task-detail-workflow-steps__due">${escapeHtml(formatDueDisplay(child))}</span>
+              </button>
+            </li>
+          `;
+        })
+        .join("");
+      els.taskDetailWorkflowStepsList.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
+      });
+    } else {
+      els.taskDetailWorkflowSteps.hidden = true;
+      els.taskDetailWorkflowStepsList.innerHTML = "";
     }
   }
 }
@@ -5161,7 +5502,7 @@ function renderStudyMaster() {
         <li>
           <button type="button" class="study-master-list__item${study.id === selectedStudyMasterId ? " study-master-list__item--active" : ""}" data-study-id="${study.id}">
             <span class="study-master-list__name">${escapeHtml(study.studyName || study.protocolNumber)}</span>
-            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length} · WF ${(study.workflows || []).length} · RT ${(study.routines || []).length}</span>
+            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length} · <span class="study-master-list__wf">WF ${(study.workflows || []).length}</span> · <span class="study-master-list__rt">RT ${(study.routines || []).length}</span></span>
           </button>
         </li>
       `
@@ -6750,8 +7091,8 @@ function isActive(task) {
   return task.status !== "Completed" && task.status !== "Cancelled";
 }
 
-const APP_VERSION = "1.0.0";
-const APP_BUILD = "31";
+const APP_VERSION = "1.1.0";
+const APP_BUILD = "33";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -8618,8 +8959,48 @@ function renderDashboard() {
     .sort((a, b) => compareAttentionTasks(a, b));
 
   renderAttentionPanel(todayTasks, overdueTasks, d1Tasks);
+  renderDashboardWorkflowSections();
   updateReminderStatusBadge();
   updateDashboardCardFilterUi();
+}
+
+function renderDashboardWorkflowSections() {
+  const activeRoots = getActiveWorkflowRoots();
+  const weekDueTasks = getDashboardWeekDueTasks();
+  const recentCompleted = getRecentlyCompletedTasks();
+  const routinePreview = getRoutinePreviewEntries();
+
+  if (els.dashboardWorkflowActiveCount) {
+    els.dashboardWorkflowActiveCount.textContent = String(activeRoots.length);
+  }
+  if (els.dashboardWorkflowActiveList) {
+    els.dashboardWorkflowActiveList.innerHTML = activeRoots.length
+      ? activeRoots.slice(0, 4).map((task) => renderWorkflowActiveCard(task)).join("")
+      : '<p class="empty-msg">진행 중인 Workflow가 없습니다. MV/SIV/COV 또는 Workflow 적용으로 Task Flow를 시작하세요.</p>';
+    bindWorkflowActiveCardClicks(els.dashboardWorkflowActiveList);
+  }
+
+  if (els.dashboardWeekDueCount) els.dashboardWeekDueCount.textContent = String(weekDueTasks.length);
+  if (els.dashboardWeekDueList) {
+    els.dashboardWeekDueList.innerHTML = weekDueTasks.length
+      ? weekDueTasks.map((task) => renderDashItem(task, "week")).join("")
+      : '<p class="empty-msg">이번 주 마감 업무가 없습니다.</p>';
+  }
+
+  if (els.dashboardRecentCompletedCount) {
+    els.dashboardRecentCompletedCount.textContent = String(recentCompleted.length);
+  }
+  if (els.dashboardRecentCompletedList) {
+    els.dashboardRecentCompletedList.innerHTML = recentCompleted.length
+      ? recentCompleted.map((task) => renderDashItem(task, "recent")).join("")
+      : '<p class="empty-msg">최근 완료 업무가 없습니다.</p>';
+  }
+
+  if (els.dashboardRoutinePreviewList) {
+    els.dashboardRoutinePreviewList.innerHTML = routinePreview.length
+      ? routinePreview.map((entry) => renderRoutinePreviewItem(entry)).join("")
+      : '<p class="empty-msg">등록된 Routine이 없습니다. Study → Routine 탭에서 반복 업무를 등록하세요.</p>';
+  }
 }
 
 function compareAttentionTasks(a, b) {
@@ -8657,8 +9038,7 @@ function renderDashItem(task, type) {
     <div class="dash-item dash-item--${type}${criticalClass}">
       <div class="dash-item-title">
         ${criticalBadge}${escapeHtml(task.task)}
-        ${isAutoGeneratedTask(task) ? renderAutoGeneratedBadge() : ""}
-        ${isWorkflowComplete(task) ? renderWorkflowCompleteBadge() : ""}
+        ${renderTaskContextChips(task)}
       </div>
       ${renderSourceVisitHtml(task)}
       <div class="dash-item-meta">${escapeHtml(task.study)} · ${escapeHtml(getStandardSiteName(task.site))} · ${escapeHtml(task.status)}</div>
@@ -8743,6 +9123,7 @@ function renderTaskCard({ task, isSubtask }) {
           <span class="task-card__due ${dueClass}">📅 ${escapeHtml(dueText)}</span>
         </div>
         <h3 class="task-card__title">${escapeHtml(task.task)}</h3>
+        ${renderTaskContextChips(task)}
         <p class="task-card__study">${escapeHtml(studyLabel)}</p>
         <p class="task-card__site">${escapeHtml(siteLabel)}</p>
       </button>
@@ -8784,6 +9165,7 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
       </td>
       <td>
         <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
+        ${renderTaskContextChips(task)}
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
@@ -8800,6 +9182,7 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
 
 function renderAll() {
   renderDashboard();
+  renderTasksWorkflowStrip();
   if (isDailyMode()) {
     renderMobileDailyHome();
   } else {

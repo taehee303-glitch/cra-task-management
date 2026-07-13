@@ -2,6 +2,8 @@
 
 **Last updated:** 2026-07-13
 
+**v1.1 RC 이후:** Bug Fix만 즉시 처리. 기능 개선·신규 Sprint는 Backlog.
+
 우선순위별 기능 후보 목록입니다. **구현 대상이 아닌 제품 관리 문서**이며, Sprint 계획 시 참고합니다.
 
 상태 표기: `💡 idea` · `📋 planned` · `🚧 in progress` · `✅ done` · `❌ dropped`
@@ -10,15 +12,28 @@
 
 ## Next Sprint
 
-> **Post MVP v1** — 아래 항목은 BACKLOG에서 우선순위 협의 후 착수.
+> **Sprint 4+** — BACKLOG 우선순위 협의 후 착수.
 
 | ID | Item | Notes |
 |----|------|-------|
-| NS-01 | Dashboard: Due This Week 리스트 | Backlog |
-| NS-02 | Dashboard: Recently Completed | Backlog |
-| NS-03 | Dashboard: Routine preview 섹션 | Backlog |
+| NS-01 | ~~Dashboard: Due This Week 리스트~~ | ✅ Sprint 3 |
+| NS-02 | ~~Dashboard: Recently Completed~~ | ✅ Sprint 3 |
+| NS-03 | ~~Dashboard: Routine preview 섹션~~ | ✅ Sprint 3 |
 | NS-04 | Workflow Library category/tags 필터 | High Priority |
 | NS-05 | Study 완료 → Template 저장 제안 | High Priority |
+| NS-06 | Quick Add Workflow hint / full modal 연동 | Medium |
+
+---
+
+## Sprint 3 Complete (reference)
+
+| ID | Item | Status |
+|----|------|--------|
+| S3-01 | Dashboard Workflow/Routine sections | ✅ build 32 |
+| S3-02 | Task context chips + strip | ✅ |
+| S3-03 | Task Detail preview + navigation | ✅ |
+| S3-04 | Add Task live Workflow hint | ✅ |
+| S3-05 | Branding + Library sort | ✅ |
 
 ---
 

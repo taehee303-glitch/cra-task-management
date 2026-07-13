@@ -4,14 +4,63 @@
 
 **Versioning**
 
-- `APP_VERSION` — 제품 메이저 버전 (현재 `1.0.0`)
+- `APP_VERSION` — 제품 메이저 버전 (현재 `1.1.0`)
 - `APP_BUILD` / `CACHE_VERSION` — 배포 빌드 및 PWA 캐시 버전
+
+**Post v1.1 RC:** 버그는 Bug Fix로, 기능 개선은 [BACKLOG.md](./BACKLOG.md)에 기록.
 
 ---
 
 ## [Unreleased]
 
-_(none — MVP v1 complete)_
+_(none — v1.1 RC 배포 후 실사용 단계)_
+
+---
+
+## [1.1.0] — MVP v1.1 Release Candidate — build 33 — 2026-07-13
+
+Sprint 3 UX Polish + Dashboard Active Workflow hero 첫 화면 배치. **새 DB/Workflow 구조 변경 없음.**
+
+### Sprint 3 UX Polish (build 32 → 33)
+
+- **Dashboard Active Workflow hero** — header 바로 아래, 스크롤 없이 첫 화면 노출
+- Dashboard — 이번 주 마감 / 최근 완료 / Routine preview
+- My Tasks Workflow strip, Mobile Workflow/Routine 섹션
+- Task context chips, Task Detail preview/Steps, Library/Routine 이동
+- Task 생성 Modal Workflow live hint
+- Branding: Workflow OS tagline, FAB Workflow 라벨
+- Workflow Library usage/lastUsed 정렬
+
+### Release
+
+- `APP_VERSION` → **1.1.0**
+- `APP_BUILD` / `CACHE_VERSION` → **33**
+- QA: [MVP_V1_1_RC_QA.md](./MVP_V1_1_RC_QA.md)
+
+---
+
+## [1.0.0] — build 32 — 2026-07-13 — Sprint 3 (pre-RC, internal)
+
+### Added
+
+- **Dashboard Workflow 섹션** — 진행 중 Workflow, 이번 주 마감, 최근 완료, Routine preview
+- **My Tasks Workflow strip** — PC 홈에서 진행 중 Workflow 요약
+- **Mobile Today** — 진행 중 Workflow / 예정 Routine 섹션
+- **Task context chips** — Workflow · Routine · step progress · Follow-up (카드/리스트/Dashboard)
+- **Task Detail** — Workflow Flow preview, Workflow Steps 목록, Library/Routine 이동 버튼
+- **Task 생성 Modal** — Workflow 매칭 live hint
+
+### Changed
+
+- Sidebar tagline **Workflow OS**, Dashboard tagline **Track tasks. Build workflows.**
+- FAB MV/SIV/COV → **MV/SIV/COV Workflow** 라벨
+- Workflow Library 카드 정렬 — 적용 횟수 · 최근 사용일 우선
+- Study 목록 WF/RT 카운트 강조
+- `APP_BUILD` / `CACHE_VERSION` → **32**
+
+### Notes
+
+- DB 스키마 및 WorkflowRecord 구조 변경 없음 (UI/UX only)
 
 ---
 

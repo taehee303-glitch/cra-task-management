@@ -53,7 +53,10 @@
     <aside class="sidebar" id="sidebar" aria-label="CRA Workspace">
       <div class="sidebar__brand">
         <span class="sidebar__brand-icon" aria-hidden="true">📋</span>
-        <span class="sidebar__brand-text">CRA Workspace</span>
+        <div class="sidebar__brand-copy">
+          <span class="sidebar__brand-text">CRA Workspace</span>
+          <span class="sidebar__brand-tagline">Workflow OS</span>
+        </div>
       </div>
       <nav class="sidebar__nav" aria-label="메인 메뉴">
         <button type="button" class="sidebar__item sidebar__item--active sidebar__item--primary" data-view="tasks" aria-current="page">
@@ -147,6 +150,19 @@
             <div id="mobileTaskFeed" class="mobile-task-feed" aria-live="polite"></div>
           </section>
 
+          <section class="mobile-daily__section" id="mobileWorkflowSection" hidden>
+            <div class="mobile-daily__section-head">
+              <h3 class="mobile-daily__section-title">진행 중인 Workflow</h3>
+              <span class="mobile-daily__section-badge" id="mobileWorkflowCount">0</span>
+            </div>
+            <div id="mobileWorkflowList" class="workflow-active-list" aria-live="polite"></div>
+          </section>
+
+          <section class="mobile-daily__section" id="mobileRoutineSection" hidden>
+            <h3 class="mobile-daily__section-title">예정된 Routine</h3>
+            <div id="mobileRoutinePreviewList" class="routine-preview-list" aria-live="polite"></div>
+          </section>
+
           <section class="mobile-daily__section" id="mobileUpcomingSection">
             <h3 class="mobile-daily__section-title">곧 마감되는 업무</h3>
             <div id="mobileUpcomingList" class="mobile-upcoming"></div>
@@ -221,6 +237,8 @@
             </div>
           </div>
 
+          <div id="tasksWorkflowStrip" class="tasks-workflow-strip" hidden aria-live="polite"></div>
+
           <div id="taskCardList" class="task-card-list task-card-list--inline" aria-live="polite"></div>
           <div class="table-wrap task-table-wrap task-table-wrap--inline" id="taskTableWrap" hidden>
             <table class="task-table task-table--list">
@@ -256,9 +274,9 @@
         <div class="fab-root" id="fabRoot">
           <div class="fab-menu" id="fabMenu" hidden>
             <button type="button" class="fab-menu__item" data-fab-action="task"><span>📝</span> 새 업무</button>
-            <button type="button" class="fab-menu__item" data-fab-action="mv"><span>🏥</span> MV 방문</button>
-            <button type="button" class="fab-menu__item" data-fab-action="siv"><span>🚀</span> SIV</button>
-            <button type="button" class="fab-menu__item" data-fab-action="cov"><span>✅</span> COV</button>
+            <button type="button" class="fab-menu__item" data-fab-action="mv"><span>🏥</span> MV Workflow</button>
+            <button type="button" class="fab-menu__item" data-fab-action="siv"><span>🚀</span> SIV Workflow</button>
+            <button type="button" class="fab-menu__item" data-fab-action="cov"><span>✅</span> COV Workflow</button>
           </div>
           <button type="button" class="fab" id="fabToggleBtn" aria-label="업무 추가" aria-expanded="false">+</button>
         </div>
@@ -367,7 +385,20 @@
       <!-- Dashboard View -->
       <div id="viewDashboard" class="view-panel" hidden>
         <section class="dashboard">
-          <h2 class="section-title">Dashboard</h2>
+          <header class="dashboard__header">
+            <h2 class="section-title">Dashboard</h2>
+            <p class="dashboard__tagline">Track tasks. Build workflows.</p>
+          </header>
+
+          <section class="dashboard-workflow-section dashboard-workflow-section--hero" aria-labelledby="dashboardWorkflowActiveHeading">
+            <div class="dashboard-workflow-section__head">
+              <h3 class="dashboard-workflow-section__title" id="dashboardWorkflowActiveHeading">진행 중인 Workflow</h3>
+              <span class="dashboard-workflow-section__badge" id="dashboardWorkflowActiveCount">0</span>
+            </div>
+            <div id="dashboardWorkflowActiveList" class="workflow-active-list">
+              <p class="empty-msg">진행 중인 Workflow가 없습니다. MV/SIV/COV 또는 Workflow 적용으로 Task Flow를 시작하세요.</p>
+            </div>
+          </section>
 
           <section class="attention-panel">
             <div class="attention-panel__header">
@@ -451,6 +482,40 @@
               <div class="progress-bar__fill" id="progressFill" style="width: 0%"></div>
             </div>
           </div>
+
+          <div class="dashboard-grid dashboard-grid--workflow">
+            <section class="dash-card dash-card--week-list">
+              <div class="dash-card-header">
+                <span class="dash-icon">📆</span>
+                <h3>이번 주 마감</h3>
+                <span class="badge badge--primary" id="dashboardWeekDueCount">0</span>
+              </div>
+              <div class="dash-list" id="dashboardWeekDueList">
+                <p class="empty-msg">이번 주 마감 업무가 없습니다.</p>
+              </div>
+            </section>
+            <section class="dash-card dash-card--recent">
+              <div class="dash-card-header">
+                <span class="dash-icon">✅</span>
+                <h3>최근 완료</h3>
+                <span class="badge badge--muted" id="dashboardRecentCompletedCount">0</span>
+              </div>
+              <div class="dash-list" id="dashboardRecentCompletedList">
+                <p class="empty-msg">최근 완료 업무가 없습니다.</p>
+              </div>
+            </section>
+          </div>
+
+          <section class="dash-card dash-card--routine-preview">
+            <div class="dash-card-header">
+              <span class="dash-icon">🔁</span>
+              <h3>예정된 Routine</h3>
+              <button type="button" class="btn btn--ghost btn--sm" id="dashboardRoutineManageBtn">Routine 관리</button>
+            </div>
+            <div id="dashboardRoutinePreviewList" class="routine-preview-list">
+              <p class="empty-msg">등록된 Routine이 없습니다. Study → Routine 탭에서 반복 업무를 등록하세요.</p>
+            </div>
+          </section>
         </section>
       </div>
 
@@ -953,9 +1018,14 @@
             </div>
 
             <div class="task-detail-section" id="taskDetailLinksSection">
-              <h4 class="task-detail-section__title">연결</h4>
-              <div id="taskDetailWorkflowLink" class="task-detail-link" hidden></div>
-              <div id="taskDetailRoutineLink" class="task-detail-link" hidden></div>
+              <h4 class="task-detail-section__title">Workflow &amp; Routine</h4>
+              <div id="taskDetailWorkflowPreview" class="task-detail-workflow-preview" hidden></div>
+              <button type="button" id="taskDetailWorkflowLink" class="task-detail-link task-detail-link--action" hidden></button>
+              <button type="button" id="taskDetailRoutineLink" class="task-detail-link task-detail-link--action" hidden></button>
+              <div id="taskDetailWorkflowSteps" class="task-detail-workflow-steps" hidden>
+                <h5 class="task-detail-workflow-steps__title">Workflow Steps</h5>
+                <ol id="taskDetailWorkflowStepsList" class="task-detail-workflow-steps__list"></ol>
+              </div>
             </div>
 
             <div class="task-detail-section">
@@ -1021,7 +1091,9 @@
           </div>
           <div class="form-group form-group--wide">
             <label for="task">Task</label>
-            <input type="text" id="task" name="task" placeholder="예: SDV, EDC 쿼리 확인" required />
+            <input type="text" id="task" name="task" placeholder="예: Monitoring Visit, SIV, SDV..." required />
+            <div id="taskWorkflowMatchHint" class="task-workflow-hint" hidden aria-live="polite"></div>
+            <p class="form-hint form-hint--workflow">Monitoring Visit · SIV · COV 등 입력 시 Workflow Flow를 제안합니다.</p>
           </div>
           <div class="form-group">
             <label for="dueDate">Due Date</label>

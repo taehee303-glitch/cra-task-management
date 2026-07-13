@@ -1,7 +1,9 @@
 # CRA Workflow OS — ROADMAP
 
 **Last updated:** 2026-07-13  
-**Current build:** v1.0.0 (build 31) — **MVP v1**
+**Current release:** v1.1.0 (build 33) — **MVP v1.1 Release Candidate**
+
+이후 **실사용 단계** — Bug Fix만 즉시, 기능 개선은 Backlog.
 
 이 문서는 구현 일정이 아닌 **제품 개발 방향**을 Sprint / Phase 단위로 정리한 로드맵입니다.
 
@@ -81,7 +83,32 @@ CRA Task Manager MVP  →  CRA Workflow OS MVP  →  Workflow OS v1.x
 
 ---
 
-## Sprint 3+ — Post MVP v1
+## Sprint 3 — UX Polish ✅ (build 32–33 → v1.1.0 RC)
+
+**Goal:** 기존 Workflow/Routine 기능의 가시성·사용성 향상. DB/Workflow 구조 변경 없음.
+
+| # | Item | Status |
+|---|------|--------|
+| 3.1 | Dashboard — 진행 중 Workflow / 이번 주 마감 / 최근 완료 / Routine preview | ✅ Done |
+| 3.2 | Task 카드·리스트·Dashboard — Workflow/Routine chip + step progress | ✅ Done |
+| 3.3 | Task Detail — Flow preview, Workflow Steps, Library/Routine 이동 | ✅ Done |
+| 3.4 | My Tasks strip — 진행 중 Workflow 요약 | ✅ Done |
+| 3.5 | Mobile Today — Workflow / Routine preview 섹션 | ✅ Done |
+| 3.6 | Task 생성 Modal — Workflow 매칭 live hint | ✅ Done |
+| 3.7 | Branding — Sidebar tagline, Dashboard tagline, FAB Workflow 라벨 | ✅ Done |
+| 3.8 | Workflow Library — usage/lastUsed 정렬 | ✅ Done |
+| 3.9 | Dashboard Active Workflow hero — 첫 화면 우선 배치 | ✅ build 33 |
+
+**v1.1 RC 이후:** 새 Sprint 착수 없음. Bug Fix + Backlog 관리.
+
+- Workflow category/tags 필터 UI
+- Quick Add Workflow 연동
+- Study 완료 → Template 저장 제안
+- Version History, Analytics, Engine 분리
+
+---
+
+## Sprint 4+ — Post UX Polish
 
 _상세 항목은 [BACKLOG.md](./BACKLOG.md) 참고._
 

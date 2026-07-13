@@ -3,7 +3,7 @@
 **Version:** v2.0 MVP (living document)  
 **Product:** CRA Workflow OS (evolved from CRA Task Manager)  
 **Last updated:** 2026-07-13  
-**Status:** MVP v1 complete (build 31)
+**Status:** MVP v1.1 Release Candidate (build 33)
 
 ---
 
