@@ -431,6 +431,7 @@ const els = {
   mobileRoutinePreviewList: document.getElementById("mobileRoutinePreviewList"),
   taskWorkflowMatchHint: document.getElementById("taskWorkflowMatchHint"),
   taskDetailWorkflowPreview: document.getElementById("taskDetailWorkflowPreview"),
+  taskDetailWorkflowTimeline: document.getElementById("taskDetailWorkflowTimeline"),
   taskDetailWorkflowSteps: document.getElementById("taskDetailWorkflowSteps"),
   taskDetailWorkflowStepsList: document.getElementById("taskDetailWorkflowStepsList"),
   tasksWorkflowStrip: document.getElementById("tasksWorkflowStrip"),
@@ -4677,16 +4678,79 @@ function renderWorkflowDetailPriorityOptions(selected = "Medium") {
   ).join("");
 }
 
-function renderWorkflowDetailStepRow(step, side, index) {
+function workflowRecordToFlowSteps(workflow) {
+  const flowSteps = (workflow.preSteps || []).map((step) => ({
+    kind: "pre",
+    ...normalizeWorkflowStep(step),
+  }));
+  flowSteps.push({
+    kind: "root",
+    taskName: workflow.rootTaskName || getWorkflowRootLabel(workflow),
+    dueOffset: 0,
+    dueUnit: "calendar",
+    priority: "Medium",
+  });
+  (workflow.steps || []).forEach((step) => {
+    flowSteps.push({ kind: "post", ...normalizeWorkflowStep(step) });
+  });
+  return flowSteps;
+}
+
+function normalizeFlowStepKinds(flowSteps) {
+  const rootIndex = flowSteps.findIndex((step) => step.kind === "root");
+  if (rootIndex < 0) return flowSteps;
+  return flowSteps.map((step, index) => {
+    if (index === rootIndex) return { ...step, kind: "root" };
+    return { ...step, kind: index < rootIndex ? "pre" : "post" };
+  });
+}
+
+function inferStepKindForInsert(flowSteps, afterIndex) {
+  const rootIndex = flowSteps.findIndex((step) => step.kind === "root");
+  if (rootIndex < 0) return "post";
+  return afterIndex < rootIndex ? "pre" : "post";
+}
+
+function flowStepsToWorkflowPayload(flowSteps) {
+  const preSteps = [];
+  const steps = [];
+  let rootTaskName = "";
+
+  flowSteps.forEach((step) => {
+    const normalized = normalizeWorkflowStep(step);
+    if (step.kind === "root") {
+      rootTaskName = (step.taskName || "").trim();
+      return;
+    }
+    if (step.kind === "pre") preSteps.push(normalized);
+    else steps.push(normalized);
+  });
+
+  return { preSteps, steps, rootTaskName };
+}
+
+function renderWorkflowDetailStepRow(step, index, total) {
+  const isRoot = step.kind === "root";
+  const offsetLabel = step.kind === "pre" ? "일 전" : "일 후";
   return `
-    <div class="workflow-detail-step" data-step-side="${side}" data-step-index="${index}">
-      <input type="text" class="workflow-detail-step__name" value="${escapeAttr(step.taskName)}" placeholder="Task 이름" data-field="taskName" />
-      <div class="workflow-detail-step__offset-wrap">
-        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset}" min="0" step="1" data-field="dueOffset" />
-        <span class="workflow-detail-step__offset-label">${side === "pre" ? "일 전" : "일 후"}</span>
+    <div class="workflow-detail-step${isRoot ? " workflow-detail-step--root" : ""}" data-step-index="${index}">
+      <div class="workflow-detail-step__reorder">
+        <button type="button" class="workflow-detail-step__move" data-move-up aria-label="위로"${index === 0 ? " disabled" : ""}>↑</button>
+        <button type="button" class="workflow-detail-step__move" data-move-down aria-label="아래로"${index === total - 1 ? " disabled" : ""}>↓</button>
       </div>
-      <select class="workflow-detail-step__priority" data-field="priority">${renderWorkflowDetailPriorityOptions(step.priority)}</select>
-      <button type="button" class="btn btn--ghost btn--sm workflow-detail-step__remove" data-remove-step aria-label="단계 삭제">삭제</button>
+      ${isRoot ? '<span class="workflow-detail-step__badge">Root</span>' : ""}
+      <input type="text" class="workflow-detail-step__name" value="${escapeAttr(step.taskName)}" placeholder="Task 이름" data-field="taskName" />
+      ${
+        isRoot
+          ? ""
+          : `<div class="workflow-detail-step__offset-wrap">
+        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset}" min="0" step="1" data-field="dueOffset" />
+        <span class="workflow-detail-step__offset-label">${offsetLabel}</span>
+      </div>
+      <select class="workflow-detail-step__priority" data-field="priority">${renderWorkflowDetailPriorityOptions(step.priority)}</select>`
+      }
+      <button type="button" class="btn btn--ghost btn--sm workflow-detail-step__remove" data-remove-step aria-label="단계 삭제"${isRoot ? " disabled" : ""}>삭제</button>
+      <button type="button" class="btn btn--ghost btn--sm workflow-detail-step__insert" data-insert-after aria-label="아래 단계 추가">+ 아래</button>
     </div>
   `;
 }
@@ -4695,42 +4759,83 @@ function syncWorkflowDetailDraftFromDom() {
   if (!workflowDetailDraft || !els.workflowDetailBody) return null;
 
   const nameInput = document.getElementById("workflowDetailName");
-  const rootInput = document.getElementById("workflowDetailRootTask");
   workflowDetailDraft.name = nameInput?.value.trim() || workflowDetailDraft.name;
-  workflowDetailDraft.rootTaskName = rootInput?.value.trim() || workflowDetailDraft.rootTaskName;
 
-  const readSteps = (side) =>
-    [...els.workflowDetailBody.querySelectorAll(`.workflow-detail-step[data-step-side="${side}"]`)].map((row) =>
-      normalizeWorkflowStep({
-        taskName: row.querySelector('[data-field="taskName"]')?.value || "",
-        dueOffset: row.querySelector('[data-field="dueOffset"]')?.value,
+  workflowDetailDraft.flowSteps = [
+    ...els.workflowDetailBody.querySelectorAll(".workflow-detail-step[data-step-index]"),
+  ].map((row, index) => {
+    const existing = workflowDetailDraft.flowSteps[index] || { kind: "post" };
+    const kind = existing.kind || "post";
+    if (kind === "root") {
+      return {
+        kind: "root",
+        taskName: row.querySelector('[data-field="taskName"]')?.value.trim() || existing.taskName,
+        dueOffset: 0,
         dueUnit: "calendar",
-        priority: row.querySelector('[data-field="priority"]')?.value,
-      })
-    );
+        priority: "Medium",
+      };
+    }
+    return normalizeWorkflowStep({
+      kind,
+      taskName: row.querySelector('[data-field="taskName"]')?.value || "",
+      dueOffset: row.querySelector('[data-field="dueOffset"]')?.value,
+      dueUnit: "calendar",
+      priority: row.querySelector('[data-field="priority"]')?.value,
+    });
+  });
 
-  workflowDetailDraft.preSteps = readSteps("pre");
-  workflowDetailDraft.steps = readSteps("post");
   return workflowDetailDraft;
 }
 
 function bindWorkflowDetailEditorEvents() {
   if (!els.workflowDetailBody) return;
 
-  els.workflowDetailBody.querySelector("[data-add-pre]")?.addEventListener("click", () => {
+  els.workflowDetailBody.querySelector("[data-add-step]")?.addEventListener("click", () => {
     syncWorkflowDetailDraftFromDom();
-    workflowDetailDraft.preSteps.push(
-      normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" })
-    );
+    workflowDetailDraft.flowSteps.push({
+      kind: "post",
+      ...normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" }),
+    });
     renderWorkflowDetailEditor();
   });
 
-  els.workflowDetailBody.querySelector("[data-add-post]")?.addEventListener("click", () => {
-    syncWorkflowDetailDraftFromDom();
-    workflowDetailDraft.steps.push(
-      normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" })
-    );
-    renderWorkflowDetailEditor();
+  els.workflowDetailBody.querySelectorAll("[data-move-up]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      syncWorkflowDetailDraftFromDom();
+      const index = Number(btn.closest(".workflow-detail-step")?.dataset.stepIndex);
+      if (!Number.isFinite(index) || index <= 0) return;
+      const steps = workflowDetailDraft.flowSteps;
+      [steps[index - 1], steps[index]] = [steps[index], steps[index - 1]];
+      workflowDetailDraft.flowSteps = normalizeFlowStepKinds(steps);
+      renderWorkflowDetailEditor();
+    });
+  });
+
+  els.workflowDetailBody.querySelectorAll("[data-move-down]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      syncWorkflowDetailDraftFromDom();
+      const index = Number(btn.closest(".workflow-detail-step")?.dataset.stepIndex);
+      const steps = workflowDetailDraft.flowSteps;
+      if (!Number.isFinite(index) || index >= steps.length - 1) return;
+      [steps[index], steps[index + 1]] = [steps[index + 1], steps[index]];
+      workflowDetailDraft.flowSteps = normalizeFlowStepKinds(steps);
+      renderWorkflowDetailEditor();
+    });
+  });
+
+  els.workflowDetailBody.querySelectorAll("[data-insert-after]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      syncWorkflowDetailDraftFromDom();
+      const index = Number(btn.closest(".workflow-detail-step")?.dataset.stepIndex);
+      if (!Number.isFinite(index)) return;
+      const kind = inferStepKindForInsert(workflowDetailDraft.flowSteps, index);
+      workflowDetailDraft.flowSteps.splice(index + 1, 0, {
+        kind,
+        ...normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" }),
+      });
+      workflowDetailDraft.flowSteps = normalizeFlowStepKinds(workflowDetailDraft.flowSteps);
+      renderWorkflowDetailEditor();
+    });
   });
 
   els.workflowDetailBody.querySelectorAll("[data-remove-step]").forEach((btn) => {
@@ -4738,10 +4843,9 @@ function bindWorkflowDetailEditorEvents() {
       syncWorkflowDetailDraftFromDom();
       const row = btn.closest(".workflow-detail-step");
       if (!row) return;
-      const side = row.dataset.stepSide;
       const index = Number(row.dataset.stepIndex);
-      if (side === "pre") workflowDetailDraft.preSteps.splice(index, 1);
-      else workflowDetailDraft.steps.splice(index, 1);
+      if (!Number.isFinite(index) || workflowDetailDraft.flowSteps[index]?.kind === "root") return;
+      workflowDetailDraft.flowSteps.splice(index, 1);
       renderWorkflowDetailEditor();
     });
   });
@@ -4751,17 +4855,11 @@ function renderWorkflowDetailEditor() {
   if (!els.workflowDetailBody || !workflowDetailDraft) return;
 
   const draft = workflowDetailDraft;
-  const preRows = draft.preSteps
+  const flowSteps = draft.flowSteps || [];
+  const rows = flowSteps
     .map((step, index) => {
-      const row = renderWorkflowDetailStepRow(step, "pre", index);
+      const row = renderWorkflowDetailStepRow(step, index, flowSteps.length);
       return index > 0 ? `<div class="workflow-detail-arrow" aria-hidden="true">↓</div>${row}` : row;
-    })
-    .join("");
-
-  const postRows = draft.steps
-    .map((step, index) => {
-      const row = renderWorkflowDetailStepRow(step, "post", index);
-      return `${index === 0 ? "" : '<div class="workflow-detail-arrow" aria-hidden="true">↓</div>'}${row}`;
     })
     .join("");
 
@@ -4771,18 +4869,13 @@ function renderWorkflowDetailEditor() {
       <input type="text" id="workflowDetailName" class="workflow-detail-form__input" value="${escapeAttr(draft.name)}" />
     </div>
     <div class="workflow-detail-flow">
-      <button type="button" class="btn btn--ghost btn--sm workflow-detail-add" data-add-pre>+ 이전 단계 추가</button>
-      ${preRows ? `<div class="workflow-detail-steps">${preRows}</div>` : ""}
-      ${preRows ? '<div class="workflow-detail-arrow" aria-hidden="true">↓</div>' : ""}
-      <div class="workflow-detail-root">
-        <span class="workflow-detail-root__label">기준 Task</span>
-        <input type="text" id="workflowDetailRootTask" class="workflow-detail-form__input" value="${escapeAttr(draft.rootTaskName)}" placeholder="예: Monitoring Visit" />
+      <div class="workflow-detail-flow__toolbar">
+        <span class="workflow-detail-flow__label">전체 Flow</span>
+        <button type="button" class="btn btn--ghost btn--sm workflow-detail-add" data-add-step>+ 마지막 단계 추가</button>
       </div>
-      <div class="workflow-detail-arrow" aria-hidden="true">↓</div>
-      <button type="button" class="btn btn--ghost btn--sm workflow-detail-add" data-add-post>+ 이후 단계 추가</button>
-      ${postRows ? `<div class="workflow-detail-steps">${postRows}</div>` : ""}
+      ${rows ? `<div class="workflow-detail-steps workflow-detail-steps--unified">${rows}</div>` : ""}
     </div>
-    <p class="form-hint">업무 중 학습은 이후 단계(Post-task)만 추가됩니다. Workflow Library에서 전체 프로세스를 다듬을 수 있습니다.</p>
+    <p class="form-hint">Learning Modal은 빠른 후속 Task 등록용입니다. 순서 변경·중간 삽입·전체 편집은 Workflow Library에서 진행하세요.</p>
   `;
 
   bindWorkflowDetailEditorEvents();
@@ -4802,9 +4895,7 @@ function openWorkflowDetailModal(ref) {
   workflowDetailEditRef = ref;
   workflowDetailDraft = {
     name: workflow.name,
-    rootTaskName: workflow.rootTaskName || getWorkflowRootLabel(workflow),
-    preSteps: (workflow.preSteps || []).map(normalizeWorkflowStep),
-    steps: (workflow.steps || []).map(normalizeWorkflowStep),
+    flowSteps: workflowRecordToFlowSteps(workflow),
   };
   renderWorkflowDetailEditor();
   if (els.workflowDetailModal) {
@@ -4828,16 +4919,18 @@ function handleWorkflowDetailSave() {
     showToast("Workflow 이름을 입력해 주세요.");
     return;
   }
-  if (!draft.rootTaskName.trim()) {
-    showToast("기준 Task 이름을 입력해 주세요.");
+
+  const { preSteps, steps, rootTaskName } = flowStepsToWorkflowPayload(draft.flowSteps || []);
+  if (!rootTaskName) {
+    showToast("기준 Task(Root) 이름을 입력해 주세요.");
     return;
   }
 
   const payload = {
     name: draft.name.trim(),
-    rootTaskName: draft.rootTaskName.trim(),
-    preSteps: draft.preSteps.filter((step) => step.taskName),
-    steps: draft.steps.filter((step) => step.taskName),
+    rootTaskName,
+    preSteps: preSteps.filter((step) => step.taskName),
+    steps: steps.filter((step) => step.taskName),
     source: "manual",
   };
 
@@ -5152,8 +5245,23 @@ function inferWorkflowRecordForTaskChain(task) {
 function resolveTaskWorkflowRecord(task) {
   if (!task) return null;
 
-  const workflowId = resolveTaskWorkflowId(task);
+  const root = getWorkflowRootTask(task);
+  const chainTasks = root ? [root, ...getSubtasks(root.id)] : [task];
+
+  let workflowId = null;
+  for (const chainTask of chainTasks) {
+    if (chainTask.workflowId) {
+      workflowId = chainTask.workflowId;
+      break;
+    }
+  }
+  if (!workflowId) workflowId = resolveTaskWorkflowId(task);
+
   if (workflowId) {
+    for (const chainTask of chainTasks) {
+      const workflow = findWorkflowByIdAnywhere(workflowId, chainTask.study || task.study);
+      if (workflow) return workflow;
+    }
     const workflow = findWorkflowByIdAnywhere(workflowId, task.study);
     if (workflow) return workflow;
   }
@@ -5291,8 +5399,85 @@ function renderTaskContextMeta(task, options = {}) {
   return `<div class="${className}">${chips.join("")}</div>`;
 }
 
-const DASHBOARD_TODAY_PREVIEW_LIMIT = 5;
 const DASHBOARD_SECTION_PREVIEW_LIMIT = 3;
+
+function buildWorkflowTimelineStepDefs(workflow, rootTask) {
+  const steps = [];
+  (workflow.preSteps || []).forEach((step) => {
+    steps.push({ kind: "pre", taskName: step.taskName, stepDef: step });
+  });
+  steps.push({
+    kind: "root",
+    taskName: rootTask?.task?.trim() || getWorkflowRootLabel(workflow),
+    stepDef: null,
+  });
+  (workflow.steps || []).forEach((step) => {
+    steps.push({ kind: "post", taskName: step.taskName, stepDef: step });
+  });
+  return steps;
+}
+
+function findTaskForWorkflowStepName(stepName, rootTask, children) {
+  const nameLower = (stepName || "").trim().toLowerCase();
+  if (!nameLower) return null;
+  if (rootTask && (rootTask.task || "").trim().toLowerCase() === nameLower) return rootTask;
+  return children.find((child) => (child.task || "").trim().toLowerCase() === nameLower) || null;
+}
+
+function renderWorkflowTimeline(task) {
+  const workflow = resolveTaskWorkflowRecord(task);
+  const root = getWorkflowRootTask(task);
+  if (!workflow || !root) return "";
+
+  const children = getSubtasks(root.id).sort(compareTasks);
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
+  const currentIndex = Math.max(0, (getWorkflowStepIndexForTask(task, root, workflow) || 1) - 1);
+  const workflowName = workflow.name?.trim() || getWorkflowRootLabel(workflow);
+
+  const rows = stepDefs
+    .map((def, index) => {
+      const matchedTask = findTaskForWorkflowStepName(def.taskName, root, children);
+      const isDone = matchedTask?.status === "Completed";
+      const isCurrent = index === currentIndex && !isDone;
+      let icon;
+      let stateClass;
+      if (isDone) {
+        icon = "✓";
+        stateClass = "workflow-timeline__step--done";
+      } else if (isCurrent) {
+        icon = "●";
+        stateClass = "workflow-timeline__step--current";
+      } else {
+        icon = "○";
+        stateClass = "workflow-timeline__step--pending";
+      }
+
+      const nameLabel = isCurrent ? `${def.taskName} (현재)` : def.taskName;
+      const stepInner = matchedTask
+        ? `<button type="button" class="workflow-timeline__btn" data-edit="${escapeAttr(matchedTask.id)}"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></button>`
+        : `<div class="workflow-timeline__placeholder"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></div>`;
+      const arrow =
+        index < stepDefs.length - 1 ? '<div class="workflow-timeline__arrow" aria-hidden="true">↓</div>' : "";
+
+      return `<div class="workflow-timeline__step ${stateClass}">${stepInner}${arrow}</div>`;
+    })
+    .join("");
+
+  return `
+    <div class="workflow-timeline">
+      <h4 class="workflow-timeline__title">${escapeHtml(workflowName)}</h4>
+      <div class="workflow-timeline__track">${rows}</div>
+    </div>
+  `;
+}
+
+function bindWorkflowTimelineClicks(container) {
+  container?.querySelectorAll(".workflow-timeline__btn[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
+  });
+}
+
+const DASHBOARD_TODAY_PREVIEW_LIMIT = DASHBOARD_SECTION_PREVIEW_LIMIT;
 
 function renderDashboardMoreButton(filter, remaining) {
   if (!remaining || remaining <= 0 || !filter) return "";
@@ -5406,20 +5591,22 @@ function updateAddTaskWorkflowHint() {
 function renderTaskDetailLinks(task) {
   const workflowInfo = resolveTaskWorkflowDisplay(task);
   const routineInfo = resolveTaskRoutineDisplay(task);
-  const rootTask = getWorkflowRootTask(task);
-  const children = rootTask ? getSubtasks(rootTask.id) : [];
+  const timelineHtml = renderWorkflowTimeline(task);
+
+  if (els.taskDetailWorkflowTimeline) {
+    if (timelineHtml) {
+      els.taskDetailWorkflowTimeline.hidden = false;
+      els.taskDetailWorkflowTimeline.innerHTML = timelineHtml;
+      bindWorkflowTimelineClicks(els.taskDetailWorkflowTimeline);
+    } else {
+      els.taskDetailWorkflowTimeline.hidden = true;
+      els.taskDetailWorkflowTimeline.innerHTML = "";
+    }
+  }
 
   if (els.taskDetailWorkflowPreview) {
-    if (workflowInfo?.workflow) {
-      els.taskDetailWorkflowPreview.hidden = false;
-      els.taskDetailWorkflowPreview.innerHTML = renderWorkflowFlowPreview(workflowInfo.workflow, {
-        compact: true,
-        rootLabel: getWorkflowRootLabel(workflowInfo.workflow),
-      });
-    } else {
-      els.taskDetailWorkflowPreview.hidden = true;
-      els.taskDetailWorkflowPreview.innerHTML = "";
-    }
+    els.taskDetailWorkflowPreview.hidden = true;
+    els.taskDetailWorkflowPreview.innerHTML = "";
   }
 
   if (els.taskDetailWorkflowLink) {
@@ -5427,11 +5614,11 @@ function renderTaskDetailLinks(task) {
       els.taskDetailWorkflowLink.hidden = false;
       els.taskDetailWorkflowLink.dataset.studyProtocol = task.study || "";
       els.taskDetailWorkflowLink.innerHTML = `
-        <span class="task-detail-link__label">Workflow</span>
+        <span class="task-detail-link__label">Workflow Library</span>
         <span class="task-detail-link__value">${escapeHtml(workflowInfo.name)}</span>
         <span class="task-detail-link__scope">${escapeHtml(workflowInfo.scopeLabel)}</span>
         ${workflowInfo.viaParent ? '<span class="task-detail-link__hint">(parent Task)</span>' : ""}
-        <span class="task-detail-link__action">Library 열기 →</span>
+        <span class="task-detail-link__action">편집 · Library 열기 →</span>
       `;
     } else {
       els.taskDetailWorkflowLink.hidden = true;
@@ -5457,29 +5644,8 @@ function renderTaskDetailLinks(task) {
   }
 
   if (els.taskDetailWorkflowSteps && els.taskDetailWorkflowStepsList) {
-    if (children.length > 0) {
-      els.taskDetailWorkflowSteps.hidden = false;
-      els.taskDetailWorkflowStepsList.innerHTML = children
-        .map((child) => {
-          const done = child.status === "Completed";
-          return `
-            <li class="task-detail-workflow-steps__item${done ? " task-detail-workflow-steps__item--done" : ""}">
-              <button type="button" class="task-detail-workflow-steps__btn" data-edit="${escapeAttr(child.id)}">
-                <span class="task-detail-workflow-steps__status">${done ? "✓" : "○"}</span>
-                <span class="task-detail-workflow-steps__name">${escapeHtml(child.task)}</span>
-                <span class="task-detail-workflow-steps__due">${escapeHtml(formatDueDisplay(child))}</span>
-              </button>
-            </li>
-          `;
-        })
-        .join("");
-      els.taskDetailWorkflowStepsList.querySelectorAll("[data-edit]").forEach((btn) => {
-        btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
-      });
-    } else {
-      els.taskDetailWorkflowSteps.hidden = true;
-      els.taskDetailWorkflowStepsList.innerHTML = "";
-    }
+    els.taskDetailWorkflowSteps.hidden = true;
+    els.taskDetailWorkflowStepsList.innerHTML = "";
   }
 }
 
@@ -7510,7 +7676,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "47";
+const APP_BUILD = "48";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -9083,9 +9249,10 @@ function applyTaskPriorityChange(taskId, newPriority) {
   renderAll();
 }
 
-function renderInlineStatusDropdown(task) {
+function renderInlineStatusDropdown(task, options = {}) {
+  const compact = Boolean(options.compact);
   const currentClass = statusClass(task.status);
-  const options = INLINE_STATUS_OPTIONS.map(
+  const optionsHtml = INLINE_STATUS_OPTIONS.map(
     (status) => `
       <button type="button" class="status-dropdown__option${status === task.status ? " status-dropdown__option--active" : ""}" data-status-option data-task-id="${escapeAttr(task.id)}" data-status="${escapeAttr(status)}" role="option" aria-selected="${status === task.status}">
         ${escapeHtml(status)}
@@ -9093,13 +9260,20 @@ function renderInlineStatusDropdown(task) {
     `
   ).join("");
 
+  const triggerClass = compact
+    ? `status-chip status-chip--${currentClass} status-dropdown__trigger status-dropdown__trigger--compact`
+    : `status-badge status-badge--${currentClass} status-dropdown__trigger`;
+  const caret = compact
+    ? '<span class="status-dropdown__caret status-dropdown__caret--compact" aria-hidden="true">▾</span>'
+    : '<span class="status-dropdown__caret" aria-hidden="true">▼</span>';
+
   return `
-    <div class="status-dropdown" data-status-dropdown="${escapeAttr(task.id)}">
-      <button type="button" class="status-badge status-badge--${currentClass} status-dropdown__trigger" data-status-trigger="${escapeAttr(task.id)}" aria-haspopup="listbox" aria-expanded="false">
-        ${escapeHtml(task.status)} <span class="status-dropdown__caret" aria-hidden="true">▼</span>
+    <div class="status-dropdown${compact ? " status-dropdown--compact" : ""}" data-status-dropdown="${escapeAttr(task.id)}">
+      <button type="button" class="${triggerClass}" data-status-trigger="${escapeAttr(task.id)}" aria-haspopup="listbox" aria-expanded="false">
+        ${escapeHtml(task.status)} ${caret}
       </button>
       <div class="status-dropdown__menu" role="listbox" hidden>
-        ${options}
+        ${optionsHtml}
       </div>
     </div>
   `;
@@ -9658,7 +9832,7 @@ function renderDashItem(task, type, options = {}) {
         <span class="dash-item__chevron" aria-hidden="true">›</span>
       </button>
       <div class="dash-item__actions dash-item__actions--compact">
-        ${renderInlineStatusDropdown(task)}
+        ${renderInlineStatusDropdown(task, { compact: true })}
         <button type="button" class="dash-item__complete dash-item__complete--icon" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
           <span class="dash-item__complete-icon" aria-hidden="true">✓</span>
         </button>

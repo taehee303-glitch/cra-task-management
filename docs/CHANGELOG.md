@@ -17,6 +17,22 @@ _(none)_
 
 ---
 
+## [1.1.0] — build 48 — 2026-07-13 — Workflow Timeline UX Sprint
+
+### Added
+
+- **Task Detail Workflow Timeline** — WorkflowRecord 기반 ✓ / ● / ○ 진행 표시, Task 클릭으로 Detail 이동
+- **Workflow Library 통합 Editor** — 전체 Flow 순서 변경, 중간 삽입, 삭제, 이름·offset 편집
+
+### Changed
+
+- Dashboard Workflow Chip — Task chain 전체에서 `workflowId` 해석, Library와 동일 WorkflowRecord 이름 표시
+- Dashboard Compact UI — Status Chip 축소, 완료 버튼 아이콘화, 카드 높이 추가 감소
+- Dashboard 모든 섹션 — 최대 3건 미리보기 (오늘 마감 포함)
+- Learning Modal vs Library — 빠른 등록 / 정식 편집 역할 구분 명확화
+
+---
+
 ## [1.1.0] — build 47 — 2026-07-13 — Dashboard WorkflowRecord sync
 
 ### Fixed
