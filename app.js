@@ -2,6 +2,7 @@ const STORAGE_KEY = "cra-tasks";
 const WORKSPACE_WORKFLOWS_KEY = "cra-workspace-workflows";
 const GLOBAL_WORKFLOWS_KEY = "cra-global-workflows";
 const WORKFLOW_INSTANCES_KEY = "cra-workflow-instances";
+const ROUTINE_MASTER_KEY = "cra-routines";
 const STUDY_MASTER_KEY = "cra-study-master";
 const SITE_MASTER_KEY = "cra-site-master";
 const SYSTEM_MASTER_KEY = "cra-system-master";
@@ -60,7 +61,7 @@ let selectedStudyMasterId = null;
 let selectedSiteMasterId = null;
 let selectedSystemMasterId = null;
 let selectedSiteMasterTab = "basic";
-let selectedStudyMasterTab = "basic";
+let selectedStudyMasterTab = "general";
 
 const TASK_RULE_BASE_EVENTS = [
   { key: "mv", label: "MV 완료일" },
@@ -127,7 +128,8 @@ const WORKFLOW_INSTANCE_STATUSES = ["active", "completed", "superseded"];
 const WORKFLOW_SCOPE_LABELS = {
   study: "Study",
   workspace: "Workspace",
-  global: "Global",
+  global: "General",
+  general: "General",
 };
 
 let pendingTaskDraft = null;
@@ -206,11 +208,13 @@ const VIEW_TITLES = {
   "site-master": "Site",
   "system-master": "System",
   "workflow-master": "Workflow",
+  "routine-master": "Routine",
 };
 
 const DAILY_PRIMARY_VIEWS = ["dashboard", "tasks", "inbox", "calendar", "reference"];
 const FAB_VIEWS = ["dashboard", "tasks", "inbox", "calendar"];
-const MASTER_VIEWS = ["study-master", "site-master", "system-master", "workflow-master"];
+const MASTER_VIEWS = ["study-master", "workflow-master", "routine-master"];
+const HIDDEN_MASTER_VIEWS = ["site-master", "system-master"];
 const MOBILE_BREAKPOINT = window.matchMedia("(max-width: 768px)");
 
 const MOBILE_FILTER_LABELS = {
@@ -230,7 +234,8 @@ let workflowDetailEditRef = null;
 let workflowDetailDraft = null;
 let dashboardWorkflowTaskId = null;
 let dashboardExpandedSections = new Set();
-let selectedWorkflowMasterTab = "global";
+let selectedWorkflowMasterTab = "general";
+let selectedWorkflowStudyId = null;
 let activeStatusPicker = null;
 let mobileDailyFilter = null;
 
@@ -269,6 +274,9 @@ const els = {
   viewSystemMaster: document.getElementById("viewSystemMaster"),
   viewSiteMaster: document.getElementById("viewSiteMaster"),
   viewWorkflowMaster: document.getElementById("viewWorkflowMaster"),
+  viewRoutineMaster: document.getElementById("viewRoutineMaster"),
+  routineMasterList: document.getElementById("routineMasterList"),
+  workflowDetailSaveBtn: document.getElementById("workflowDetailSaveBtn"),
   workflowMasterPanel: document.getElementById("workflowMasterPanel"),
   newWorkflowMasterBtn: document.getElementById("newWorkflowMasterBtn"),
   navButtons: document.querySelectorAll("[data-view]"),
@@ -490,17 +498,21 @@ function loadAllFromLocalStorage() {
   WorkspaceWorkflowStore.load();
   GlobalWorkflowStore.load();
   WorkflowInstanceStore.load();
+  RoutineStore.load();
 }
 
 function refreshAfterCloudSync() {
   reconcileSiteNamesAfterMasterChange();
   WorkflowInstanceStore.load();
+  RoutineStore.load();
+  migrateMasterDataSSOT();
   migrateTasksToWorkflowInstances();
   updateTodayLabel();
   renderAll();
   renderStudyMaster();
   renderSystemMaster();
   renderWorkflowMaster();
+  renderRoutineMaster();
   refreshTaskStudySiteSelects();
 }
 
@@ -589,6 +601,15 @@ function registerCloudSyncSources() {
       applyPayload: (items) => {
         GlobalWorkflowStore.workflows = Array.isArray(items) ? items.map((w) => normalizeWorkflowRecord({ ...w, scope: "global" })) : [];
         localStorage.setItem(GLOBAL_WORKFLOWS_KEY, JSON.stringify(GlobalWorkflowStore.workflows));
+      },
+    },
+    routines: {
+      kind: "array",
+      localStorageKey: ROUTINE_MASTER_KEY,
+      getPayload: () => RoutineStore.routines,
+      applyPayload: (items) => {
+        RoutineStore.routines = Array.isArray(items) ? items.map(normalizeRoutineRecord) : [];
+        localStorage.setItem(ROUTINE_MASTER_KEY, JSON.stringify(RoutineStore.routines));
       },
     },
     workflowInstances: {
@@ -728,6 +749,7 @@ async function bootstrapApp() {
   await seedStudyMasterIfEmpty();
   seedSampleDataIfEmpty();
   migrateTaskStatuses();
+  migrateMasterDataSSOT();
   migrateTasksToWorkflowInstances();
   StudyMasterStore.migrateFromTasks(tasks);
   reconcileSiteNamesAfterMasterChange();
@@ -960,14 +982,12 @@ async function bootstrapApp() {
   bindEvent(els.workflowLearnModal, "click", (e) => {
     if (e.target === els.workflowLearnModal) closeWorkflowLearnModal();
   });
-  bindEvent(document.getElementById("newStudyRoutineBtn"), "click", () => {
-    if (selectedStudyMasterId && selectedStudyMasterId !== "new") openRoutineModal(selectedStudyMasterId);
-  });
+  bindEvent(document.getElementById("openSiteMasterFromStudyBtn"), "click", () => switchView("site-master"));
+  bindEvent(document.getElementById("openSystemMasterFromStudyBtn"), "click", () => switchView("system-master"));
+  bindEvent(document.getElementById("newRoutineMasterBtn"), "click", () => openRoutineModal());
   document.querySelectorAll("[data-routine-preset]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (selectedStudyMasterId && selectedStudyMasterId !== "new") {
-        openRoutineModal(selectedStudyMasterId, null, btn.dataset.routinePreset);
-      }
+      openRoutineModal(null, btn.dataset.routinePreset);
     });
   });
   bindEvent(els.routineForm, "submit", handleRoutineSubmit);
@@ -2079,70 +2099,70 @@ const StudyMasterStore = {
   },
 
   getWorkflows(studyId) {
+    return this.getAppliedWorkflows(studyId);
+  },
+
+  getAppliedWorkflowIds(studyId) {
     const study = this.getById(studyId);
     if (!study) return [];
-    return (study.workflows || []).map(normalizeWorkflowRecord);
+    return [...(study.appliedWorkflowIds || [])];
+  },
+
+  getAppliedWorkflows(studyId) {
+    return this.getAppliedWorkflowIds(studyId)
+      .map((id) => resolveGeneralWorkflow(id))
+      .filter(Boolean)
+      .map((workflow) => normalizeWorkflowRecord({ ...workflow, scope: "global" }));
   },
 
   getWorkflow(studyId, workflowId) {
-    return this.getWorkflows(studyId).find((workflow) => workflow.id === workflowId) || null;
+    const applied = this.getAppliedWorkflowIds(studyId);
+    if (!applied.includes(workflowId)) return null;
+    return resolveGeneralWorkflow(workflowId);
   },
 
-  addWorkflow(studyId, data) {
+  applyWorkflow(studyId, workflowId) {
     const study = this.getById(studyId);
-    if (!study) return null;
+    if (!study || !resolveGeneralWorkflow(workflowId)) return false;
 
-    const workflow = normalizeWorkflowRecord({
-      ...data,
-      scope: "study",
-      studyId,
-      id: generateId(),
-      createdAt: new Date().toISOString(),
-    });
-    if (!study.workflows) study.workflows = [];
-    study.workflows.push(workflow);
-    study.updatedAt = new Date().toISOString();
-    this.persist();
-    return workflow;
-  },
+    const appliedWorkflowIds = this.getAppliedWorkflowIds(studyId);
+    if (appliedWorkflowIds.includes(workflowId)) return true;
 
-  updateWorkflow(studyId, workflowId, data) {
-    const study = this.getById(studyId);
-    if (!study) return null;
-
-    const idx = (study.workflows || []).findIndex((workflow) => workflow.id === workflowId);
-    if (idx === -1) return null;
-
-    study.workflows[idx] = normalizeWorkflowRecord({
-      ...study.workflows[idx],
-      ...data,
-      id: workflowId,
-      scope: "study",
-      studyId,
-      updatedAt: new Date().toISOString(),
-    });
-    study.updatedAt = new Date().toISOString();
-    this.persist();
-    return study.workflows[idx];
-  },
-
-  deleteWorkflow(studyId, workflowId) {
-    const study = this.getById(studyId);
-    if (!study) return false;
-
-    study.workflows = (study.workflows || []).filter((workflow) => workflow.id !== workflowId);
-    study.updatedAt = new Date().toISOString();
-    this.persist();
+    appliedWorkflowIds.push(workflowId);
+    this.updateStudy(studyId, { appliedWorkflowIds });
     return true;
   },
 
+  unapplyWorkflow(studyId, workflowId) {
+    const study = this.getById(studyId);
+    if (!study) return false;
+
+    const appliedWorkflowIds = this.getAppliedWorkflowIds(studyId).filter((id) => id !== workflowId);
+    this.updateStudy(studyId, { appliedWorkflowIds });
+    return true;
+  },
+
+  addWorkflow(studyId, data) {
+    const general = upsertGeneralWorkflowFromRecord(data);
+    if (!general) return null;
+    this.applyWorkflow(studyId, general.id);
+    return general;
+  },
+
+  updateWorkflow(studyId, workflowId, data) {
+    if (!this.getAppliedWorkflowIds(studyId).includes(workflowId)) return null;
+    return GlobalWorkflowStore.update(workflowId, data);
+  },
+
+  deleteWorkflow(studyId, workflowId) {
+    return this.unapplyWorkflow(studyId, workflowId);
+  },
+
   recordWorkflowUsage(studyId, workflowId) {
-    const workflow = this.getWorkflow(studyId, workflowId);
-    if (!workflow) return null;
-    return this.updateWorkflow(studyId, workflowId, {
-      usageCount: (workflow.usageCount || 0) + 1,
-      lastUsedAt: new Date().toISOString(),
-    });
+    if (!this.getAppliedWorkflowIds(studyId).includes(workflowId)) {
+      this.applyWorkflow(studyId, workflowId);
+    }
+    return GlobalWorkflowStore.recordUsage(workflowId);
   },
 
   getRoutines(studyId) {
@@ -2689,6 +2709,10 @@ function normalizeStudyRecord(study) {
     ? study.workflows.map(normalizeWorkflowRecord)
     : [];
 
+  const appliedWorkflowIds = Array.isArray(study.appliedWorkflowIds)
+    ? [...new Set(study.appliedWorkflowIds.filter(Boolean))]
+    : [];
+
   const routines = Array.isArray(study.routines)
     ? study.routines.map(normalizeRoutineRecord)
     : [];
@@ -2710,6 +2734,7 @@ function normalizeStudyRecord(study) {
     systems,
     taskRules,
     workflows,
+    appliedWorkflowIds,
     routines,
     customTaskNames,
     ...(study.ruleTemplateId ? { ruleTemplateId: study.ruleTemplateId } : {}),
@@ -2888,6 +2913,15 @@ const GlobalWorkflowStore = {
   delete(id) {
     this.workflows = this.workflows.filter((workflow) => workflow.id !== id);
     this.persist();
+  },
+
+  recordUsage(id) {
+    const workflow = this.getById(id);
+    if (!workflow) return null;
+    return this.update(id, {
+      usageCount: (workflow.usageCount || 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+    });
   },
 };
 
@@ -3183,8 +3217,10 @@ function findLearnedWorkflowForFollowUp(parentTask, followUpTask) {
 
   const parentName = parentTask.task.trim().toLowerCase();
   const followUpName = followUpTask.task.trim().toLowerCase();
-  const matches = (study.workflows || []).filter((workflow) => {
+  const appliedIds = new Set(StudyMasterStore.getAppliedWorkflowIds(study.id));
+  const candidates = GlobalWorkflowStore.getAll().filter((workflow) => {
     if (workflow.source !== "learned") return false;
+    if (appliedIds.size && !appliedIds.has(workflow.id)) return false;
     const rootLabel = (workflow.rootTaskName || "").trim().toLowerCase();
     if (rootLabel !== parentName) return false;
     return (workflow.steps || []).some(
@@ -3192,7 +3228,7 @@ function findLearnedWorkflowForFollowUp(parentTask, followUpTask) {
     );
   });
 
-  return matches.length === 1 ? matches[0] : null;
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function migrateMisassignedLearnedFollowUps() {
@@ -3323,7 +3359,7 @@ function normalizeRoutineRecord(routine) {
   return {
     id: routine?.id || generateId(),
     name: routine?.name?.trim() || "Untitled Routine",
-    studyId: routine?.studyId || undefined,
+    studyId: routine?.studyId || null,
     taskTemplate: {
       taskName: routine?.taskTemplate?.taskName?.trim() || "",
       priority: PRIORITIES.includes(routine?.taskTemplate?.priority) ? routine.taskTemplate.priority : "Medium",
@@ -3411,6 +3447,174 @@ const WorkspaceWorkflowStore = {
     });
   },
 };
+
+const RoutineStore = {
+  routines: [],
+
+  load() {
+    try {
+      const raw = localStorage.getItem(ROUTINE_MASTER_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      this.routines = Array.isArray(parsed) ? parsed.map(normalizeRoutineRecord) : [];
+    } catch {
+      this.routines = [];
+    }
+  },
+
+  persist() {
+    localStorage.setItem(ROUTINE_MASTER_KEY, JSON.stringify(this.routines));
+    notifyCloudSync("routines");
+  },
+
+  getAll() {
+    return [...this.routines];
+  },
+
+  getById(id) {
+    return this.routines.find((routine) => routine.id === id) || null;
+  },
+
+  add(data) {
+    const routine = normalizeRoutineRecord({
+      ...data,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    });
+    this.routines.push(routine);
+    this.routines.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    this.persist();
+    return routine;
+  },
+
+  update(id, data) {
+    const idx = this.routines.findIndex((routine) => routine.id === id);
+    if (idx === -1) return null;
+    this.routines[idx] = normalizeRoutineRecord({
+      ...this.routines[idx],
+      ...data,
+      id,
+      updatedAt: new Date().toISOString(),
+    });
+    this.routines.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    this.persist();
+    return this.routines[idx];
+  },
+
+  delete(id) {
+    this.routines = this.routines.filter((routine) => routine.id !== id);
+    this.persist();
+    return true;
+  },
+};
+
+function workflowContentSignature(workflow) {
+  const normalized = normalizeWorkflowRecord(workflow);
+  return JSON.stringify({
+    name: normalized.name,
+    rootTaskName: normalized.rootTaskName,
+    preSteps: normalized.preSteps,
+    steps: normalized.steps,
+  });
+}
+
+function upsertGeneralWorkflowFromRecord(source) {
+  const signature = workflowContentSignature(source);
+  const existing = GlobalWorkflowStore.getAll().find((item) => workflowContentSignature(item) === signature);
+  if (existing) return existing;
+
+  const byName = GlobalWorkflowStore.getAll().find(
+    (item) => item.name.trim().toLowerCase() === (source.name || "").trim().toLowerCase()
+  );
+  if (byName && workflowContentSignature(byName) === signature) return byName;
+
+  return GlobalWorkflowStore.add({
+    ...source,
+    scope: "global",
+    id: undefined,
+    studyId: undefined,
+    source: source.source || "manual",
+  });
+}
+
+function remapWorkflowRecordId(oldId, newId) {
+  if (!oldId || !newId || oldId === newId) return;
+
+  tasks.forEach((task) => {
+    if (task.workflowRecordId === oldId || task.workflowId === oldId) {
+      TaskStore.update(task.id, {
+        workflowRecordId: newId,
+        workflowId: newId,
+      });
+    }
+  });
+
+  WorkflowInstanceStore.getAll().forEach((instance) => {
+    if (instance.workflowRecordId === oldId) {
+      WorkflowInstanceStore.update(instance.id, { workflowRecordId: newId });
+    }
+  });
+}
+
+function migrateMasterDataSSOT() {
+  const workflowIdMap = new Map();
+
+  WorkspaceWorkflowStore.getAll().forEach((workflow) => {
+    const general = upsertGeneralWorkflowFromRecord(workflow);
+    workflowIdMap.set(workflow.id, general.id);
+  });
+
+  StudyMasterStore.getAll().forEach((study) => {
+    let appliedWorkflowIds = Array.isArray(study.appliedWorkflowIds)
+      ? [...new Set(study.appliedWorkflowIds.filter(Boolean))]
+      : [];
+
+    (study.workflows || []).forEach((embedded) => {
+      const mappedId = workflowIdMap.get(embedded.id);
+      let general = mappedId ? GlobalWorkflowStore.getById(mappedId) : GlobalWorkflowStore.getById(embedded.id);
+      if (!general) {
+        general = upsertGeneralWorkflowFromRecord(embedded);
+      }
+      workflowIdMap.set(embedded.id, general.id);
+      if (!appliedWorkflowIds.includes(general.id)) {
+        appliedWorkflowIds.push(general.id);
+      }
+      remapWorkflowRecordId(embedded.id, general.id);
+    });
+
+    appliedWorkflowIds = appliedWorkflowIds.map((id) => workflowIdMap.get(id) || id);
+    appliedWorkflowIds = [...new Set(appliedWorkflowIds.filter((id) => GlobalWorkflowStore.getById(id)))];
+
+    StudyMasterStore.updateStudy(study.id, {
+      appliedWorkflowIds,
+      workflows: [],
+    });
+  });
+
+  const existingRoutineIds = new Set(RoutineStore.getAll().map((routine) => routine.id));
+  StudyMasterStore.getAll().forEach((study) => {
+    (study.routines || []).forEach((raw) => {
+      const routine = normalizeRoutineRecord({ ...raw, studyId: raw.studyId || study.id });
+      if (existingRoutineIds.has(routine.id)) {
+        RoutineStore.update(routine.id, routine);
+      } else {
+        RoutineStore.add(routine);
+        existingRoutineIds.add(routine.id);
+      }
+    });
+    if ((study.routines || []).length) {
+      StudyMasterStore.updateStudy(study.id, { routines: [] });
+    }
+  });
+}
+
+function getGeneralWorkflowRef(workflowId) {
+  return workflowId ? { scope: "global", id: workflowId, studyId: null } : null;
+}
+
+function resolveGeneralWorkflow(workflowId) {
+  if (!workflowId) return null;
+  return GlobalWorkflowStore.getById(workflowId) || null;
+}
 
 function upsertSiteMasterFromLegacy(nested) {
   const stdName = getStandardSiteName(nested.standardSiteName || nested.siteNumber || nested.standardName || "");
@@ -4043,6 +4247,7 @@ function switchView(viewName) {
   els.viewSystemMaster.hidden = viewName !== "system-master";
   els.viewSiteMaster.hidden = viewName !== "site-master";
   els.viewWorkflowMaster.hidden = viewName !== "workflow-master";
+  if (els.viewRoutineMaster) els.viewRoutineMaster.hidden = viewName !== "routine-master";
 
   closeSidebar();
   closeMasterSheet();
@@ -4069,6 +4274,9 @@ function switchView(viewName) {
   }
   if (viewName === "workflow-master") {
     switchWorkflowMasterTab(selectedWorkflowMasterTab);
+  }
+  if (viewName === "routine-master") {
+    renderRoutineMaster();
   }
   if (viewName === "dashboard") renderDashboard();
   if (viewName === "calendar") renderCalendarView();
@@ -4811,7 +5019,7 @@ function updateEditSiteInfoDisplay() {
 }
 
 function switchStudyMasterTab(tabName) {
-  if (selectedStudyMasterId === "new" && tabName !== "basic") return;
+  if (selectedStudyMasterId === "new" && tabName !== "general") return;
   selectedStudyMasterTab = tabName;
   applyStudyMasterTabUi();
 }
@@ -4930,27 +5138,24 @@ function renderWorkflowMetaRow(workflow) {
 }
 
 function getWorkflowRef(workflow) {
-  if (workflow.scope === "global" || String(workflow.id).startsWith("global-preset-")) {
+  if (workflow.scope === "global" || workflow.scope === "general" || String(workflow.id).startsWith("global-preset-")) {
     return { scope: "global", id: workflow.id, studyId: null };
   }
   if (workflow.scope === "workspace") {
-    return { scope: "workspace", id: workflow.id, studyId: null };
+    return { scope: "global", id: workflow.id, studyId: null };
   }
-  return { scope: "study", id: workflow.id, studyId: workflow.studyId || selectedStudyMasterId };
+  return getGeneralWorkflowRef(workflow.id);
 }
 
 function resolveWorkflowRecord(ref) {
   if (!ref) return null;
-  if (ref.scope === "global") {
-    return GlobalWorkflowStore.getById(ref.id);
-  }
-  if (ref.scope === "workspace") {
-    return WorkspaceWorkflowStore.getById(ref.id);
+  if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace") {
+    return resolveGeneralWorkflow(ref.id);
   }
   if (ref.scope === "study" && ref.studyId) {
     return StudyMasterStore.getWorkflow(ref.studyId, ref.id);
   }
-  return null;
+  return resolveGeneralWorkflow(ref.id);
 }
 
 function workflowMatchesTaskName(workflow, taskName) {
@@ -4997,25 +5202,22 @@ function findMatchingWorkflows(taskName, studyProtocol) {
   };
 
   if (study) {
-    (study.workflows || []).forEach((workflow) => pushMatch(normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })));
+    StudyMasterStore.getAppliedWorkflows(study.id).forEach(pushMatch);
     legacyTaskRulesToWorkflows(study).forEach(pushMatch);
   }
 
-  WorkspaceWorkflowStore.getAll().forEach(pushMatch);
-  getGlobalWorkflowPresets().forEach(pushMatch);
+  GlobalWorkflowStore.getAll().forEach(pushMatch);
 
   return matches.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0));
 }
 
 function recordWorkflowUsageByRef(ref) {
-  if (!ref || ref.scope === "global") return;
-  if (ref.scope === "workspace") {
-    WorkspaceWorkflowStore.recordUsage(ref.id);
+  if (!ref?.id) return;
+  if (ref.studyId) {
+    StudyMasterStore.recordWorkflowUsage(ref.studyId, ref.id);
     return;
   }
-  if (ref.scope === "study" && ref.studyId) {
-    StudyMasterStore.recordWorkflowUsage(ref.studyId, ref.id);
-  }
+  GlobalWorkflowStore.recordUsage(ref.id);
 }
 
 function applyWorkflowToRootTask(rootTask, workflow, ref) {
@@ -5123,9 +5325,6 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
   let actions;
   if (libraryMode) {
     actions = `<button type="button" class="btn btn--primary btn--sm" data-apply-workflow="${refJson}">적용</button>`;
-    if (isGlobal || workflow.scope === "workspace") {
-      actions += `<button type="button" class="btn btn--ghost btn--sm" data-copy-workflow="${refJson}">Study에 복사</button>`;
-    }
   } else {
     actions = `
       <button type="button" class="btn btn--ghost btn--sm" data-edit-workflow="${refJson}">편집</button>
@@ -5155,44 +5354,93 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
   `;
 }
 
-function renderStudyWorkflowLibrary(study) {
-  if (!els.studyWorkflowLibrary) return;
+function renderStudyAppliedWorkflows(study) {
+  const container = document.getElementById("studyAppliedWorkflows");
+  if (!container) return;
 
-  const studyWorkflows = sortWorkflowsForDisplay(
-    (study.workflows || []).map((workflow) =>
-      normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id })
-    )
-  );
-  const workspaceWorkflows = sortWorkflowsForDisplay(WorkspaceWorkflowStore.getAll());
-  const globalPresets = sortWorkflowsForDisplay(getGlobalWorkflowPresets());
-
-  const sections = [
-    { title: "Study Workflow", items: studyWorkflows },
-    { title: "Workspace", items: workspaceWorkflows },
-    { title: "Global Template", items: globalPresets },
-  ].filter((section) => section.items.length > 0);
-
-  if (!sections.length) {
-    els.studyWorkflowLibrary.innerHTML =
-      '<p class="workflow-library-empty">적용 가능한 Workflow가 없습니다. Master Data → Workflow에서 등록하거나 Global Template을 복사하세요.</p>';
+  const applied = StudyMasterStore.getAppliedWorkflows(study.id);
+  if (!applied.length) {
+    container.innerHTML =
+      '<p class="workflow-library-empty">적용된 Workflow가 없습니다. Workflow → Study에서 적용하세요.</p>';
     return;
   }
 
-  els.studyWorkflowLibrary.innerHTML = `
-    <p class="form-hint workflow-library-hint">Study Library는 Workflow 적용·복사만 제공합니다. 편집은 Master Data → Workflow에서 진행하세요.</p>
-    ${sections
-      .map(
-        (section) => `
-      <section class="workflow-library-section">
-        <h4 class="workflow-library-section__title">${escapeHtml(section.title)}</h4>
-        <div class="workflow-library-grid">${section.items.map((workflow) => renderWorkflowLibraryCard(workflow, { libraryMode: true })).join("")}</div>
-      </section>
-    `
-      )
-      .join("")}
+  container.innerHTML = `
+    <p class="form-hint workflow-library-hint">Applied Workflow는 조회 전용입니다. 수정은 Workflow → General에서 진행하세요.</p>
+    <div class="applied-workflow-list">
+      ${applied
+        .map((workflow) => {
+          const stepCount = computeWorkflowStepCount(workflow);
+          const updatedLabel = workflow.updatedAt
+            ? formatRelativeDateLabel(workflow.updatedAt)
+            : workflow.createdAt
+              ? formatRelativeDateLabel(workflow.createdAt)
+              : "—";
+          return `
+            <button type="button" class="applied-workflow-item" data-view-applied-workflow="${escapeAttr(workflow.id)}">
+              <span class="applied-workflow-item__check" aria-hidden="true">✓</span>
+              <span class="applied-workflow-item__body">
+                <span class="applied-workflow-item__name">${escapeHtml(workflow.name)}</span>
+                <span class="applied-workflow-item__meta">${stepCount} steps · ${escapeHtml(updatedLabel)}</span>
+              </span>
+            </button>
+          `;
+        })
+        .join("")}
+    </div>
   `;
 
-  bindWorkflowLibraryCardActions(els.studyWorkflowLibrary, study);
+  container.querySelectorAll("[data-view-applied-workflow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openWorkflowDetailModalReadOnly(getGeneralWorkflowRef(btn.dataset.viewAppliedWorkflow));
+    });
+  });
+}
+
+function formatRelativeDateLabel(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("ko-KR");
+  } catch {
+    return "—";
+  }
+}
+
+function openWorkflowDetailModalReadOnly(ref) {
+  const workflow = resolveWorkflowRecord(ref);
+  if (!workflow || !els.workflowDetailBody) {
+    showToast("Workflow를 찾을 수 없습니다.");
+    return;
+  }
+
+  workflowDetailEditRef = null;
+  workflowDetailDraft = null;
+
+  const preview = renderWorkflowFlowPreview(workflow, { compact: false, rootLabel: getWorkflowRootLabel(workflow) });
+  els.workflowDetailBody.innerHTML = `
+    <div class="workflow-detail-readonly">
+      <h4 class="workflow-detail-readonly__title">${escapeHtml(workflow.name)}</h4>
+      <p class="form-hint">이 화면은 조회 전용입니다. Workflow 수정은 <strong>Workflow → General</strong>에서 진행하세요.</p>
+      ${preview}
+      <div class="form-actions">
+        <button type="button" class="btn btn--primary" id="workflowReadonlyGoGeneralBtn">Workflow → General 이동</button>
+        <button type="button" class="btn btn--ghost" id="workflowReadonlyCloseBtn">닫기</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("workflowReadonlyGoGeneralBtn")?.addEventListener("click", () => {
+    closeWorkflowDetailModal();
+    switchView("workflow-master");
+    switchWorkflowMasterTab("general");
+  });
+  document.getElementById("workflowReadonlyCloseBtn")?.addEventListener("click", closeWorkflowDetailModal);
+
+  if (els.workflowDetailSaveBtn) els.workflowDetailSaveBtn.hidden = true;
+  if (els.workflowDetailModal) {
+    els.workflowDetailModal.hidden = false;
+    els.workflowDetailModal.removeAttribute("hidden");
+  }
 }
 
 function bindWorkflowLibraryCardActions(container, study = null) {
@@ -5233,19 +5481,11 @@ function bindWorkflowLibraryCardActions(container, study = null) {
         const ref = JSON.parse(btn.dataset.copyWorkflow);
         const preset = resolveWorkflowRecord(ref);
         if (!preset || !study?.id) return;
-        StudyMasterStore.addWorkflow(study.id, {
-          ...preset,
-          id: undefined,
-          name: preset.name,
-          scope: "study",
-          source: "template",
-          usageCount: 0,
-          lastUsedAt: null,
-        });
-        renderStudyWorkflowLibrary(study);
-        showToast("Study Workflow Library에 복사했습니다.");
+        StudyMasterStore.applyWorkflow(study.id, preset.id);
+        renderStudyAppliedWorkflows(study);
+        showToast("Study에 Workflow를 적용했습니다.");
       } catch {
-        showToast("복사할 수 없습니다.");
+        showToast("Workflow를 적용할 수 없습니다.");
       }
     });
   });
@@ -5254,29 +5494,29 @@ function bindWorkflowLibraryCardActions(container, study = null) {
 function handleDeleteWorkflowRef(ref) {
   if (!ref || !confirm("이 Workflow를 삭제할까요?")) return;
 
-  if (ref.scope === "global") {
+  if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace") {
     GlobalWorkflowStore.delete(ref.id);
+    StudyMasterStore.getAll().forEach((study) => {
+      if (StudyMasterStore.getAppliedWorkflowIds(study.id).includes(ref.id)) {
+        StudyMasterStore.unapplyWorkflow(study.id, ref.id);
+      }
+    });
     renderWorkflowMaster();
-    showToast("Global Workflow가 삭제되었습니다.");
+    showToast("General Workflow가 삭제되었습니다.");
     return;
   }
-  if (ref.scope === "workspace") {
-    WorkspaceWorkflowStore.delete(ref.id);
-    renderWorkflowMaster();
-    showToast("Workspace Workflow가 삭제되었습니다.");
-    return;
-  }
+
   if (ref.scope === "study" && ref.studyId) {
-    StudyMasterStore.deleteWorkflow(ref.studyId, ref.id);
+    StudyMasterStore.unapplyWorkflow(ref.studyId, ref.id);
     renderWorkflowMaster();
     const study = StudyMasterStore.getById(ref.studyId);
-    if (study && selectedStudyMasterId === ref.studyId) renderStudyWorkflowLibrary(study);
-    showToast("Study Workflow가 삭제되었습니다.");
+    if (study && selectedStudyMasterId === ref.studyId) renderStudyAppliedWorkflows(study);
+    showToast("Study Workflow 적용을 해제했습니다.");
   }
 }
 
 function switchWorkflowMasterTab(tab) {
-  selectedWorkflowMasterTab = tab || "global";
+  selectedWorkflowMasterTab = tab === "study" ? "study" : "general";
   document.querySelectorAll("[data-workflow-tab]").forEach((btn) => {
     btn.classList.toggle("workflow-master-tabs__btn--active", btn.dataset.workflowTab === selectedWorkflowMasterTab);
   });
@@ -5286,82 +5526,144 @@ function switchWorkflowMasterTab(tab) {
   renderWorkflowMaster();
 }
 
-function getStudyWorkflowEntries() {
-  const entries = [];
-  StudyMasterStore.getAll().forEach((study) => {
-    (study.workflows || []).forEach((workflow) => {
-      entries.push({
-        workflow: normalizeWorkflowRecord({ ...workflow, scope: "study", studyId: study.id }),
-        studyLabel: study.protocolNumber,
-        ref: { scope: "study", id: workflow.id, studyId: study.id },
-      });
+function renderWorkflowMasterStudyAssignment() {
+  const studies = StudyMasterStore.getAll();
+  if (!studies.length) {
+    return '<p class="workflow-library-empty">Study를 먼저 등록하세요.</p>';
+  }
+
+  if (!selectedWorkflowStudyId || !StudyMasterStore.getById(selectedWorkflowStudyId)) {
+    selectedWorkflowStudyId = studies[0].id;
+  }
+
+  const study = StudyMasterStore.getById(selectedWorkflowStudyId);
+  const appliedIds = new Set(StudyMasterStore.getAppliedWorkflowIds(study.id));
+  const applied = StudyMasterStore.getAppliedWorkflows(study.id);
+  const available = sortWorkflowsForDisplay(GlobalWorkflowStore.getAll()).filter((workflow) => !appliedIds.has(workflow.id));
+
+  return `
+    <div class="workflow-study-assign">
+      <div class="workflow-study-assign__header">
+        <label class="workflow-study-assign__label" for="workflowStudySelect">Study</label>
+        <select id="workflowStudySelect" class="workflow-study-assign__select">
+          ${studies
+            .map(
+              (item) =>
+                `<option value="${escapeAttr(item.id)}"${item.id === study.id ? " selected" : ""}>${escapeHtml(item.protocolNumber)} — ${escapeHtml(item.studyName || item.protocolNumber)}</option>`
+            )
+            .join("")}
+        </select>
+        <button type="button" class="btn btn--primary btn--sm" id="workflowApplyPickerBtn">+ Workflow 적용</button>
+      </div>
+      <section class="workflow-study-assign__section">
+        <h4 class="workflow-library-section__title">Applied Workflow — ${escapeHtml(study.protocolNumber)}</h4>
+        ${
+          applied.length
+            ? `<div class="applied-workflow-list">${applied
+                .map((workflow) => {
+                  const stepCount = computeWorkflowStepCount(workflow);
+                  return `
+                    <div class="applied-workflow-item applied-workflow-item--manage">
+                      <label class="applied-workflow-item__label">
+                        <input type="checkbox" checked data-unapply-workflow="${escapeAttr(workflow.id)}" />
+                        <span class="applied-workflow-item__name">${escapeHtml(workflow.name)}</span>
+                        <span class="applied-workflow-item__meta">${stepCount} steps</span>
+                      </label>
+                    </div>
+                  `;
+                })
+                .join("")}</div>`
+            : '<p class="workflow-library-empty">적용된 Workflow가 없습니다.</p>'
+        }
+      </section>
+      <div id="workflowApplyPicker" class="workflow-apply-picker" hidden>
+        <h4 class="workflow-library-section__title">General Workflow 선택</h4>
+        ${
+          available.length
+            ? `<div class="workflow-apply-picker__list">${available
+                .map(
+                  (workflow) =>
+                    `<button type="button" class="btn btn--ghost btn--sm" data-apply-workflow-id="${escapeAttr(workflow.id)}">${escapeHtml(workflow.name)}</button>`
+                )
+                .join("")}</div>`
+            : '<p class="form-hint">적용 가능한 General Workflow가 없습니다. General 탭에서 Workflow를 추가하세요.</p>'
+        }
+      </div>
+    </div>
+  `;
+}
+
+function bindWorkflowMasterStudyAssignment() {
+  document.getElementById("workflowStudySelect")?.addEventListener("change", (event) => {
+    selectedWorkflowStudyId = event.target.value;
+    renderWorkflowMaster();
+  });
+
+  document.getElementById("workflowApplyPickerBtn")?.addEventListener("click", () => {
+    const picker = document.getElementById("workflowApplyPicker");
+    if (picker) picker.hidden = !picker.hidden;
+  });
+
+  document.querySelectorAll("[data-apply-workflow-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!selectedWorkflowStudyId) return;
+      StudyMasterStore.applyWorkflow(selectedWorkflowStudyId, btn.dataset.applyWorkflowId);
+      renderWorkflowMaster();
+      const study = StudyMasterStore.getById(selectedWorkflowStudyId);
+      if (study && selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
+      showToast("Workflow를 Study에 적용했습니다.");
     });
   });
-  return entries.sort((a, b) => a.studyLabel.localeCompare(b.studyLabel, "ko"));
+
+  document.querySelectorAll("[data-unapply-workflow]").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!selectedWorkflowStudyId || input.checked) return;
+      StudyMasterStore.unapplyWorkflow(selectedWorkflowStudyId, input.dataset.unapplyWorkflow);
+      renderWorkflowMaster();
+      const study = StudyMasterStore.getById(selectedWorkflowStudyId);
+      if (study && selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
+      showToast("Workflow 적용을 해제했습니다.");
+    });
+  });
 }
 
 function renderWorkflowMaster() {
   if (!els.workflowMasterPanel) return;
 
-  let items = [];
-  let emptyMsg = "";
-
-  if (selectedWorkflowMasterTab === "global") {
-    items = sortWorkflowsForDisplay(GlobalWorkflowStore.getAll()).map((workflow) => ({
-      workflow,
-      studyLabel: null,
-    }));
-    emptyMsg = "Global Template가 없습니다. + Workflow로 추가하세요.";
-  } else if (selectedWorkflowMasterTab === "workspace") {
-    items = sortWorkflowsForDisplay(WorkspaceWorkflowStore.getAll()).map((workflow) => ({
-      workflow,
-      studyLabel: null,
-    }));
-    emptyMsg = "Workspace Workflow가 없습니다. + Workflow로 추가하세요.";
-  } else {
-    items = getStudyWorkflowEntries().map((entry) => ({
-      workflow: entry.workflow,
-      studyLabel: entry.studyLabel,
-    }));
-    emptyMsg = "Study Workflow가 없습니다. Study Master 또는 Workflow 적용으로 추가하세요.";
+  if (selectedWorkflowMasterTab === "study") {
+    els.workflowMasterPanel.innerHTML = renderWorkflowMasterStudyAssignment();
+    bindWorkflowMasterStudyAssignment();
+    return;
   }
 
+  const items = sortWorkflowsForDisplay(GlobalWorkflowStore.getAll()).map((workflow) => ({
+    workflow,
+    studyLabel: null,
+  }));
+
   if (!items.length) {
-    els.workflowMasterPanel.innerHTML = `<p class="workflow-library-empty">${escapeHtml(emptyMsg)}</p>`;
+    els.workflowMasterPanel.innerHTML =
+      '<p class="workflow-library-empty">General Workflow가 없습니다. + Workflow로 추가하세요.</p>';
     return;
   }
 
   els.workflowMasterPanel.innerHTML = `<div class="workflow-library-grid">${items
-    .map(({ workflow, studyLabel }) =>
-      renderWorkflowLibraryCard(workflow, { libraryMode: false, studyLabel })
-    )
+    .map(({ workflow, studyLabel }) => renderWorkflowLibraryCard(workflow, { libraryMode: false, studyLabel }))
     .join("")}</div>`;
 
   bindWorkflowLibraryCardActions(els.workflowMasterPanel);
 }
 
 function handleNewWorkflowMaster() {
-  if (selectedWorkflowMasterTab === "global") {
-    const workflow = GlobalWorkflowStore.add({
-      name: "New Global Workflow",
-      rootTaskName: "Root Task",
-      preSteps: [],
-      steps: [],
-      source: "manual",
-    });
-    openWorkflowDetailModal({ scope: "global", id: workflow.id, studyId: null });
-    return;
-  }
-  if (selectedWorkflowMasterTab === "workspace") {
-    const workflow = WorkspaceWorkflowStore.add({
-      name: "New Workspace Workflow",
-      rootTaskName: "Root Task",
-      preSteps: [],
-      steps: [],
-      source: "manual",
-    });
-    openWorkflowDetailModal({ scope: "workspace", id: workflow.id, studyId: null });
-  }
+  if (selectedWorkflowMasterTab !== "general") return;
+  const workflow = GlobalWorkflowStore.add({
+    name: "New Workflow",
+    rootTaskName: "Root Task",
+    preSteps: [],
+    steps: [],
+    source: "manual",
+  });
+  openWorkflowDetailModal({ scope: "global", id: workflow.id, studyId: null });
 }
 
 function canEditWorkflowRef(ref) {
@@ -5583,7 +5885,7 @@ function renderWorkflowDetailEditor() {
 
 function openWorkflowDetailModal(ref) {
   if (!canEditWorkflowRef(ref)) {
-    showToast("이 Workflow는 편집할 수 없습니다.");
+    openWorkflowDetailModalReadOnly(ref);
     return;
   }
   const workflow = resolveWorkflowRecord(ref);
@@ -5597,6 +5899,7 @@ function openWorkflowDetailModal(ref) {
     name: workflow.name,
     flowSteps: workflowRecordToFlowSteps(workflow),
   };
+  if (els.workflowDetailSaveBtn) els.workflowDetailSaveBtn.hidden = false;
   renderWorkflowDetailEditor();
   if (els.workflowDetailModal) {
     els.workflowDetailModal.hidden = false;
@@ -5636,22 +5939,14 @@ function handleWorkflowDetailSave() {
 
   const ref = workflowDetailEditRef;
   let saved = null;
-  if (ref.scope === "global") {
+  if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace") {
     saved = GlobalWorkflowStore.update(ref.id, payload);
     renderWorkflowMaster();
   } else if (ref.scope === "study" && ref.studyId) {
-    saved = StudyMasterStore.updateWorkflow(ref.studyId, ref.id, payload);
-    if (saved && selectedStudyMasterId === ref.studyId) {
-      renderStudyWorkflowLibrary(StudyMasterStore.getById(ref.studyId));
-    }
+    saved = GlobalWorkflowStore.update(ref.id, payload);
     renderWorkflowMaster();
-  } else if (ref.scope === "workspace") {
-    saved = WorkspaceWorkflowStore.update(ref.id, payload);
-    renderWorkflowMaster();
-    const study = selectedStudyMasterId && selectedStudyMasterId !== "new"
-      ? StudyMasterStore.getById(selectedStudyMasterId)
-      : null;
-    if (study) renderStudyWorkflowLibrary(study);
+    const study = StudyMasterStore.getById(ref.studyId);
+    if (study && selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
   }
 
   if (!saved) {
@@ -5870,23 +6165,17 @@ function finalizeTaskCompletion(completedTask, workflowCount = 0) {
 function findWorkflowByIdAnywhere(workflowId, studyProtocol) {
   if (!workflowId) return null;
 
+  const general = resolveGeneralWorkflow(workflowId);
+  if (general) return general;
+
   if (studyProtocol) {
     const study = StudyMasterStore.getByProtocol(studyProtocol);
-    if (study) {
-      const match = StudyMasterStore.getWorkflow(study.id, workflowId);
-      if (match) return match;
+    if (study && StudyMasterStore.getAppliedWorkflowIds(study.id).includes(workflowId)) {
+      return resolveGeneralWorkflow(workflowId);
     }
   }
 
-  for (const study of StudyMasterStore.getAll()) {
-    const match = StudyMasterStore.getWorkflow(study.id, workflowId);
-    if (match) return match;
-  }
-
-  const workspaceMatch = WorkspaceWorkflowStore.getById(workflowId);
-  if (workspaceMatch) return workspaceMatch;
-
-  return GlobalWorkflowStore.getById(workflowId) || getGlobalWorkflowPresets().find((w) => w.id === workflowId) || null;
+  return null;
 }
 
 function getWorkflowRootTask(task) {
@@ -5935,12 +6224,12 @@ function resolveTaskWorkflowDisplay(task) {
 
 function findRoutineByIdAnywhere(routineId, studyProtocol) {
   if (!routineId) return null;
-  if (studyProtocol) {
-    const study = StudyMasterStore.getByProtocol(studyProtocol);
-    if (study) return StudyMasterStore.getRoutine(study.id, routineId);
-  }
+  const direct = RoutineStore.getById(routineId);
+  if (direct) return direct;
+
   for (const study of StudyMasterStore.getAll()) {
-    const match = (study.routines || []).find((r) => r.id === routineId);
+    if (studyProtocol && study.protocolNumber !== studyProtocol) continue;
+    const match = (study.routines || []).find((routine) => routine.id === routineId);
     if (match) return normalizeRoutineRecord({ ...match, studyId: study.id });
   }
   return null;
@@ -6346,36 +6635,25 @@ function getRecentlyCompletedTasks(limit = null) {
   return limit ? sorted.slice(0, limit) : sorted;
 }
 
-function navigateToStudyWorkflowLibrary(studyProtocol) {
-  const study = StudyMasterStore.getByProtocol(studyProtocol);
-  if (!study) {
-    showToast("Study를 찾을 수 없습니다.");
-    return;
-  }
+function navigateToStudyRoutineTab(studyProtocol) {
   closeTaskDetail();
-  closeAddTaskModal();
-  selectedStudyMasterId = study.id;
-  selectedStudyMasterTab = "workflow-library";
-  switchView("study-master");
-  renderStudyMaster();
+  switchView("routine-master");
+  renderRoutineMaster();
 }
 
-function navigateToStudyRoutineTab(studyProtocol) {
-  let study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
-  if (!study) {
-    study =
-      StudyMasterStore.getAll().find((item) => (item.routines || []).length > 0) || StudyMasterStore.getAll()[0];
-  }
-  if (!study) {
-    showToast("Routine을 등록할 Study를 먼저 선택하세요.");
+function navigateToStudyWorkflowLibrary(studyProtocol) {
+  const study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+  if (study) {
+    closeTaskDetail();
+    closeAddTaskModal();
+    selectedStudyMasterId = study.id;
+    selectedStudyMasterTab = "applied-workflows";
     switchView("study-master");
+    renderStudyMaster();
     return;
   }
-  closeTaskDetail();
-  selectedStudyMasterId = study.id;
-  selectedStudyMasterTab = "routines";
-  switchView("study-master");
-  renderStudyMaster();
+  switchView("workflow-master");
+  switchWorkflowMasterTab("study");
 }
 
 function updateAddTaskWorkflowHint() {
@@ -6465,36 +6743,30 @@ function renderTaskDetailLinks(task) {
 }
 
 function saveWorkflowWithScope(payload, scope, studyProtocol) {
+  const saved = GlobalWorkflowStore.add({ ...payload, scope: "global", source: payload.source || "learned" });
+  if (!saved) return null;
+
   if (scope === "study") {
     const study = StudyMasterStore.getByProtocol(studyProtocol);
     if (!study) {
       showToast("Study를 찾을 수 없습니다.");
-      return null;
+      return saved;
     }
-    const saved = StudyMasterStore.addWorkflow(study.id, { ...payload, scope: "study", studyId: study.id });
-    if (selectedStudyMasterId === study.id) renderStudyWorkflowLibrary(study);
-    return saved;
+    StudyMasterStore.applyWorkflow(study.id, saved.id);
+    if (selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
   }
 
-  if (scope === "workspace") {
-    return WorkspaceWorkflowStore.add({ ...payload, scope: "workspace" });
-  }
-
-  showToast("Global 템플릿 저장은 MVP v1에서 지원하지 않습니다.");
-  return null;
+  return saved;
 }
 
 function buildWorkflowRefFromSaved(saved, scope, studyProtocol) {
   if (!saved?.id) return null;
   if (scope === "study") {
     const study = StudyMasterStore.getByProtocol(studyProtocol);
-    if (!study) return null;
-    return { scope: "study", id: saved.id, studyId: study.id };
+    if (!study) return getGeneralWorkflowRef(saved.id);
+    return { scope: "global", id: saved.id, studyId: study.id };
   }
-  if (scope === "workspace") {
-    return { scope: "workspace", id: saved.id, studyId: null };
-  }
-  return null;
+  return getGeneralWorkflowRef(saved.id);
 }
 
 function applyLearnedWorkflowToTaskChain(rootTaskRef, followUpTaskRef, workflow, ref, options = {}) {
@@ -6528,10 +6800,10 @@ function applyLearnedWorkflowToTaskChain(rootTaskRef, followUpTaskRef, workflow,
     }
   }
 
-  if (ref?.scope === "study" && ref.studyId) {
+  if (ref?.studyId) {
     StudyMasterStore.recordWorkflowUsage(ref.studyId, workflow.id);
-  } else if (ref?.scope === "workspace") {
-    WorkspaceWorkflowStore.recordUsage(ref.id);
+  } else {
+    GlobalWorkflowStore.recordUsage(workflow.id);
   }
 }
 
@@ -6544,7 +6816,7 @@ function openWorkflowLearnModal(context) {
   if (!root || !followUp) return;
 
   const study = root.study ? StudyMasterStore.getByProtocol(root.study) : null;
-  const existingWorkflows = study ? StudyMasterStore.getWorkflows(study.id) : [];
+  const existingWorkflows = study ? StudyMasterStore.getAppliedWorkflows(study.id) : [];
   const dueOffset =
     root.dueDate && followUp.dueDate
       ? Math.max(0, Math.round((parseDate(followUp.dueDate) - parseDate(root.dueDate)) / 86400000))
@@ -6570,7 +6842,7 @@ function openWorkflowLearnModal(context) {
     )
     .join("");
 
-  const defaultScope = study ? "study" : "workspace";
+  const defaultScope = study ? "study" : "general";
 
   els.workflowLearnBody.innerHTML = `
     ${renderWorkflowFlowPreview(previewWorkflow, { rootLabel: root.task })}
@@ -6585,7 +6857,7 @@ function openWorkflowLearnModal(context) {
         ${
           existingWorkflows.length
             ? `<select id="workflowLearnUpdateSelect" class="workflow-learn-form__select">${updateOptions}</select>`
-            : '<p class="form-hint">업데이트할 Study Workflow가 없습니다.</p>'
+            : '<p class="form-hint">업데이트할 Applied Workflow가 없습니다.</p>'
         }
         <label class="workflow-learn-form__radio">
           <input type="radio" name="learnMode" value="new" checked />
@@ -6594,16 +6866,16 @@ function openWorkflowLearnModal(context) {
         <input type="text" id="workflowLearnNameInput" class="workflow-learn-form__input" value="${escapeAttr(`${root.task} Follow-up`)}" placeholder="Workflow 이름" />
       </fieldset>
       <fieldset class="workflow-learn-form__field">
-        <legend class="workflow-learn-form__legend">저장 범위 (Scope)</legend>
+        <legend class="workflow-learn-form__legend">Study 적용</legend>
         <label class="workflow-learn-form__radio">
           <input type="radio" name="learnScope" value="study" ${defaultScope === "study" ? "checked" : ""} ${study ? "" : "disabled"} />
-          이 Study에만
+          General에 저장 + 이 Study에 적용
         </label>
         <label class="workflow-learn-form__radio">
-          <input type="radio" name="learnScope" value="workspace" ${defaultScope === "workspace" ? "checked" : ""} />
-          내 Workspace
+          <input type="radio" name="learnScope" value="general" ${defaultScope === "general" ? "checked" : ""} />
+          General에만 저장
         </label>
-        <p class="form-hint">Global 템플릿은 읽기 전용입니다. Study 또는 Workspace에 저장하세요.</p>
+        <p class="form-hint">Workflow 원본은 Workflow → General에 저장됩니다. Study는 참조만 합니다.</p>
       </fieldset>
     </form>
   `;
@@ -6628,7 +6900,7 @@ function handleWorkflowLearnSave() {
   }
 
   const mode = form.querySelector('input[name="learnMode"]:checked')?.value || "new";
-  const scope = form.querySelector('input[name="learnScope"]:checked')?.value || "workspace";
+  const scope = form.querySelector('input[name="learnScope"]:checked')?.value || "general";
   const step = normalizeWorkflowStep({
     taskName: followUp.task,
     dueOffset:
@@ -6643,24 +6915,25 @@ function handleWorkflowLearnSave() {
     const study = StudyMasterStore.getByProtocol(root.study);
     const workflowId = document.getElementById("workflowLearnUpdateSelect")?.value;
     if (study && workflowId) {
-      const existing = StudyMasterStore.getWorkflow(study.id, workflowId);
+      const existing = resolveGeneralWorkflow(workflowId);
       if (existing) {
-        const updated = StudyMasterStore.updateWorkflow(study.id, workflowId, {
+        const updated = GlobalWorkflowStore.update(workflowId, {
           steps: [...(existing.steps || []), step],
           source: "learned",
           trigger: "TASK_COMPLETED",
           category: inferWorkflowCategory(existing.name, existing.tags),
         });
         if (updated) {
+          StudyMasterStore.applyWorkflow(study.id, workflowId);
           applyLearnedWorkflowToTaskChain(root, followUp, updated, {
-            scope: "study",
+            scope: "global",
             id: workflowId,
             studyId: study.id,
           }, { reuseInstance: true });
           renderAll();
-          showToast("Workflow가 업데이트되었습니다.");
+          showToast("General Workflow가 업데이트되었습니다.");
           closeWorkflowLearnModal();
-          if (selectedStudyMasterId === study.id) renderStudyWorkflowLibrary(study);
+          if (selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
           renderWorkflowMaster();
         }
         return;
@@ -6687,7 +6960,7 @@ function handleWorkflowLearnSave() {
     const ref = buildWorkflowRefFromSaved(saved, scope, root.study);
     applyLearnedWorkflowToTaskChain(root, followUp, saved, ref, { reuseInstance: false });
     renderAll();
-    showToast(scope === "study" ? "Study Workflow로 저장했습니다." : "Workspace Workflow로 저장했습니다.");
+    showToast(scope === "study" ? "General Workflow를 저장하고 Study에 적용했습니다." : "General Workflow로 저장했습니다.");
   }
   closeWorkflowLearnModal();
 }
@@ -6707,60 +6980,60 @@ function formatRoutineScheduleSummary(routine) {
   return "마감일 기준";
 }
 
-function renderStudyRoutinesPanel(study) {
-  if (!els.studyRoutinesList) return;
+function renderRoutineMaster() {
+  const container = els.routineMasterList;
+  if (!container) return;
 
-  const routines = StudyMasterStore.getRoutines(study.id);
+  const routines = RoutineStore.getAll();
   if (!routines.length) {
-    els.studyRoutinesList.innerHTML =
-      '<p class="workflow-library-empty">Routine을 등록하면 반복 Task가 자동 생성됩니다. Training 외 자유 생성도 가능합니다.</p>';
+    container.innerHTML =
+      '<p class="workflow-library-empty">Routine을 등록하면 반복 Task가 자동 생성됩니다. Study 연결은 선택 사항입니다.</p>';
     return;
   }
 
-  els.studyRoutinesList.innerHTML = routines
-    .map(
-      (routine) => `
+  container.innerHTML = routines
+    .map((routine) => {
+      const study = routine.studyId ? StudyMasterStore.getById(routine.studyId) : null;
+      const studyLabel = study ? study.protocolNumber : "Study 미연결";
+      return `
       <article class="routine-card">
         <header class="routine-card__head">
           <h4 class="routine-card__title">${escapeHtml(routine.name)}</h4>
           <span class="routine-card__badge${routine.enabled ? "" : " routine-card__badge--off"}">${routine.enabled ? "ON" : "OFF"}</span>
         </header>
         <p class="routine-card__task">${escapeHtml(routine.taskTemplate.taskName)} · ${escapeHtml(routine.taskTemplate.priority)}</p>
-        <p class="routine-card__schedule">${escapeHtml(formatRoutineScheduleSummary(routine))}</p>
+        <p class="routine-card__schedule">${escapeHtml(formatRoutineScheduleSummary(routine))} · ${escapeHtml(studyLabel)}</p>
         <footer class="routine-card__actions">
           <button type="button" class="btn btn--ghost btn--sm" data-edit-routine="${escapeAttr(routine.id)}">수정</button>
           <button type="button" class="btn btn--ghost btn--sm" data-delete-routine="${escapeAttr(routine.id)}">삭제</button>
         </footer>
       </article>
-    `
-    )
+    `;
+    })
     .join("");
 
-  els.studyRoutinesList.querySelectorAll("[data-edit-routine]").forEach((btn) => {
-    btn.addEventListener("click", () => openRoutineModal(study.id, btn.dataset.editRoutine));
+  container.querySelectorAll("[data-edit-routine]").forEach((btn) => {
+    btn.addEventListener("click", () => openRoutineModal(btn.dataset.editRoutine));
   });
-  els.studyRoutinesList.querySelectorAll("[data-delete-routine]").forEach((btn) => {
+  container.querySelectorAll("[data-delete-routine]").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (confirm("이 Routine을 삭제할까요?")) {
-        StudyMasterStore.deleteRoutine(study.id, btn.dataset.deleteRoutine);
-        renderStudyRoutinesPanel(study);
+        RoutineStore.delete(btn.dataset.deleteRoutine);
+        renderRoutineMaster();
       }
     });
   });
 }
 
-function openRoutineModal(studyId, routineId = null, presetKey = null) {
+function openRoutineModal(routineId = null, presetKey = null) {
   if (!els.routineModal || !els.routineForm) return;
 
-  const study = StudyMasterStore.getById(studyId);
-  if (!study) return;
-
-  const routine = routineId ? StudyMasterStore.getRoutine(studyId, routineId) : null;
+  const routine = routineId ? RoutineStore.getById(routineId) : null;
   const preset = presetKey ? ROUTINE_PRESETS[presetKey] : null;
 
   document.getElementById("routineModalTitle").textContent = routine ? "Routine 수정" : "Routine 등록";
   document.getElementById("routineId").value = routine?.id || "";
-  document.getElementById("routineStudyId").value = studyId;
+  populateRoutineStudySelect(routine?.studyId || "");
   document.getElementById("routineName").value = routine?.name || preset?.name || "";
   document.getElementById("routineTaskName").value = routine?.taskTemplate?.taskName || preset?.taskName || "";
   document.getElementById("routinePriority").value = routine?.taskTemplate?.priority || preset?.priority || "Medium";
@@ -6773,6 +7046,20 @@ function openRoutineModal(studyId, routineId = null, presetKey = null) {
   applyRoutineScheduleFieldsVisibility();
 
   els.routineModal.hidden = false;
+}
+
+function populateRoutineStudySelect(selectedStudyId = "") {
+  const select = document.getElementById("routineStudyId");
+  if (!select) return;
+  const studies = StudyMasterStore.getAll();
+  select.innerHTML =
+    '<option value="">Study 미연결</option>' +
+    studies
+      .map(
+        (study) =>
+          `<option value="${escapeAttr(study.id)}"${study.id === selectedStudyId ? " selected" : ""}>${escapeHtml(study.protocolNumber)}</option>`
+      )
+      .join("");
 }
 
 function closeRoutineModal() {
@@ -6792,8 +7079,8 @@ function applyRoutineScheduleFieldsVisibility() {
 
 function handleRoutineSubmit(e) {
   e.preventDefault();
-  const studyId = document.getElementById("routineStudyId").value;
   const routineId = document.getElementById("routineId").value;
+  const studyId = document.getElementById("routineStudyId")?.value || "";
   const scheduleType = document.getElementById("routineScheduleType").value;
   const offsetsRaw = document.getElementById("routineOffsets").value || "";
   const offsets = offsetsRaw
@@ -6803,6 +7090,7 @@ function handleRoutineSubmit(e) {
 
   const payload = {
     name: document.getElementById("routineName").value.trim(),
+    studyId: studyId || null,
     taskTemplate: {
       taskName: document.getElementById("routineTaskName").value.trim(),
       priority: document.getElementById("routinePriority").value,
@@ -6824,16 +7112,15 @@ function handleRoutineSubmit(e) {
   }
 
   if (routineId) {
-    StudyMasterStore.updateRoutine(studyId, routineId, payload);
+    RoutineStore.update(routineId, payload);
     showToast("Routine이 수정되었습니다.");
   } else {
-    StudyMasterStore.addRoutine(studyId, payload);
+    RoutineStore.add(payload);
     showToast("Routine이 등록되었습니다.");
   }
 
   closeRoutineModal();
-  const study = StudyMasterStore.getById(studyId);
-  if (study) renderStudyRoutinesPanel(study);
+  renderRoutineMaster();
   runRoutineScheduler();
   renderAll();
 }
@@ -6887,36 +7174,35 @@ function runRoutineScheduler() {
   const todayStr = toDateString(getToday());
   let created = 0;
 
-  StudyMasterStore.getAll().forEach((study) => {
-    (study.routines || []).forEach((raw) => {
-      const routine = normalizeRoutineRecord({ ...raw, studyId: study.id });
-      if (!routine.enabled || !routine.taskTemplate.taskName) return;
+  RoutineStore.getAll().forEach((routine) => {
+    if (!routine.enabled || !routine.taskTemplate.taskName) return;
 
-      const dueDates = computeRoutineDueDates(routine, todayStr);
-      let routineCreated = 0;
-      dueDates.forEach((dueDate) => {
-        if (taskExistsForRoutine(routine.id, dueDate, routine.taskTemplate.taskName)) return;
+    const study = routine.studyId ? StudyMasterStore.getById(routine.studyId) : null;
+    const dueDates = computeRoutineDueDates(routine, todayStr);
+    let routineCreated = 0;
 
-        TaskStore.add({
-          id: generateId(),
-          study: study.protocolNumber,
-          site: "",
-          task: routine.taskTemplate.taskName,
-          dueDate,
-          status: DEFAULT_STATUS,
-          priority: routine.taskTemplate.priority,
-          routineId: routine.id,
-          autoGenerated: true,
-          createdAt: new Date().toISOString(),
-        });
-        routineCreated += 1;
+    dueDates.forEach((dueDate) => {
+      if (taskExistsForRoutine(routine.id, dueDate, routine.taskTemplate.taskName)) return;
+
+      TaskStore.add({
+        id: generateId(),
+        study: study?.protocolNumber || "",
+        site: "",
+        task: routine.taskTemplate.taskName,
+        dueDate,
+        status: DEFAULT_STATUS,
+        priority: routine.taskTemplate.priority,
+        routineId: routine.id,
+        autoGenerated: true,
+        createdAt: new Date().toISOString(),
       });
-
-      if (routineCreated > 0) {
-        StudyMasterStore.updateRoutine(study.id, routine.id, { lastMaterializedAt: new Date().toISOString() });
-        created += routineCreated;
-      }
+      routineCreated += 1;
     });
+
+    if (routineCreated > 0) {
+      RoutineStore.update(routine.id, { lastMaterializedAt: new Date().toISOString() });
+      created += routineCreated;
+    }
   });
 
   return created;
@@ -6926,7 +7212,7 @@ function applyStudyMasterTabUi() {
   document.querySelectorAll("[data-study-tab]").forEach((btn) => {
     const tab = btn.dataset.studyTab;
     btn.classList.toggle("site-master-tabs__btn--active", tab === selectedStudyMasterTab);
-    btn.disabled = selectedStudyMasterId === "new" && tab !== "basic";
+    btn.disabled = selectedStudyMasterId === "new" && tab !== "general";
   });
 
   document.querySelectorAll("[data-study-tab-panel]").forEach((panel) => {
@@ -6935,25 +7221,20 @@ function applyStudyMasterTabUi() {
 
   const isNewStudy = selectedStudyMasterId === "new";
   const newStudySystemsHint = document.getElementById("studySystemsNewStudyHint");
-  const newStudyTaskRulesHint = document.getElementById("studyTaskRulesNewStudyHint");
-
-  const newStudyWorkflowLibraryHint = document.getElementById("studyWorkflowLibraryNewStudyHint");
-  const newStudyRoutinesHint = document.getElementById("studyRoutinesNewStudyHint");
+  const newStudyAppliedWorkflowHint = document.getElementById("studyAppliedWorkflowNewStudyHint");
 
   if (newStudySystemsHint) newStudySystemsHint.hidden = !isNewStudy || selectedStudyMasterTab !== "systems";
-  if (newStudyTaskRulesHint) newStudyTaskRulesHint.hidden = !isNewStudy || selectedStudyMasterTab !== "task-rules";
-  if (newStudyWorkflowLibraryHint) {
-    newStudyWorkflowLibraryHint.hidden = !isNewStudy || selectedStudyMasterTab !== "workflow-library";
-  }
-  if (newStudyRoutinesHint) {
-    newStudyRoutinesHint.hidden = !isNewStudy || selectedStudyMasterTab !== "routines";
+  if (newStudyAppliedWorkflowHint) {
+    newStudyAppliedWorkflowHint.hidden = !isNewStudy || selectedStudyMasterTab !== "applied-workflows";
   }
   if (els.newStudySystemBtn) els.newStudySystemBtn.disabled = isNewStudy;
-  if (els.newStudyTaskRuleBtn) els.newStudyTaskRuleBtn.disabled = isNewStudy;
-  if (document.getElementById("newStudyRoutineBtn")) {
-    document.getElementById("newStudyRoutineBtn").disabled = isNewStudy;
-  }
   if (els.linkSiteBtn) els.linkSiteBtn.disabled = isNewStudy;
+  if (document.getElementById("openSiteMasterFromStudyBtn")) {
+    document.getElementById("openSiteMasterFromStudyBtn").disabled = isNewStudy;
+  }
+  if (document.getElementById("openSystemMasterFromStudyBtn")) {
+    document.getElementById("openSystemMasterFromStudyBtn").disabled = isNewStudy;
+  }
 }
 
 function renderStudyMaster() {
@@ -6968,7 +7249,7 @@ function renderStudyMaster() {
         <li>
           <button type="button" class="study-master-list__item${study.id === selectedStudyMasterId ? " study-master-list__item--active" : ""}" data-study-id="${study.id}">
             <span class="study-master-list__name">${escapeHtml(study.studyName || study.protocolNumber)}</span>
-            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length} · <span class="study-master-list__wf">WF ${(study.workflows || []).length}</span> · <span class="study-master-list__rt">RT ${(study.routines || []).length}</span></span>
+            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length} · <span class="study-master-list__wf">WF ${StudyMasterStore.getAppliedWorkflowIds(study.id).length}</span></span>
           </button>
         </li>
       `
@@ -6989,7 +7270,7 @@ function renderStudyMaster() {
   if (selectedStudyMasterId === "new") {
     els.studyMasterEmpty.hidden = true;
     els.studyMasterForm.hidden = false;
-    selectedStudyMasterTab = "basic";
+    selectedStudyMasterTab = "general";
     els.studyMasterForm.reset();
     document.getElementById("studyMasterId").value = "";
     applyStudyMasterTabUi();
@@ -7017,9 +7298,7 @@ function renderStudyMaster() {
 
   renderLinkedSitesTable(study);
   renderStudySystemsTable(study);
-  renderStudyTaskRulesTable(study);
-  renderStudyWorkflowLibrary(study);
-  renderStudyRoutinesPanel(study);
+  renderStudyAppliedWorkflows(study);
   applyStudyMasterTabUi();
 }
 
@@ -7219,7 +7498,7 @@ function handleDeleteStudyTaskRule(ruleId) {
 
 function openNewStudyForm() {
   selectedStudyMasterId = "new";
-  selectedStudyMasterTab = "basic";
+  selectedStudyMasterTab = "general";
   els.studyMasterEmpty.hidden = true;
   els.studyMasterForm.hidden = false;
   els.studyMasterForm.reset();
@@ -8571,7 +8850,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "58";
+const APP_BUILD = "59";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

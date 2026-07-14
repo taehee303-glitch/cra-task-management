@@ -17,6 +17,20 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 59 — 2026-07-14 — Master Data SSOT refactor
+
+### Changed
+
+- **메뉴 구조** — Study · Workflow · Routine · Settings (Site/System은 Study 탭에서 Master 관리)
+- **Workflow SSOT** — General(`GlobalWorkflowStore`) 단일 원본, Study는 `appliedWorkflowIds` 참조만
+- **Study 탭** — General · Sites · Systems · Applied Workflow(조회) · Notes
+- **Workflow 탭** — General(편집) · Study(적용/해제)
+- **Routine** — 독립 `RoutineStore`, 선택적 Study 연결
+- Learning 저장 → General + Study 적용(참조)
+- Workspace/Study embedded Workflow → 마이그레이션으로 General + Applied 참조 변환
+
+---
+
 ## [1.2.0] — build 58 — 2026-07-14 — Hotfix: app.js syntax error
 
 ### Fixed
