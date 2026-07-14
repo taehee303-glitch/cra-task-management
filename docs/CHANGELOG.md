@@ -17,6 +17,20 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 63 — 2026-07-15 — Dashboard information hierarchy UX
+
+### Changed
+
+- **Hero 영역** — 오늘 업무량·Workflow 진행률·시작 버튼 중심으로 재구성
+- **Task Card** — Task → Study/Site → Workflow → Due → Status 순 CRA 기준 배치
+- **Workflow** — Study별 그룹화, Progress Bar + 현재/다음 Step 표시
+- **일정 Timeline** — 날짜별 세로 Timeline 형태
+- **카드 크기** — 오늘 Task(대) → Workflow/일정(중) → 업데이트(소)
+- **통계** — 접을 수 있는 하단 Summary
+- 색상 역할 정리 (Blue/Purple/Orange/Red/Green)
+
+---
+
 ## [1.3.0] — build 62 — 2026-07-15 — Workflow task completion engine
 
 ### Changed

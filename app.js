@@ -471,10 +471,12 @@ const els = {
   dashboardAddTaskBtn: document.getElementById("dashboardAddTaskBtn"),
   dashboardStartWorkBtn: document.getElementById("dashboardStartWorkBtn"),
   todayProgressTotal: document.getElementById("todayProgressTotal"),
-  dashboardUrgentToday: document.getElementById("dashboardUrgentToday"),
-  dashboardUrgentD1: document.getElementById("dashboardUrgentD1"),
-  dashboardUrgentD2: document.getElementById("dashboardUrgentD2"),
-  dashboardUrgentD3: document.getElementById("dashboardUrgentD3"),
+  todayProgressCompleted: document.getElementById("todayProgressCompleted"),
+  dashboardWorkflowProgressPercent: document.getElementById("dashboardWorkflowProgressPercent"),
+  dashboardWorkflowProgressFill: document.getElementById("dashboardWorkflowProgressFill"),
+  dashboardWorkflowProgressSubtitle: document.getElementById("dashboardWorkflowProgressSubtitle"),
+  dashboardOverdueSection: document.getElementById("dashboardOverdueSection"),
+  dashboardNextWeekSection: document.getElementById("dashboardNextWeekSection"),
   dashboardActiveWorkflowList: document.getElementById("dashboardActiveWorkflowList"),
   dashboardActiveWorkflowCount: document.getElementById("dashboardActiveWorkflowCount"),
   referenceSearchInput: document.getElementById("referenceSearchInput"),
@@ -1050,11 +1052,9 @@ async function bootstrapApp() {
   });
   els.todayProgressHero?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   els.dashboardStartWorkBtn?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
+  document.querySelector(".dashboard-hero__metrics")?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   els.dashboardCalendarBtn?.addEventListener("click", () => switchView("calendar"));
   els.dashboardAddTaskBtn?.addEventListener("click", () => openAddTaskModal());
-  document.querySelectorAll(".dashboard-v2__urgent-bucket[data-dashboard-filter]").forEach((btn) => {
-    btn.addEventListener("click", () => handleDashboardCardFilterClick(btn.dataset.dashboardFilter));
-  });
   els.searchInput.addEventListener("input", renderTaskList);
   els.exportCsvBtn.addEventListener("click", exportTasksToCsv);
   els.importCsvBtn.addEventListener("click", () => els.importCsvInput.click());
@@ -9076,7 +9076,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "62";
+const APP_BUILD = "63";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -11089,12 +11089,38 @@ function getDashboardUrgentCounts() {
   };
 }
 
-function renderDashboardUrgentBuckets() {
-  const counts = getDashboardUrgentCounts();
-  if (els.dashboardUrgentToday) els.dashboardUrgentToday.textContent = String(counts.today);
-  if (els.dashboardUrgentD1) els.dashboardUrgentD1.textContent = String(counts.d1);
-  if (els.dashboardUrgentD2) els.dashboardUrgentD2.textContent = String(counts.d2);
-  if (els.dashboardUrgentD3) els.dashboardUrgentD3.textContent = String(counts.d3);
+function getDashboardAggregateWorkflowProgress() {
+  const entries = getDashboardActiveWorkflowEntries();
+  if (!entries.length) {
+    return { completed: 0, total: 0, rate: 0, count: 0 };
+  }
+  const completed = entries.reduce((sum, entry) => sum + entry.progress.completed, 0);
+  const total = entries.reduce((sum, entry) => sum + entry.progress.total, 0);
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { completed, total, rate, count: entries.length };
+}
+
+function getWorkflowStepLabels(workflow, root, instance) {
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
+  let currentStepName = null;
+  let nextStepName = null;
+
+  for (let index = 0; index < stepDefs.length; index += 1) {
+    const def = stepDefs[index];
+    const matched = findTaskForWorkflowStepInInstance(def.taskName, root, instance);
+    const isDone = matched?.status === "Completed";
+    if (!isDone) {
+      currentStepName = def.taskName;
+      nextStepName = stepDefs[index + 1]?.taskName || null;
+      break;
+    }
+  }
+
+  if (!currentStepName && stepDefs.length) {
+    currentStepName = stepDefs[stepDefs.length - 1].taskName;
+  }
+
+  return { currentStepName, nextStepName };
 }
 
 function getDashboardActiveWorkflowEntries() {
@@ -11111,38 +11137,44 @@ function getDashboardActiveWorkflowEntries() {
     const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
     if (progress.total > 0 && progress.completed >= progress.total) return;
 
+    const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
+    const repTask =
+      getWorkflowInstanceTasks(ctx.instance.id).find((item) => item.status !== "Completed") ||
+      ctx.root;
+
     entries.push({
       workflow: ctx.workflow,
       root: ctx.root,
+      instance: ctx.instance,
       progress,
       study: ctx.root.study || "Study 미정",
-      taskId: ctx.root.id,
+      taskId: repTask.id,
+      currentStepName: stepLabels.currentStepName,
+      nextStepName: stepLabels.nextStepName,
     });
   });
 
   return entries.sort((a, b) => {
+    const studyCmp = a.study.localeCompare(b.study, "ko");
+    if (studyCmp !== 0) return studyCmp;
     const rateA = a.progress.total ? a.progress.completed / a.progress.total : 0;
     const rateB = b.progress.total ? b.progress.completed / b.progress.total : 0;
     return rateB - rateA;
   });
 }
 
-function renderWorkflowStepperDots(completed, total) {
-  if (!total) return "";
-  const dots = [];
-  for (let index = 0; index < total; index += 1) {
-    const isDone = index < completed;
-    const isCurrent = index === completed && completed < total;
-    let stateClass = "";
-    if (isDone) stateClass = " dash-wf-stepper__dot--done";
-    else if (isCurrent) stateClass = " dash-wf-stepper__dot--current";
-    dots.push(`<span class="dash-wf-stepper__dot${stateClass}" aria-hidden="true"></span>`);
-  }
-  return `<div class="dash-wf-stepper" aria-hidden="true">${dots.join("")}</div>`;
+function groupDashboardWorkflowEntriesByStudy(entries) {
+  const map = new Map();
+  entries.forEach((entry) => {
+    const study = entry.study || "Study 미정";
+    if (!map.has(study)) map.set(study, []);
+    map.get(study).push(entry);
+  });
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "ko"));
 }
 
 function renderDashboardActiveWorkflows() {
-  const entries = getDashboardActiveWorkflowEntries().slice(0, 4);
+  const entries = getDashboardActiveWorkflowEntries();
   if (els.dashboardActiveWorkflowCount) {
     els.dashboardActiveWorkflowCount.textContent = String(entries.length);
     els.dashboardActiveWorkflowCount.hidden = entries.length === 0;
@@ -11156,87 +11188,127 @@ function renderDashboardActiveWorkflows() {
     return;
   }
 
-  els.dashboardActiveWorkflowList.innerHTML = entries
-    .map((entry) => {
-      const name = entry.workflow.name?.trim() || getWorkflowRootLabel(entry.workflow);
-      const percent = entry.progress.total
-        ? Math.round((entry.progress.completed / entry.progress.total) * 100)
-        : 0;
-      return `
-        <button type="button" class="dash-wf-card" data-dashboard-workflow="${escapeAttr(entry.taskId)}">
-          <div class="dash-wf-card__head">
-            <span class="dash-wf-card__icon" aria-hidden="true">🟣</span>
-            <div class="dash-wf-card__copy">
-              <span class="dash-wf-card__title">${escapeHtml(name)}</span>
-              <span class="dash-wf-card__meta">${escapeHtml(entry.study)} · ${entry.progress.completed}/${entry.progress.total} · ${percent}%</span>
-            </div>
-          </div>
-          ${renderWorkflowStepperDots(entry.progress.completed, entry.progress.total)}
-        </button>
-      `;
-    })
+  const grouped = groupDashboardWorkflowEntriesByStudy(entries);
+  els.dashboardActiveWorkflowList.innerHTML = grouped
+    .map(
+      ([study, studyEntries]) => `
+      <section class="dash-wf-study-group">
+        <h4 class="dash-wf-study-group__title">${escapeHtml(study)}</h4>
+        <div class="dash-wf-study-group__list">
+          ${studyEntries.map((entry) => renderDashboardWorkflowCard(entry)).join("")}
+        </div>
+      </section>
+    `
+    )
     .join("");
   setDashCardEmptyState(els.dashboardActiveWorkflowList, false);
 }
 
+function renderDashboardWorkflowCard(entry) {
+  const name = entry.workflow.name?.trim() || getWorkflowRootLabel(entry.workflow);
+  const percent = entry.progress.total
+    ? Math.round((entry.progress.completed / entry.progress.total) * 100)
+    : 0;
+  const currentLabel = entry.currentStepName || "—";
+  const nextLabel = entry.nextStepName || "—";
+
+  return `
+    <button type="button" class="dash-wf-card" data-dashboard-workflow="${escapeAttr(entry.taskId)}">
+      <div class="dash-wf-card__head">
+        <span class="dash-wf-card__title">${escapeHtml(name)}</span>
+        <span class="dash-wf-card__fraction">${entry.progress.completed} / ${entry.progress.total}</span>
+      </div>
+      <div class="dash-wf-card__bar" role="progressbar" aria-valuenow="${entry.progress.completed}" aria-valuemin="0" aria-valuemax="${entry.progress.total}">
+        <span class="dash-wf-card__bar-fill" style="width:${percent}%"></span>
+      </div>
+      <div class="dash-wf-card__steps">
+        <div class="dash-wf-card__step">
+          <span class="dash-wf-card__step-label">현재</span>
+          <span class="dash-wf-card__step-name">${escapeHtml(currentLabel)}</span>
+        </div>
+        <div class="dash-wf-card__step dash-wf-card__step--next">
+          <span class="dash-wf-card__step-label">다음</span>
+          <span class="dash-wf-card__step-name">${escapeHtml(nextLabel)}</span>
+        </div>
+      </div>
+    </button>
+  `;
+}
+
 function getDashboardDueBadge(task) {
   if (task.status === "Completed") {
-    return { label: "완료", className: "dash-v2-badge--done" };
+    return { label: "Completed", className: "dash-v2-badge--done" };
   }
   const diff = daysUntilDue(task.dueDate);
-  if (diff < 0) return { label: "지연", className: "dash-v2-badge--overdue" };
-  if (diff === 0) return { label: "오늘 마감", className: "dash-v2-badge--today" };
-  if (diff === 1) return { label: "D-1", className: "dash-v2-badge--d1" };
-  return { label: `D-${diff}`, className: "dash-v2-badge--soon" };
+  if (diff < 0) return { label: "Overdue", className: "dash-v2-badge--overdue" };
+  if (diff === 0) return { label: "D-0", className: "dash-v2-badge--today" };
+  return { label: `D-${diff}`, className: diff === 1 ? "dash-v2-badge--d1" : "dash-v2-badge--neutral" };
 }
 
-function renderDashboardContextPill(task) {
+function getDashboardWorkflowLabel(task) {
   const step = getWorkflowStepPosition(task);
+  if (step?.workflowName) return step.workflowName;
   const routineInfo = resolveTaskRoutineDisplay(task);
-  if (step) {
-    return `<span class="dash-v2-pill dash-v2-pill--workflow">Workflow</span>`;
-  }
-  if (routineInfo) {
-    return `<span class="dash-v2-pill dash-v2-pill--routine">Routine</span>`;
-  }
+  if (routineInfo?.name) return routineInfo.name;
   return "";
-}
-
-function renderDashboardTaskProgress(task) {
-  const step = getWorkflowStepPosition(task);
-  if (!step || step.total <= 1) return "";
-  const percent = Math.round((step.current / step.total) * 100);
-  return `<span class="dash-v2-row__progress"><span class="dash-v2-row__fraction">${step.current}/${step.total}</span><span class="dash-v2-row__percent">${percent}%</span></span>`;
 }
 
 function renderDashboardUpdateItem(task) {
   const when = formatRelativeTime(task.completedAt || task.dueDate || task.createdAt);
   const studyLabel = task.study || "Study 미정";
+  const workflowLabel = getDashboardWorkflowLabel(task);
+  const workflowBadge = workflowLabel
+    ? `<span class="dash-update-item__workflow">Workflow</span>`
+    : "";
+
   return `
     <article class="dash-update-item" data-task-id="${escapeAttr(task.id)}">
       <span class="dash-update-item__icon" aria-hidden="true">✓</span>
       <div class="dash-update-item__copy">
-        <p class="dash-update-item__title">${escapeHtml(task.task)} <span class="dash-update-item__status">Completed</span></p>
-        <p class="dash-update-item__meta">${escapeHtml(studyLabel)} · ${escapeHtml(when)}</p>
+        <p class="dash-update-item__title">${escapeHtml(task.task)} <span class="dash-update-item__status">완료</span></p>
+        <p class="dash-update-item__meta">${escapeHtml(studyLabel)} · ${escapeHtml(when)} ${workflowBadge}</p>
       </div>
     </article>
   `;
 }
 
-function renderDashboardScheduleItem(task) {
-  const studyLabel = task.study || "Study 미정";
-  const dueLabel = task.dueDate ? formatDueDaySuffix(task.dueDate) : "";
-  return `
-    <article class="dash-schedule-item dash-item--interactive" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-schedule-item__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 보기">
-        <span class="dash-schedule-item__time">${escapeHtml(dueLabel || "—")}</span>
-        <div class="dash-schedule-item__copy">
-          <span class="dash-schedule-item__title">${escapeHtml(task.task)}</span>
-          <span class="dash-schedule-item__meta">${escapeHtml(studyLabel)}</span>
-        </div>
-      </button>
-    </article>
-  `;
+function formatDashboardTimelineDayLabel(dateStr) {
+  const d = parseDate(dateStr);
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `${dayNames[d.getDay()]} ${d.getDate()}`;
+}
+
+function renderDashboardTimelineTasks(taskList, filter, limit) {
+  const isExpanded = dashboardExpandedSections.has(filter);
+  const visibleCount = isExpanded ? taskList.length : Math.min(taskList.length, limit);
+  const visible = taskList.slice(0, visibleCount);
+  if (!visible.length) return "";
+
+  const groups = [];
+  let currentGroup = null;
+  visible.forEach((task) => {
+    const key = task.dueDate || "__none__";
+    if (!currentGroup || currentGroup.date !== key) {
+      currentGroup = { date: key, tasks: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.tasks.push(task);
+  });
+
+  const html = groups
+    .map((group) => {
+      const label = group.date === "__none__" ? "일정 미정" : formatDashboardTimelineDayLabel(group.date);
+      const items = group.tasks
+        .map(
+          (task) =>
+            `<button type="button" class="dash-timeline__item" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">${escapeHtml(task.task)}</button>`
+        )
+        .join("");
+      return `<div class="dash-timeline__day"><span class="dash-timeline__day-label">${escapeHtml(label)}</span><div class="dash-timeline__day-items">${items}</div></div>`;
+    })
+    .join("");
+
+  return `${html}${renderDashboardMoreButton(filter, taskList, limit)}`;
 }
 
 function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}) {
@@ -11249,17 +11321,7 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
   if (layout === "updates") {
     itemsHtml = visible.map((task) => renderDashboardUpdateItem(task)).join("");
   } else if (layout === "schedule") {
-    let lastDate = "";
-    visible.forEach((task) => {
-      if (task.dueDate && task.dueDate !== lastDate) {
-        lastDate = task.dueDate;
-        const d = parseDate(task.dueDate);
-        const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
-        const header = `${d.getMonth() + 1}/${d.getDate()} (${dayNames[d.getDay()]})`;
-        itemsHtml += `<p class="dash-schedule-date">${escapeHtml(header)}</p>`;
-      }
-      itemsHtml += renderDashboardScheduleItem(task);
-    });
+    itemsHtml = renderDashboardTimelineTasks(visible, filter, limit);
   } else {
     itemsHtml = visible.map((task) => renderDashItem(task, type, { compact: true, layout: "v2" })).join("");
   }
@@ -11267,24 +11329,41 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
   return `${itemsHtml}${renderDashboardMoreButton(filter, taskList, limit)}`;
 }
 
-function renderTodayProgressHero() {
+function renderDashboardHero() {
   const progress = getTodayProgressStats();
+  const wfProgress = getDashboardAggregateWorkflowProgress();
 
   if (els.todayProgressTotal) els.todayProgressTotal.textContent = String(progress.total);
-  if (els.todayProgressPercent) els.todayProgressPercent.textContent = `${progress.rate}%`;
-  if (els.todayProgressCount) {
-    els.todayProgressCount.textContent = `${progress.completed}개 완료`;
-  }
-  if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
+  if (els.todayProgressCompleted) els.todayProgressCompleted.textContent = String(progress.completed);
   if (els.todayProgressRemaining) {
-    if (progress.total === 0) {
-      els.todayProgressRemaining.textContent = "오늘 Due 없음";
-    } else if (progress.remaining === 0) {
-      els.todayProgressRemaining.textContent = "완료 🎉";
-    } else {
-      els.todayProgressRemaining.textContent = `${progress.remaining}개 남음`;
-    }
+    els.todayProgressRemaining.textContent =
+      progress.total === 0 ? "0" : progress.remaining === 0 ? "0" : String(progress.remaining);
   }
+  if (els.todayProgressCount) {
+    els.todayProgressCount.textContent = `${progress.completed} / ${progress.total}`;
+  }
+  if (els.todayProgressPercent) els.todayProgressPercent.textContent = `${progress.rate}%`;
+  if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
+
+  if (els.dashboardWorkflowProgressPercent) {
+    els.dashboardWorkflowProgressPercent.textContent = `${wfProgress.rate}%`;
+  }
+  if (els.dashboardWorkflowProgressFill) {
+    els.dashboardWorkflowProgressFill.style.width = `${wfProgress.rate}%`;
+  }
+  if (els.dashboardWorkflowProgressSubtitle) {
+    els.dashboardWorkflowProgressSubtitle.textContent =
+      wfProgress.count > 0
+        ? `${wfProgress.count}개 Workflow · ${wfProgress.completed} / ${wfProgress.total} Step`
+        : "진행 중 Workflow 없음";
+  }
+
+  if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${progress.rate}%`;
+  if (els.overallProgressSubtitle) {
+    els.overallProgressSubtitle.textContent = `${progress.completed} / ${progress.total}`;
+  }
+  if (els.overallProgressFill) els.overallProgressFill.style.width = `${progress.rate}%`;
+
   if (els.todayProgressHero) {
     els.todayProgressHero.classList.remove(
       "today-progress-hero--done",
@@ -11301,13 +11380,14 @@ function renderTodayProgressHero() {
   }
 }
 
+function renderTodayProgressHero() {
+  renderDashboardHero();
+}
+
 function renderOverallProgress(stats) {
   if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${stats.completionRate}%`;
   if (els.overallProgressSubtitle) {
-    els.overallProgressSubtitle.textContent =
-      stats.total > 0
-        ? `${stats.completed} / ${stats.total} 완료 · 오늘도 한 걸음씩, CRA님의 꾸준함이 Study를 움직입니다.`
-        : "등록된 업무가 없습니다.";
+    els.overallProgressSubtitle.textContent = `${stats.completed} / ${stats.total}`;
   }
   if (els.overallProgressFill) els.overallProgressFill.style.width = `${stats.completionRate}%`;
 }
@@ -11324,9 +11404,7 @@ function renderDashboard() {
   if (els.statWeekDue) els.statWeekDue.textContent = stats.weekPrep;
   if (els.statTodayDue) els.statTodayDue.textContent = stats.todayDue;
   if (els.statNextWeekDue) els.statNextWeekDue.textContent = stats.nextWeekDue;
-  renderTodayProgressHero();
-  renderOverallProgress(stats);
-  renderDashboardUrgentBuckets();
+  renderDashboardHero();
   renderDashboardActiveWorkflows();
 
   const overdueTasks = activeTasks
@@ -11379,9 +11457,14 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.dashboardNextWeekList) {
     els.dashboardNextWeekList.innerHTML = nextWeekTasks.length
-      ? renderDashboardSectionTasks(nextWeekTasks, "time-next-week", "next-week", DASHBOARD_SECTION_PREVIEW_LIMIT)
+      ? renderDashboardSectionTasks(nextWeekTasks, "time-next-week", "next-week", DASHBOARD_SECTION_PREVIEW_LIMIT, {
+          layout: "v2",
+        })
       : renderDashboardEmptyMsg("다음 주 예정 업무가 없습니다.");
     setDashCardEmptyState(els.dashboardNextWeekList, nextWeekTasks.length === 0);
+  }
+  if (els.dashboardNextWeekSection) {
+    els.dashboardNextWeekSection.hidden = nextWeekTasks.length === 0;
   }
 
   if (els.dashboardRecentCompletedCount) {
@@ -11408,6 +11491,9 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
         })
       : renderDashboardEmptyMsg("지연된 업무가 없습니다.");
     setDashCardEmptyState(els.attentionOverdueList, overdueTasks.length === 0);
+  }
+  if (els.dashboardOverdueSection) {
+    els.dashboardOverdueSection.hidden = overdueTasks.length === 0;
   }
 
   bindDashboardTaskActions();
@@ -11463,33 +11549,27 @@ function renderDashItem(task, type, options = {}) {
 
   if (layoutV2) {
     const badge = getDashboardDueBadge(task);
-    const step = getWorkflowStepPosition(task);
-    const workflowSubtitle = step?.workflowName || step?.name || "";
-    const subtitle = workflowSubtitle
-      ? `${studyLabel} · ${workflowSubtitle}`
-      : `${studyLabel}${siteLabel !== "Site 미정" ? ` · ${siteLabel}` : ""}`;
+    const workflowLabel = getDashboardWorkflowLabel(task);
+    const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
 
     return `
-    <article class="dash-v2-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-v2-row__check dash-item__complete${isDone ? " dash-v2-row__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+    <article class="dash-task-card dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-task-card__check dash-item__complete${isDone ? " dash-task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
         <span class="dash-item__complete-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
-      <button type="button" class="dash-v2-row__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
-        <div class="dash-v2-row__copy">
-          <div class="dash-v2-row__title-line">
+      <div class="dash-task-card__body">
+        <button type="button" class="dash-task-card__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
+          <div class="dash-task-card__title-row">
             ${criticalBadge}
-            <span class="dash-v2-row__title">${escapeHtml(task.task)}</span>
+            <span class="dash-task-card__title">${escapeHtml(task.task)}</span>
           </div>
-          <span class="dash-v2-row__meta">${escapeHtml(subtitle)}</span>
+          <span class="dash-task-card__study-site">${escapeHtml(studyLabel)}${escapeHtml(sitePart)}</span>
+          ${workflowLabel ? `<span class="dash-task-card__workflow">${escapeHtml(workflowLabel)}</span>` : ""}
+        </button>
+        <div class="dash-task-card__footer">
+          <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+          <span class="dash-task-card__status">${renderInlineStatusDropdown(task, { compact: true })}</span>
         </div>
-      </button>
-      <div class="dash-v2-row__aside">
-        <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
-        ${renderDashboardContextPill(task)}
-        ${renderDashboardTaskProgress(task)}
-      </div>
-      <div class="dash-v2-row__actions">
-        ${renderInlineStatusDropdown(task, { compact: true })}
       </div>
     </article>
   `;
