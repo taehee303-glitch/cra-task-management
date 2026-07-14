@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 62 — 2026-07-15 — Workflow task completion engine
+
+### Changed
+
+- **Workflow Task 완료** — 후속 업무 팝업 제거, Workflow Engine 우선 실행
+- 다음 Step Task 미생성 시에만 자동 생성 (중복 방지)
+- 자동 생성·Workflow 완료 시 Toast 안내만 표시
+- Workflow 적용 시 루트 Task 연결만 수행, 후속 Task는 완료 시 순차 생성
+- 일반 Task는 기존 "다음 업무가 있나요?" 팝업 유지
+
+---
+
 ## [1.3.0] — build 61 — 2026-07-15 — Dashboard daily priority UI
 
 ### Changed
