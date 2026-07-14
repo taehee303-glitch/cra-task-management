@@ -17,6 +17,31 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 65 — 2026-07-15 — My Tasks action-first UX
+
+### Changed
+
+- **단일 Task List** — "오늘 마감"과 "My Open Tasks" 중복 제거, 필터별 하나의 리스트만 표시
+- **Task Card Actions** — 모든 카드에 Status 변경·완료(✓)·상세·더보기( Calendar / 삭제 ) 동일 제공
+- **정보 우선순위** — Task → Study/Site → Workflow → Due → Priority → Status (CRA 시각 우선순위)
+- **Workflow Progress Bar** — `(2/2)` 숫자 대신 Progress Bar + Step 카운트
+- **필터 강화** — Today, This Week, Workflow, Routine, Overdue, Completed (+ Open / In Progress)
+- **Quick Complete** — 체크 한 번으로 완료, Workflow Task는 엔진 실행 후 Toast만 표시
+- **Mobile** — PC와 동일한 필터·Action Card UX
+
+---
+
+## [1.3.0] — build 64 — 2026-07-15 — Dashboard compact density
+
+### Changed
+
+- Hero·카드·Task 행 패딩 축소, 2열 레이아웃으로 스크롤 감소
+- Task 한 줄형 표시, Workflow Step 인라인 요약
+- 다음 주·통계는 「더 보기」 접기 영역으로 이동
+- 미리보기 항목 수 축소 (오늘 5건, 기타 2건)
+
+---
+
 ## [1.3.0] — build 63 — 2026-07-15 — Dashboard information hierarchy UX
 
 ### Changed

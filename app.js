@@ -179,13 +179,15 @@ let toastHideTimer = null;
 let toastRemoveTimer = null;
 
 const TASK_QUICK_FILTER_LABELS = {
-  overdue: "지연 업무",
-  today: "오늘 마감",
+  overdue: "Overdue",
+  today: "Today",
+  week: "This Week",
+  workflow: "Workflow",
+  routine: "Routine",
   d1: "D-1",
   open: "Open",
   "in-progress": "In Progress",
-  completed: "완료",
-  week: "이번 주 준비",
+  completed: "Completed",
   "next-week": "다음 주 예정",
   all: "전체 업무",
 };
@@ -217,13 +219,7 @@ const MASTER_VIEWS = ["study-master", "workflow-master", "routine-master"];
 const HIDDEN_MASTER_VIEWS = ["site-master", "system-master"];
 const MOBILE_BREAKPOINT = window.matchMedia("(max-width: 768px)");
 
-const MOBILE_FILTER_LABELS = {
-  overdue: "🔥 Overdue",
-  today: "📅 Today",
-  d1: "⏰ D-1",
-  open: "📂 Open",
-  completed: "✅ Completed",
-};
+const MOBILE_FILTER_LABELS = TASK_QUICK_FILTER_LABELS;
 
 const PRIORITY_SORT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
@@ -237,7 +233,6 @@ let dashboardExpandedSections = new Set();
 let selectedWorkflowMasterTab = "general";
 let selectedWorkflowStudyId = null;
 let activeStatusPicker = null;
-let mobileDailyFilter = null;
 
 let addTaskPresetPriority = "Medium";
 const els = {
@@ -300,8 +295,6 @@ const els = {
   inboxNavBadge: document.getElementById("inboxNavBadge"),
   inboxTaskList: document.getElementById("inboxTaskList"),
   inboxCount: document.getElementById("inboxCount"),
-  openTasksList: document.getElementById("openTasksList"),
-  weekPreviewList: document.getElementById("weekPreviewList"),
   taskTableWrap: document.getElementById("taskTableWrap"),
   taskViewCardBtn: document.getElementById("taskViewCardBtn"),
   taskViewListBtn: document.getElementById("taskViewListBtn"),
@@ -440,13 +433,9 @@ const els = {
   settingsAppBuild: document.getElementById("settingsAppBuild"),
   taskListSection: document.getElementById("taskListSection"),
   mobileDailyHome: document.getElementById("mobileDailyHome"),
-  mobileTaskFeed: document.getElementById("mobileTaskFeed"),
-  mobileUpcomingList: document.getElementById("mobileUpcomingList"),
-  mobileRecentCompletedList: document.getElementById("mobileRecentCompletedList"),
-  mobileFilteredSection: document.getElementById("mobileFilteredSection"),
-  mobileFilteredList: document.getElementById("mobileFilteredList"),
+  mobileTaskActionList: document.getElementById("mobileTaskActionList"),
+  mobileTaskActionCount: document.getElementById("mobileTaskActionCount"),
   mobileFilteredTitle: document.getElementById("mobileFilteredTitle"),
-  mobileTodayActionSection: document.getElementById("mobileTodayActionSection"),
   mobileWorkflowSection: document.getElementById("mobileWorkflowSection"),
   mobileWorkflowList: document.getElementById("mobileWorkflowList"),
   mobileWorkflowCount: document.getElementById("mobileWorkflowCount"),
@@ -1042,7 +1031,13 @@ async function bootstrapApp() {
   els.filterStudy.addEventListener("change", renderTaskList);
   els.filterStatus.addEventListener("change", renderTaskList);
   document.addEventListener("click", (event) => {
-    if (event.target.closest("[data-status-trigger], #statusPickerPortal, .status-picker-portal")) return;
+    if (
+      event.target.closest(
+        "[data-status-trigger], #statusPickerPortal, .status-picker-portal, [data-more-trigger], .task-more-menu"
+      )
+    ) {
+      return;
+    }
     closeAllStatusDropdowns();
   });
   window.addEventListener("scroll", handleStatusPickerDismiss, true);
@@ -3844,35 +3839,42 @@ function syncMasterMobileDetail(viewName) {
 
 function handleMobileFilterClick(filter) {
   if (!filter) return;
-  mobileDailyFilter = mobileDailyFilter === filter ? null : filter;
+  handleQuickFilterClick(filter);
   updateMobileFilterUi();
-  renderMobileDailyHome();
+  renderMobileTaskActionList();
 }
 
 function updateMobileFilterUi() {
   els.mobileFilterBtns.forEach((btn) => {
-    const isActive = mobileDailyFilter === btn.dataset.mobileFilter;
+    const isActive = taskQuickFilter === btn.dataset.mobileFilter;
     btn.classList.toggle("task-filter__btn--active", isActive);
     btn.setAttribute("aria-selected", String(isActive));
   });
-  if (els.mobileFilteredSection) {
-    els.mobileFilteredSection.hidden = !mobileDailyFilter;
-  }
-  if (els.mobileTodayActionSection) {
-    els.mobileTodayActionSection.hidden = Boolean(mobileDailyFilter);
-  }
-  if (els.mobileFilteredTitle && mobileDailyFilter) {
-    els.mobileFilteredTitle.textContent = MOBILE_FILTER_LABELS[mobileDailyFilter] || "필터";
+  if (els.mobileFilteredTitle) {
+    els.mobileFilteredTitle.textContent = TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "Task List";
   }
 }
 
-function getMobileChipFilteredTasks() {
-  if (!mobileDailyFilter) return [];
-  const prev = taskQuickFilter;
-  taskQuickFilter = mobileDailyFilter;
-  const filtered = getFilteredTasks().filter((t) => !isInboxTask(t));
-  taskQuickFilter = prev;
-  return filtered.sort(compareTasksByPriorityThenDue);
+function renderMobileTaskActionList() {
+  if (!els.mobileTaskActionList) return;
+  const filtered = getFilteredTasks().sort(compareTasks);
+  const expanded = expandFilteredWithHierarchy(filtered);
+  const hierarchicalRows = buildHierarchicalRows(expanded);
+
+  if (els.mobileTaskActionCount) {
+    els.mobileTaskActionCount.textContent = `${filtered.length}건`;
+  }
+
+  if (!hierarchicalRows.length) {
+    els.mobileTaskActionList.innerHTML =
+      '<p class="task-card-list__empty">표시할 업무가 없습니다. Quick Add 또는 + 버튼으로 추가하세요.</p>';
+    return;
+  }
+
+  els.mobileTaskActionList.innerHTML = hierarchicalRows
+    .map((row) => renderTaskCard({ ...row, mobile: true }))
+    .join("");
+  bindTaskListActions(els.mobileTaskActionList);
 }
 
 function isHighPriorityTask(task) {
@@ -3943,93 +3945,11 @@ function getUpcomingTaskGroups() {
   return groups;
 }
 
-function renderMobileFilteredList() {
-  if (!els.mobileFilteredList) return;
-  const filtered = getMobileChipFilteredTasks();
-  els.mobileFilteredList.innerHTML = filtered.length
-    ? filtered.map((t) => renderMobileTaskCard(t)).join("")
-    : '<p class="mobile-daily__empty">표시할 업무가 없습니다.</p>';
-  bindMobileTaskFeedClicks(els.mobileFilteredList);
-}
-
-function renderMobileTaskCard(task) {
-  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
-  const dueText = task.dueDate ? formatDueDisplay(task) : "Due 미정";
-  const studyLabel = task.study?.trim() || "—";
-  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
-
-  return `
-    <button type="button" class="mobile-task-card${selectedTaskId === task.id ? " is-selected" : ""}" data-edit="${escapeAttr(task.id)}">
-      <span class="priority-badge priority-badge--${priorityClass(task.priority)} priority-badge--xs">${escapeHtml(task.priority)}</span>
-      <span class="mobile-task-card__body">
-        <span class="mobile-task-card__title">${escapeHtml(task.task)}</span>
-        ${renderTaskContextMeta(task)}
-        <span class="mobile-task-card__meta">${escapeHtml(studyLabel)} · ${escapeHtml(siteLabel)}</span>
-      </span>
-      <span class="mobile-task-card__due ${dueClass}">${escapeHtml(dueText)}</span>
-    </button>
-  `;
-}
-
-function bindMobileTaskFeedClicks(container) {
-  container?.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.addEventListener("click", () => openTaskDetail(btn.dataset.edit));
-  });
-}
-
-function renderMobileTaskFeed() {
-  if (!els.mobileTaskFeed) return;
-  const actionTasks = getTodayActionTasks();
-  els.mobileTaskFeed.innerHTML = actionTasks.length
-    ? actionTasks.map((t) => renderMobileTaskCard(t)).join("")
-    : '<p class="mobile-daily__empty">오늘 처리할 업무가 없습니다.</p>';
-  bindMobileTaskFeedClicks(els.mobileTaskFeed);
-}
-
-function renderMobileUpcoming() {
-  if (!els.mobileUpcomingList) return;
-  const groups = getUpcomingTaskGroups();
-  const sections = [
-    { key: "tomorrow", label: "Tomorrow" },
-    { key: "d2", label: "D+2" },
-    { key: "thisWeek", label: "이번 주" },
-    { key: "nextWeek", label: "다음 주" },
-  ];
-
-  const html = sections
-    .filter(({ key }) => groups[key].length > 0)
-    .map(({ key, label }) => {
-      const items = groups[key].map((t) => renderMobileTaskCard(t)).join("");
-      return `
-        <div class="mobile-upcoming__group">
-          <h4 class="mobile-upcoming__label">${escapeHtml(label)}</h4>
-          <div class="mobile-task-feed">${items}</div>
-        </div>
-      `;
-    })
-    .join("");
-
-  els.mobileUpcomingList.innerHTML = html
-    ? html
-    : '<p class="mobile-daily__empty">곧 마감되는 업무가 없습니다.</p>';
-  bindMobileTaskFeedClicks(els.mobileUpcomingList);
-}
-
-function renderMobileRecentCompleted() {
-  if (!els.mobileRecentCompletedList) return;
-  const recent = tasks
-    .filter((t) => !isInboxTask(t) && t.status === "Completed")
-    .sort((a, b) => {
-      const aTime = new Date(a.updatedAt || a.createdAt).getTime();
-      const bTime = new Date(b.updatedAt || b.createdAt).getTime();
-      return bTime - aTime;
-    })
-    .slice(0, 5);
-
-  els.mobileRecentCompletedList.innerHTML = recent.length
-    ? recent.map((t) => renderMobileTaskCard(t)).join("")
-    : '<p class="mobile-daily__empty">최근 완료 업무가 없습니다.</p>';
-  bindMobileTaskFeedClicks(els.mobileRecentCompletedList);
+function renderMobileDailyHome() {
+  if (!isDailyMode()) return;
+  updateTaskFilterCounts();
+  updateMobileFilterUi();
+  renderMobileTaskActionList();
 }
 
 function renderReferenceCard(type, id, title, meta, emoji) {
@@ -4237,16 +4157,6 @@ function renderReferenceView() {
   }
 }
 
-function renderMobileDailyHome() {
-  if (!isDailyMode()) return;
-  updateTaskFilterCounts();
-  updateMobileFilterUi();
-  renderMobileFilteredList();
-  renderMobileTaskFeed();
-  renderMobileUpcoming();
-  renderMobileRecentCompleted();
-}
-
 function switchView(viewName) {
   if (!isDailyMode() && viewName === "reference") {
     viewName = "dashboard";
@@ -4439,7 +4349,11 @@ function handleQuickFilterClick(filter) {
   if (!filter) return;
   taskQuickFilter = filter;
   updateQuickFilterUi();
+  updateMobileFilterUi();
   renderTaskList();
+  if (isDailyMode()) {
+    renderMobileTaskActionList();
+  }
   scrollFilteredTasksIntoView();
   showToast(`${TASK_QUICK_FILTER_LABELS[taskQuickFilter]} · ${getFilteredTasks().length}건`);
 }
@@ -4506,6 +4420,9 @@ function getTaskFilterCounts() {
   return {
     overdue: nonInbox.filter((t) => isActive(t) && t.dueDate && daysUntilDue(t.dueDate) < 0).length,
     today: nonInbox.filter((t) => isActive(t) && t.dueDate === todayStr).length,
+    week: nonInbox.filter((t) => isActive(t) && t.dueDate && isDueThisWeek(t.dueDate)).length,
+    workflow: nonInbox.filter((t) => isActive(t) && isWorkflowConnectedTask(t)).length,
+    routine: nonInbox.filter((t) => isActive(t) && isRoutineConnectedTask(t)).length,
     d1: nonInbox.filter((t) => isActive(t) && t.dueDate && daysUntilDue(t.dueDate) === 1).length,
     open: nonInbox.filter((t) => t.status === "Open").length,
     "in-progress": nonInbox.filter((t) => t.status === "In Progress").length,
@@ -4523,53 +4440,6 @@ function updateTaskFilterCounts() {
 
 function renderTodayWorkspace() {
   updateTaskFilterCounts();
-
-  if (els.openTasksList) {
-    const openTasks = tasks
-      .filter((t) => !isInboxTask(t) && (t.status === "Open" || t.status === "In Progress"))
-      .sort(compareTasks)
-      .slice(0, 6);
-
-    els.openTasksList.innerHTML = openTasks.length
-      ? openTasks.map((t) => renderCompactTaskPreview(t)).join("")
-      : '<p class="workspace-preview__empty">진행 중인 업무가 없습니다.</p>';
-
-    bindPreviewTaskClicks(els.openTasksList);
-  }
-
-  if (els.weekPreviewList) {
-    const todayStr = toDateString(getToday());
-    const futureWeekTasks = tasks
-      .filter(
-        (t) =>
-          !isInboxTask(t) &&
-          isActive(t) &&
-          t.dueDate &&
-          t.dueDate >= todayStr &&
-          isDueThisWeek(t.dueDate)
-      )
-      .sort(compareTasks);
-
-    if (!futureWeekTasks.length) {
-      els.weekPreviewList.innerHTML =
-        '<p class="workspace-preview__empty">오늘 이후 이번 주 일정이 없습니다.</p>';
-    } else {
-      let lastDate = "";
-      const html = futureWeekTasks
-        .map((task) => {
-          let dateHeader = "";
-          if (task.dueDate !== lastDate) {
-            lastDate = task.dueDate;
-            const d = parseDate(task.dueDate);
-            dateHeader = `<div class="schedule-date">${d.getMonth() + 1}/${d.getDate()}</div>`;
-          }
-          return `${dateHeader}${renderScheduleItem(task)}`;
-        })
-        .join("");
-      els.weekPreviewList.innerHTML = html;
-      bindPreviewTaskClicks(els.weekPreviewList);
-    }
-  }
 }
 
 function renderCompactTaskPreview(task) {
@@ -4774,7 +4644,7 @@ function renderCalendarView() {
 }
 
 function bindTaskListActions(container) {
-  container?.querySelectorAll(".task-card__main, [data-edit]").forEach((btn) => {
+  container?.querySelectorAll("[data-edit]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       openTaskDetail(btn.dataset.edit);
@@ -4783,6 +4653,7 @@ function bindTaskListActions(container) {
   container?.querySelectorAll("[data-delete]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
+      closeAllTaskMoreMenus();
       deleteTask(btn.dataset.delete);
     });
   });
@@ -4795,11 +4666,12 @@ function bindTaskListActions(container) {
   container?.querySelectorAll("[data-google-calendar]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
+      closeAllTaskMoreMenus();
       openGoogleCalendarForTask(btn.dataset.googleCalendar);
     });
   });
   bindStatusDropdowns(container);
-  bindPriorityDropdowns(container);
+  bindTaskMoreMenus(container);
 }
 
 function populateStudySelect(selectEl, selectedValue = "") {
@@ -6238,6 +6110,85 @@ function isWorkflowConnectedTask(task) {
   return Boolean(ctx.workflow && ctx.instance && ctx.root);
 }
 
+function isRoutineConnectedTask(task) {
+  if (!task) return false;
+  if (task.routineId) return true;
+  return Boolean(resolveTaskRoutineDisplay(task)?.routine);
+}
+
+function renderTaskWorkflowProgressBlock(task) {
+  const step = getWorkflowStepPosition(task);
+  if (!step?.workflowName && !step?.name) return "";
+
+  const ctx = resolveWorkflowContext(task);
+  let completed = step.current || 0;
+  let total = step.total || 0;
+  if (ctx.workflow && ctx.root && ctx.instance) {
+    const stats = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
+    completed = stats.completed;
+    total = stats.total;
+  }
+  if (total <= 0) total = 1;
+  const pct = Math.min(100, Math.round((completed / total) * 100));
+  const name = step.workflowName || step.name;
+
+  return `
+    <div class="task-wf-progress">
+      <span class="task-wf-progress__label">${escapeHtml(name)}</span>
+      <div class="task-wf-progress__track" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}" aria-label="${escapeAttr(name)} 진행률">
+        <span class="task-wf-progress__fill" style="width:${pct}%"></span>
+      </div>
+      <span class="task-wf-progress__count">${completed} / ${total}</span>
+    </div>
+  `;
+}
+
+function renderTaskRoutineLabel(task) {
+  if (getWorkflowStepPosition(task)) return "";
+  const info = resolveTaskRoutineDisplay(task);
+  if (!info?.name) return "";
+  return `<p class="task-card__routine">🔁 ${escapeHtml(info.name)}</p>`;
+}
+
+function renderTaskMoreMenu(task) {
+  const calendarSynced = task.calendarSync?.eventId;
+  return `
+    <div class="task-more-menu" data-more-menu="${escapeAttr(task.id)}">
+      <button type="button" class="task-card__action task-card__action--more" data-more-trigger="${escapeAttr(task.id)}" aria-label="더보기" aria-haspopup="menu" aria-expanded="false">⋯</button>
+      <div class="task-more-menu__panel" role="menu" hidden>
+        <button type="button" class="task-more-menu__item${calendarSynced ? " task-more-menu__item--synced" : ""}" data-google-calendar="${escapeAttr(task.id)}" role="menuitem">📅 Calendar</button>
+        <button type="button" class="task-more-menu__item task-more-menu__item--danger" data-delete="${escapeAttr(task.id)}" role="menuitem">삭제</button>
+      </div>
+    </div>
+  `;
+}
+
+function closeAllTaskMoreMenus() {
+  document.querySelectorAll(".task-more-menu__panel").forEach((panel) => {
+    panel.hidden = true;
+  });
+  document.querySelectorAll("[data-more-trigger]").forEach((btn) => {
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindTaskMoreMenus(container) {
+  container?.querySelectorAll("[data-more-trigger]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = btn.closest("[data-more-menu]")?.querySelector(".task-more-menu__panel");
+      if (!menu) return;
+      const isOpen = !menu.hidden;
+      closeAllTaskMoreMenus();
+      closeAllStatusDropdowns();
+      if (!isOpen) {
+        menu.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+}
+
 function createWorkflowStepTask({ workflow, root, instance, stepEntry, anchorTask }) {
   const stepDef = stepEntry.def;
   const stepConfig = stepDef.stepDef;
@@ -6552,7 +6503,8 @@ function renderTaskContextMeta(task, options = {}) {
 }
 
 const DASHBOARD_SECTION_PREVIEW_LIMIT = 3;
-const DASHBOARD_TODAY_PREVIEW_LIMIT = 7;
+const DASHBOARD_TODAY_PREVIEW_LIMIT = 5;
+const DASHBOARD_COMPACT_PREVIEW_LIMIT = 2;
 
 function buildWorkflowTimelineStepDefs(workflow, rootTask) {
   const steps = [];
@@ -9076,7 +9028,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "63";
+const APP_BUILD = "65";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10699,6 +10651,7 @@ function closeAllStatusDropdowns() {
   });
   closeStatusPickerPortal();
   closeAllPriorityDropdowns();
+  closeAllTaskMoreMenus();
 }
 
 function handleStatusPickerDismiss() {
@@ -10719,7 +10672,9 @@ function closeStatusPickerPortal() {
 
 function shouldUseStatusPickerPortal(triggerBtn) {
   return Boolean(
-    triggerBtn?.closest("#viewDashboard, .dash-list, .mobile-daily, .mobile-task-feed, #dashboardWorkflowPanel")
+    triggerBtn?.closest(
+      "#viewDashboard, .dash-list, .mobile-daily, .mobile-task-feed, .task-card-list, #dashboardWorkflowPanel"
+    )
   );
 }
 
@@ -10952,8 +10907,15 @@ function matchesTaskQuickFilter(task) {
   }
 
   if (taskQuickFilter === "week") {
-    const todayStr = toDateString(getToday());
-    return isActive(task) && isDueThisWeek(task.dueDate) && task.dueDate !== todayStr;
+    return isActive(task) && task.dueDate && isDueThisWeek(task.dueDate);
+  }
+
+  if (taskQuickFilter === "workflow") {
+    return isActive(task) && isWorkflowConnectedTask(task);
+  }
+
+  if (taskQuickFilter === "routine") {
+    return isActive(task) && isRoutineConnectedTask(task);
   }
 
   if (taskQuickFilter === "next-week") {
@@ -11068,7 +11030,7 @@ function renderDashboardGreeting() {
   else if (hour < 18) greeting = "Good afternoon";
 
   if (els.dashboardGreeting) els.dashboardGreeting.textContent = `${greeting} 👋`;
-  if (els.dashboardGreetingSub) els.dashboardGreetingSub.textContent = "오늘도 좋은 하루 보내세요!";
+  if (els.dashboardGreetingSub) els.dashboardGreetingSub.textContent = "";
   if (els.dashboardHeaderDate) {
     const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
     const y = now.getFullYear();
@@ -11213,24 +11175,18 @@ function renderDashboardWorkflowCard(entry) {
   const nextLabel = entry.nextStepName || "—";
 
   return `
-    <button type="button" class="dash-wf-card" data-dashboard-workflow="${escapeAttr(entry.taskId)}">
+    <button type="button" class="dash-wf-card dash-wf-card--compact" data-dashboard-workflow="${escapeAttr(entry.taskId)}">
       <div class="dash-wf-card__head">
         <span class="dash-wf-card__title">${escapeHtml(name)}</span>
-        <span class="dash-wf-card__fraction">${entry.progress.completed} / ${entry.progress.total}</span>
+        <span class="dash-wf-card__fraction">${entry.progress.completed}/${entry.progress.total}</span>
       </div>
       <div class="dash-wf-card__bar" role="progressbar" aria-valuenow="${entry.progress.completed}" aria-valuemin="0" aria-valuemax="${entry.progress.total}">
         <span class="dash-wf-card__bar-fill" style="width:${percent}%"></span>
       </div>
-      <div class="dash-wf-card__steps">
-        <div class="dash-wf-card__step">
-          <span class="dash-wf-card__step-label">현재</span>
-          <span class="dash-wf-card__step-name">${escapeHtml(currentLabel)}</span>
-        </div>
-        <div class="dash-wf-card__step dash-wf-card__step--next">
-          <span class="dash-wf-card__step-label">다음</span>
-          <span class="dash-wf-card__step-name">${escapeHtml(nextLabel)}</span>
-        </div>
-      </div>
+      <p class="dash-wf-card__steps-inline">
+        <span class="dash-wf-card__step-inline"><em>현재</em> ${escapeHtml(currentLabel)}</span>
+        <span class="dash-wf-card__step-inline dash-wf-card__step-inline--next"><em>다음</em> ${escapeHtml(nextLabel)}</span>
+      </p>
     </button>
   `;
 }
@@ -11238,6 +11194,9 @@ function renderDashboardWorkflowCard(entry) {
 function getDashboardDueBadge(task) {
   if (task.status === "Completed") {
     return { label: "Completed", className: "dash-v2-badge--done" };
+  }
+  if (!task.dueDate) {
+    return { label: "—", className: "dash-v2-badge--neutral" };
   }
   const diff = daysUntilDue(task.dueDate);
   if (diff < 0) return { label: "Overdue", className: "dash-v2-badge--overdue" };
@@ -11255,18 +11214,16 @@ function getDashboardWorkflowLabel(task) {
 
 function renderDashboardUpdateItem(task) {
   const when = formatRelativeTime(task.completedAt || task.dueDate || task.createdAt);
-  const studyLabel = task.study || "Study 미정";
+  const studyLabel = task.study || "—";
   const workflowLabel = getDashboardWorkflowLabel(task);
-  const workflowBadge = workflowLabel
-    ? `<span class="dash-update-item__workflow">Workflow</span>`
-    : "";
+  const wfTag = workflowLabel ? `<span class="dash-update-item__workflow">WF</span>` : "";
 
   return `
-    <article class="dash-update-item" data-task-id="${escapeAttr(task.id)}">
+    <article class="dash-update-item dash-update-item--compact" data-task-id="${escapeAttr(task.id)}">
       <span class="dash-update-item__icon" aria-hidden="true">✓</span>
       <div class="dash-update-item__copy">
-        <p class="dash-update-item__title">${escapeHtml(task.task)} <span class="dash-update-item__status">완료</span></p>
-        <p class="dash-update-item__meta">${escapeHtml(studyLabel)} · ${escapeHtml(when)} ${workflowBadge}</p>
+        <p class="dash-update-item__title">${escapeHtml(task.task)}</p>
+        <p class="dash-update-item__meta">${escapeHtml(studyLabel)} · ${escapeHtml(when)} ${wfTag}</p>
       </div>
     </article>
   `;
@@ -11354,8 +11311,8 @@ function renderDashboardHero() {
   if (els.dashboardWorkflowProgressSubtitle) {
     els.dashboardWorkflowProgressSubtitle.textContent =
       wfProgress.count > 0
-        ? `${wfProgress.count}개 Workflow · ${wfProgress.completed} / ${wfProgress.total} Step`
-        : "진행 중 Workflow 없음";
+        ? `${wfProgress.completed}/${wfProgress.total} Step`
+        : "—";
   }
 
   if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${progress.rate}%`;
@@ -11444,10 +11401,10 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.dashboardWeekPrepList) {
     els.dashboardWeekPrepList.innerHTML = weekPrepTasks.length
-      ? renderDashboardSectionTasks(weekPrepTasks, "time-week", "week", DASHBOARD_SECTION_PREVIEW_LIMIT, {
+      ? renderDashboardSectionTasks(weekPrepTasks, "time-week", "week", DASHBOARD_COMPACT_PREVIEW_LIMIT, {
           layout: "schedule",
         })
-      : renderDashboardEmptyMsg("이번 주 준비 업무가 없습니다.");
+      : renderDashboardEmptyMsg("이번 주 일정 없음");
     setDashCardEmptyState(els.dashboardWeekPrepList, weekPrepTasks.length === 0);
   }
 
@@ -11473,10 +11430,10 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.dashboardRecentCompletedList) {
     els.dashboardRecentCompletedList.innerHTML = recentCompleted.length
-      ? renderDashboardSectionTasks(recentCompleted, "time-recent", "completed", DASHBOARD_SECTION_PREVIEW_LIMIT, {
+      ? renderDashboardSectionTasks(recentCompleted, "time-recent", "completed", DASHBOARD_COMPACT_PREVIEW_LIMIT, {
           layout: "updates",
         })
-      : renderDashboardEmptyMsg("최근 완료 업무가 없습니다.");
+      : renderDashboardEmptyMsg("없음");
     setDashCardEmptyState(els.dashboardRecentCompletedList, recentCompleted.length === 0);
   }
 
@@ -11486,7 +11443,7 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
   }
   if (els.attentionOverdueList) {
     els.attentionOverdueList.innerHTML = overdueTasks.length
-      ? renderDashboardSectionTasks(overdueTasks, "time-overdue", "overdue", DASHBOARD_SECTION_PREVIEW_LIMIT, {
+      ? renderDashboardSectionTasks(overdueTasks, "time-overdue", "overdue", DASHBOARD_COMPACT_PREVIEW_LIMIT, {
           layout: "v2",
         })
       : renderDashboardEmptyMsg("지연된 업무가 없습니다.");
@@ -11551,26 +11508,23 @@ function renderDashItem(task, type, options = {}) {
     const badge = getDashboardDueBadge(task);
     const workflowLabel = getDashboardWorkflowLabel(task);
     const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
+    const metaParts = [studyLabel + sitePart];
+    if (workflowLabel) metaParts.push(workflowLabel);
 
     return `
-    <article class="dash-task-card dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-task-card__check dash-item__complete${isDone ? " dash-task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+    <article class="dash-task-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-task-row__check dash-item__complete${isDone ? " dash-task-row__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
         <span class="dash-item__complete-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
-      <div class="dash-task-card__body">
-        <button type="button" class="dash-task-card__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} Workflow 보기">
-          <div class="dash-task-card__title-row">
-            ${criticalBadge}
-            <span class="dash-task-card__title">${escapeHtml(task.task)}</span>
-          </div>
-          <span class="dash-task-card__study-site">${escapeHtml(studyLabel)}${escapeHtml(sitePart)}</span>
-          ${workflowLabel ? `<span class="dash-task-card__workflow">${escapeHtml(workflowLabel)}</span>` : ""}
-        </button>
-        <div class="dash-task-card__footer">
-          <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
-          <span class="dash-task-card__status">${renderInlineStatusDropdown(task, { compact: true })}</span>
-        </div>
-      </div>
+      <button type="button" class="dash-task-row__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
+        <span class="dash-task-row__title-line">
+          ${criticalBadge}
+          <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
+        </span>
+        <span class="dash-task-row__meta">${escapeHtml(metaParts.join(" · "))}</span>
+      </button>
+      <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+      <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true })}</span>
     </article>
   `;
   }
@@ -11682,36 +11636,51 @@ function renderTaskList() {
   bindTaskListActions(els.taskCardList);
 }
 
-function renderTaskCard({ task, isSubtask }) {
+function renderTaskCard({ task, isSubtask, mobile = false }) {
   const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
-  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
-  const dueText = formatDueDisplay(task);
   const urgencyClass =
     urgency === "overdue" ? "task-card--overdue" : urgency === "urgent" ? "task-card--urgent" : "";
   const studyLabel = task.study?.trim() || "Study 미정";
-  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
-  const calendarSynced = task.calendarSync?.eventId ? " task-card__action--synced" : "";
+  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "";
+  const studySite =
+    siteLabel && siteLabel !== "Site 미정" ? `${studyLabel} · ${siteLabel}` : studyLabel;
+  const badge = getDashboardDueBadge(task);
+  const workflowBlock = renderTaskWorkflowProgressBlock(task);
+  const routineBlock = renderTaskRoutineLabel(task);
   const isDone = task.status === "Completed";
+  const criticalBadge =
+    task.priority === "Critical"
+      ? '<span class="critical-badge task-card__critical">Critical</span>'
+      : "";
+  const priorityBadge =
+    task.priority !== "Critical"
+      ? `<span class="task-card__priority task-card__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>`
+      : "";
 
   return `
-    <article class="task-card task-card--dense ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="task-card__main" data-edit="${escapeAttr(task.id)}">
-        <div class="task-card__head">
-          <span class="priority-badge priority-badge--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>
-          <span class="task-card__due ${dueClass}">📅 ${escapeHtml(dueText)}</span>
-        </div>
-        <h3 class="task-card__title">${escapeHtml(task.task)}</h3>
-        ${renderTaskContextMeta(task)}
-        <p class="task-card__study">${escapeHtml(studyLabel)}</p>
-        <p class="task-card__site">${escapeHtml(siteLabel)}</p>
+    <article class="task-card task-card--action${mobile ? " task-card--mobile" : ""} ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="task-card__check${isDone ? " task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <span aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
-      <div class="task-card__actions">
-        ${renderInlineStatusDropdown(task)}
-        <div class="task-card__action-row">
-          ${renderInlinePriorityDropdown(task)}
-          <button type="button" class="task-card__action task-card__action--complete" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료">✓</button>
-          <button type="button" class="task-card__action task-card__action--calendar${calendarSynced}" data-google-calendar="${escapeAttr(task.id)}" title="Calendar" aria-label="Calendar">📅</button>
+      <div class="task-card__content">
+        <button type="button" class="task-card__detail" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
+          <span class="task-card__title-line">
+            ${criticalBadge}
+            <span class="task-card__title">${escapeHtml(task.task)}</span>
+          </span>
+          <span class="task-card__study-site">${escapeHtml(studySite)}</span>
+          ${workflowBlock}
+          ${routineBlock}
+        </button>
+        <div class="task-card__meta-row">
+          <span class="task-card__due-badge dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+          ${priorityBadge}
         </div>
+      </div>
+      <div class="task-card__actions task-card__actions--action">
+        <span class="task-card__status">${renderInlineStatusDropdown(task, { compact: true })}</span>
+        <button type="button" class="task-card__action task-card__action--detail" data-edit="${escapeAttr(task.id)}" title="상세 보기" aria-label="상세 보기">›</button>
+        ${renderTaskMoreMenu(task)}
       </div>
     </article>
   `;
@@ -11730,29 +11699,31 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
-  const dueText = formatDueDisplay(task);
+  const badge = getDashboardDueBadge(task);
   const studyLabel = task.study?.trim() || "—";
   const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
-  const calendarSynced = task.calendarSync?.eventId ? " task-card__action--synced" : "";
+  const workflowLabel = getDashboardWorkflowLabel(task);
+  const isDone = task.status === "Completed";
 
   return `
     <tr class="${rowClass}${selectedTaskId === task.id ? " is-selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       <td class="task-list-check">
-        <button type="button" class="task-card__action task-card__action--complete task-card__action--sm" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료">✓</button>
+        <button type="button" class="task-card__check task-card__check--table${isDone ? " task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+          <span aria-hidden="true">${isDone ? "✓" : ""}</span>
+        </button>
       </td>
       <td>
         <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
-        ${renderTaskContextMeta(task)}
+        ${workflowLabel ? `<span class="task-list-wf">${escapeHtml(workflowLabel)}</span>` : ""}
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
-      <td><span class="task-list-due ${dueClass}">${escapeHtml(dueText)}</span></td>
-      <td>${renderInlinePriorityDropdown(task)}</td>
-      <td class="status-cell">${renderInlineStatusDropdown(task)}</td>
+      <td><span class="task-list-due dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span></td>
+      <td><span class="task-card__priority task-card__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span></td>
+      <td class="status-cell">${renderInlineStatusDropdown(task, { compact: true })}</td>
       <td class="actions-cell">
-        <button type="button" class="task-card__action task-card__action--calendar task-card__action--sm${calendarSynced}" data-google-calendar="${escapeAttr(task.id)}" title="Calendar" aria-label="Calendar">📅</button>
-        <button type="button" class="btn btn--ghost btn--sm" data-delete="${escapeAttr(task.id)}">삭제</button>
+        <button type="button" class="task-card__action task-card__action--detail task-card__action--sm" data-edit="${escapeAttr(task.id)}" title="상세" aria-label="상세">›</button>
+        ${renderTaskMoreMenu(task)}
       </td>
     </tr>
   `;
