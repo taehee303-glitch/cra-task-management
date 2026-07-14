@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 60 — 2026-07-14 — Workflow suggest popup UX
+
+### Changed
+
+- **추천 팝업 조건** — Study Applied Workflow에 이미 포함된 Workflow는 팝업 없이 자동 연결 + Toast
+- 미적용 Workflow만 추천 팝업 표시 (Study 최초 적용 시)
+- **팝업 UI** — 화살표 Flow 대신 생성될 Task 리스트, 카드 내 적용 버튼 제거, 하단 2버튼만 유지
+
+---
+
 ## [1.3.0] — build 59 — 2026-07-14 — Master Data SSOT refactor
 
 ### Changed

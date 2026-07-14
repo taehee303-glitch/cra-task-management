@@ -6306,7 +6306,57 @@ body.body--settings-open {
 }
 
 .workflow-suggest-card__apply {
-  width: 100%;
+  display: none;
+}
+
+.workflow-suggest-task-list {
+  margin-top: 0.65rem;
+}
+
+.workflow-suggest-task-list__heading {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+
+.workflow-suggest-task-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.workflow-suggest-task-list__item {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+}
+
+.workflow-suggest-task-list__item--root .workflow-suggest-task-list__name {
+  font-weight: 600;
+}
+
+.workflow-suggest-task-list__icon {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.workflow-suggest-task-list__due {
+  font-size: 0.78rem;
+  color: var(--text-muted, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+
+.workflow-suggest-task-list__total {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #4338ca;
 }
 
 .workflow-modal__body {

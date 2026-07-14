@@ -948,11 +948,7 @@ async function bootstrapApp() {
     const workflow = entry.workflow || entry;
     const ref = entry.ref || getWorkflowRef(workflow);
     closeWorkflowSuggestModal();
-    persistPendingTaskDraft(pendingTaskDraft, {
-      applyWorkflow: true,
-      workflow,
-      workflowRef: ref,
-    });
+    persistTaskDraftWithWorkflow(pendingTaskDraft, workflow, ref);
   });
   bindEvent(document.getElementById("followUpPromptYesBtn"), "click", handleFollowUpPromptYes);
   bindEvent(document.getElementById("followUpPromptNoBtn"), "click", closeFollowUpPromptModal);
@@ -5187,6 +5183,106 @@ function workflowMatchesTaskName(workflow, taskName) {
   });
 }
 
+function findAppliedWorkflowMatchForTask(taskName, studyProtocol) {
+  const study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+  if (!study) return null;
+
+  const matches = StudyMasterStore.getAppliedWorkflows(study.id).filter((workflow) =>
+    workflowMatchesTaskName(workflow, taskName)
+  );
+  if (!matches.length) return null;
+
+  const workflow = matches.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))[0];
+  return { workflow, ref: buildWorkflowRefForStudy(workflow, studyProtocol) };
+}
+
+function findUnappliedWorkflowSuggestions(taskName, studyProtocol) {
+  const seen = new Set();
+  const suggestions = [];
+  const study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+  const appliedIds = study ? new Set(StudyMasterStore.getAppliedWorkflowIds(study.id)) : new Set();
+
+  const pushSuggest = (workflow) => {
+    if (!workflow?.id || seen.has(workflow.id)) return;
+    if (!workflowMatchesTaskName(workflow, taskName)) return;
+    if (
+      !(workflow.steps || []).length &&
+      !(workflow.preSteps || []).length &&
+      workflow.source !== "legacy-taskRules"
+    ) {
+      return;
+    }
+    if (study && appliedIds.has(workflow.id)) return;
+    seen.add(workflow.id);
+    suggestions.push({ workflow, ref: getWorkflowRef(workflow) });
+  };
+
+  if (study) {
+    legacyTaskRulesToWorkflows(study).forEach(pushSuggest);
+  }
+  GlobalWorkflowStore.getAll().forEach(pushSuggest);
+
+  return suggestions.sort((a, b) => (b.workflow.usageCount || 0) - (a.workflow.usageCount || 0));
+}
+
+function buildWorkflowRefForStudy(workflow, studyProtocol) {
+  const ref = getWorkflowRef(workflow);
+  const study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+  if (!study) return ref;
+  return { ...ref, studyId: study.id };
+}
+
+function ensureWorkflowAppliedToStudy(studyProtocol, workflowId) {
+  const study = studyProtocol ? StudyMasterStore.getByProtocol(studyProtocol) : null;
+  if (!study || !workflowId) return null;
+  StudyMasterStore.applyWorkflow(study.id, workflowId);
+  return study;
+}
+
+function renderWorkflowSuggestTaskPreview(workflow, rootTaskName) {
+  const rootLabel = (rootTaskName || getWorkflowRootLabel(workflow)).trim();
+  const followUpSteps = (workflow.steps || []).filter((step) => (step.taskName || "").trim());
+  const rows = [
+    `<li class="workflow-suggest-task-list__item workflow-suggest-task-list__item--root">
+      <span class="workflow-suggest-task-list__icon" aria-hidden="true">✓</span>
+      <span class="workflow-suggest-task-list__name">${escapeHtml(rootLabel)}</span>
+    </li>`,
+    ...followUpSteps.map(
+      (step) => `
+      <li class="workflow-suggest-task-list__item">
+        <span class="workflow-suggest-task-list__icon" aria-hidden="true">○</span>
+        <span class="workflow-suggest-task-list__name">${escapeHtml(step.taskName.trim())}</span>
+        <span class="workflow-suggest-task-list__due">D+${step.dueOffset ?? 0}</span>
+      </li>`
+    ),
+  ];
+  const total = 1 + followUpSteps.length;
+
+  return `
+    <div class="workflow-suggest-task-list">
+      <p class="workflow-suggest-task-list__heading">생성될 업무</p>
+      <ul class="workflow-suggest-task-list__items">${rows.join("")}</ul>
+      <p class="workflow-suggest-task-list__total">총 ${total}개 Task 생성</p>
+    </div>
+  `;
+}
+
+function persistTaskDraftWithWorkflow(draft, workflow, ref, options = {}) {
+  if (draft?.study && workflow?.id) {
+    ensureWorkflowAppliedToStudy(draft.study, workflow.id);
+  }
+  const workflowRef = buildWorkflowRefForStudy(workflow, draft?.study) || ref;
+  persistPendingTaskDraft(draft, {
+    applyWorkflow: true,
+    workflow,
+    workflowRef,
+    checkLearnContext: options.checkLearnContext,
+  });
+  if (options.toastMessage) {
+    showToast(options.toastMessage);
+  }
+}
+
 function findMatchingWorkflows(taskName, studyProtocol) {
   const seen = new Set();
   const matches = [];
@@ -5254,8 +5350,10 @@ function applyWorkflowToRootTask(rootTask, workflow, ref) {
     TaskStore.addMany(followUps);
   }
 
-  if (ref && ref.scope !== "global") {
-    recordWorkflowUsageByRef(ref);
+  if (ref?.studyId) {
+    StudyMasterStore.recordWorkflowUsage(ref.studyId, workflow.id);
+  } else if (ref?.id) {
+    GlobalWorkflowStore.recordUsage(ref.id);
   }
 
   getWorkflowInstanceTasks(instance.id).forEach((child) => {
@@ -5992,13 +6090,10 @@ function openWorkflowSuggestModal(matches, draft) {
   const cards = matches
     .map((entry, index) => {
       const workflow = entry.workflow || entry;
-      const meta = formatWorkflowMeta(workflow);
       return `
         <div class="workflow-suggest-card${index === 0 ? " workflow-suggest-card--active" : ""}" data-suggest-index="${index}">
           <h4 class="workflow-suggest-card__title">${escapeHtml(workflow.name)}</h4>
-          ${renderWorkflowFlowPreview(workflow, { rootLabel: draft.task, compact: matches.length > 1 })}
-          <p class="workflow-suggest-card__meta">${meta.taskCount}개 Task · ${escapeHtml(meta.scopeLabel)} · ${meta.usageCount}회 적용 · ${escapeHtml(meta.lastUsedLabel)}</p>
-          <button type="button" class="btn btn--primary btn--sm workflow-suggest-card__apply" data-suggest-apply="${index}">Workflow 적용</button>
+          ${renderWorkflowSuggestTaskPreview(workflow, draft.task)}
         </div>
       `;
     })
@@ -6008,27 +6103,10 @@ function openWorkflowSuggestModal(matches, draft) {
   els.workflowSuggestModal.hidden = false;
 
   els.workflowSuggestBody.querySelectorAll(".workflow-suggest-card").forEach((card) => {
-    card.addEventListener("click", (event) => {
-      if (event.target.closest("[data-suggest-apply]")) return;
+    card.addEventListener("click", () => {
       pendingWorkflowApplyIndex = Number(card.dataset.suggestIndex) || 0;
       els.workflowSuggestBody.querySelectorAll(".workflow-suggest-card").forEach((item) => {
         item.classList.toggle("workflow-suggest-card--active", item === card);
-      });
-    });
-  });
-
-  els.workflowSuggestBody.querySelectorAll("[data-suggest-apply]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const index = Number(btn.dataset.suggestApply);
-      const entry = pendingWorkflowMatches[index];
-      if (!entry || !pendingTaskDraft) return;
-      const workflow = entry.workflow || entry;
-      const ref = entry.ref || getWorkflowRef(workflow);
-      closeWorkflowSuggestModal();
-      persistPendingTaskDraft(pendingTaskDraft, {
-        applyWorkflow: true,
-        workflow,
-        workflowRef: ref,
       });
     });
   });
@@ -8850,7 +8928,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "59";
+const APP_BUILD = "60";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10048,13 +10126,17 @@ function handleAddTask(e) {
     return;
   }
 
-  const matches = findMatchingWorkflows(taskName, study).map((workflow) => ({
-    workflow,
-    ref: getWorkflowRef(workflow),
-  }));
+  const appliedMatch = findAppliedWorkflowMatchForTask(taskName, study);
+  if (appliedMatch) {
+    persistTaskDraftWithWorkflow(newTask, appliedMatch.workflow, appliedMatch.ref, {
+      toastMessage: "Workflow에 자동 연결되었습니다.",
+    });
+    return;
+  }
 
-  if (matches.length > 0) {
-    openWorkflowSuggestModal(matches, newTask);
+  const suggestions = findUnappliedWorkflowSuggestions(taskName, study);
+  if (suggestions.length > 0) {
+    openWorkflowSuggestModal(suggestions, newTask);
     return;
   }
 
