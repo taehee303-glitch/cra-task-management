@@ -28,7 +28,67 @@
     syncing: false,
     gisInitialized: false,
     gisCredentialHandler: null,
+    initialAuthResolved: false,
+    initialAuthWaiters: [],
+    signedInSyncWaiters: [],
   };
+
+  function requiresAuth() {
+    if (!isConfigured()) return Boolean(window.FIREBASE_CONFIG?.requireCloudAuth);
+    return window.FIREBASE_CONFIG?.requireCloudAuth !== false;
+  }
+
+  function resolveInitialAuthWaiters() {
+    const waiters = state.initialAuthWaiters.splice(0);
+    waiters.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  function resolveSignedInSyncWaiters() {
+    const waiters = state.signedInSyncWaiters.splice(0);
+    waiters.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  function waitForInitialAuth() {
+    if (state.initialAuthResolved) {
+      return Promise.resolve({ signedIn: isSignedIn(), user: state.user });
+    }
+    return new Promise((resolve) => {
+      state.initialAuthWaiters.push(() => {
+        resolve({ signedIn: isSignedIn(), user: state.user });
+      });
+    });
+  }
+
+  function waitUntilSignedInAndSynced() {
+    if (isSignedIn() && state.ready && !state.syncing) {
+      return Promise.resolve(state.user);
+    }
+    return new Promise((resolve) => {
+      state.signedInSyncWaiters.push(() => {
+        if (isSignedIn() && state.ready && !state.syncing) {
+          resolve(state.user);
+        }
+      });
+    });
+  }
+
+  function notifySignedInSyncReady() {
+    if (isSignedIn() && state.ready && !state.syncing) {
+      resolveSignedInSyncWaiters();
+    }
+  }
 
   function isConfigured() {
     const cfg = window.FIREBASE_CONFIG;
@@ -204,6 +264,7 @@
     } finally {
       state.syncing = false;
       notifyUi();
+      notifySignedInSyncReady();
     }
   }
 
@@ -275,6 +336,7 @@
     } finally {
       state.syncing = false;
       notifyUi();
+      notifySignedInSyncReady();
     }
   }
 
@@ -293,6 +355,7 @@
     } finally {
       state.syncing = false;
       notifyUi();
+      notifySignedInSyncReady();
     }
   }
 
@@ -301,6 +364,7 @@
     const initialized = metaSnap.exists && metaSnap.data()?.initialized;
     const hasLocal = localHasAnyData();
     const hasCloud = await cloudHasAnyData();
+    const mandatory = requiresAuth();
 
     if (initialized || hasCloud) {
       await downloadAllCloud();
@@ -308,6 +372,11 @@
     }
 
     if (hasLocal) {
+      if (mandatory) {
+        await uploadAllLocal();
+        return;
+      }
+
       const upload = window.confirm(
         "이 기기의 로컬 데이터를 클라우드에 업로드할까요?\n\n" +
           "예: PC 데이터를 클라우드에 저장해 휴대폰과 공유\n" +
@@ -341,7 +410,10 @@
       notifyRefresh();
     } catch (err) {
       console.error("Cloud sync sign-in handling failed:", err);
-      alert("클라우드 동기화 초기화에 실패했습니다. 네트워크와 Firebase 설정을 확인해 주세요.");
+      reportAuthError("클라우드 동기화 초기화에 실패했습니다. 네트워크와 Firebase 설정을 확인해 주세요.");
+      throw err;
+    } finally {
+      notifySignedInSyncReady();
     }
   }
 
@@ -354,15 +426,24 @@
     notifyUi();
   }
 
+  function markInitialAuthResolved() {
+    if (!state.initialAuthResolved) {
+      state.initialAuthResolved = true;
+      resolveInitialAuthWaiters();
+    }
+  }
+
   async function init() {
     if (!isConfigured()) {
       notifyUi();
+      markInitialAuthResolved();
       return false;
     }
 
     if (typeof firebase === "undefined") {
       console.warn("Firebase SDK not loaded.");
       notifyUi();
+      markInitialAuthResolved();
       return false;
     }
 
@@ -404,16 +485,21 @@
       }
 
       state.auth.onAuthStateChanged(async (user) => {
-        if (user) {
-          sessionStorage.removeItem(REDIRECT_PENDING_KEY);
-          if (state.user?.uid === user.uid && state.ready) return;
-          await handleSignedIn(user);
-          return;
-        }
+        try {
+          if (user) {
+            sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+            if (state.user?.uid === user.uid && state.ready) return;
+            await handleSignedIn(user);
+            return;
+          }
 
-        if (redirectResult?.user) return;
-        if (hasPendingAuthRedirect()) return;
-        handleSignedOut();
+          if (redirectResult?.user) return;
+          if (hasPendingAuthRedirect()) return;
+          handleSignedOut();
+        } finally {
+          markInitialAuthResolved();
+          notifySignedInSyncReady();
+        }
       });
     }
 
@@ -679,6 +765,9 @@
     isConfigured,
     isSignedIn,
     isActive,
+    requiresAuth,
+    waitForInitialAuth,
+    waitUntilSignedInAndSynced,
     registerSources,
     setRefreshCallback,
     setUiCallback,

@@ -20,4 +20,6 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: "1022286935221",
   appId: "1:1022286935221:web:28083c98ac7f0075e87afc",
   googleWebClientId: "1022286935221-u2jvohi82bb26rctv0hgi4o19hg7cnbi.apps.googleusercontent.com",
+  /** true: 앱 시작 시 로그인 필수, Firestore가 SSOT */
+  requireCloudAuth: true,
 };

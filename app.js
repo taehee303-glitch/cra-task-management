@@ -488,6 +488,14 @@ const els = {
   cloudSyncStatus: document.getElementById("cloudSyncStatus"),
   cloudSignInBtn: document.getElementById("cloudSignInBtn"),
   cloudSignOutBtn: document.getElementById("cloudSignOutBtn"),
+  workspace: document.getElementById("workspace"),
+  appBootSplash: document.getElementById("appBootSplash"),
+  appBootStatus: document.getElementById("appBootStatus"),
+  authGate: document.getElementById("authGate"),
+  authGateSignInBtn: document.getElementById("authGateSignInBtn"),
+  authGateHint: document.getElementById("authGateHint"),
+  authGateError: document.getElementById("authGateError"),
+  authGateSyncStatus: document.getElementById("authGateSyncStatus"),
 };
 
 function notifyCloudSync(key) {
@@ -630,9 +638,128 @@ function registerCloudSyncSources() {
   CloudSyncManager.setRefreshCallback(refreshAfterCloudSync);
 }
 
+function setBootStatus(message) {
+  if (els.appBootStatus) els.appBootStatus.textContent = message;
+}
+
+function showAuthGate(options = {}) {
+  if (els.appBootSplash) els.appBootSplash.hidden = true;
+  if (els.authGate) {
+    els.authGate.hidden = false;
+  }
+  if (els.workspace) {
+    els.workspace.hidden = true;
+  }
+  if (els.authGateError) {
+    els.authGateError.hidden = !options.error;
+    els.authGateError.textContent = options.error || "";
+  }
+  if (els.authGateSyncStatus) {
+    els.authGateSyncStatus.hidden = !options.syncing;
+  }
+  if (els.authGateHint && window.CloudSyncManager) {
+    const hint = CloudSyncManager.getMobileLoginHint?.() || "";
+    els.authGateHint.textContent = hint;
+    els.authGateHint.hidden = !hint;
+  }
+}
+
+function hideAuthOverlays() {
+  if (els.appBootSplash) els.appBootSplash.hidden = true;
+  if (els.authGate) els.authGate.hidden = true;
+  if (els.workspace) {
+    els.workspace.hidden = false;
+    els.workspace.classList.remove("workspace--locked");
+  }
+}
+
+function triggerCloudSignIn(buttonEl) {
+  if (!window.CloudSyncManager) return Promise.resolve();
+
+  const btn = buttonEl;
+  const prevLabel = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "로그인 중…";
+  }
+  if (els.authGateError) {
+    els.authGateError.hidden = true;
+    els.authGateError.textContent = "";
+  }
+
+  return CloudSyncManager.signInWithGoogle()
+    .then(() => {
+      if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
+      return CloudSyncManager.waitUntilSignedInAndSynced();
+    })
+    .catch((err) => {
+      console.error("Google login failed:", err);
+      if (err?.code !== "auth/popup-closed-by-user") {
+        const message = CloudSyncManager.formatAuthError?.(err) || "Google 로그인에 실패했습니다.";
+        if (els.authGateError) {
+          els.authGateError.textContent = message.replace(/\n+/g, " ");
+          els.authGateError.hidden = false;
+        } else {
+          alert(message);
+        }
+      }
+      throw err;
+    })
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevLabel;
+      }
+    });
+}
+
+async function ensureCloudAuthBeforeBootstrap() {
+  if (!window.CloudSyncManager) {
+    if (window.FIREBASE_CONFIG?.requireCloudAuth) {
+      throw new Error("Firebase 동기화 모듈을 불러오지 못했습니다. 페이지를 새로고침해 주세요.");
+    }
+    return;
+  }
+
+  setBootStatus("로그인 확인 중…");
+  await CloudSyncManager.init();
+  const { signedIn } = await CloudSyncManager.waitForInitialAuth();
+
+  if (!CloudSyncManager.requiresAuth()) {
+    if (signedIn) {
+      await CloudSyncManager.waitUntilSignedInAndSynced();
+    }
+    return;
+  }
+
+  if (!CloudSyncManager.isConfigured()) {
+    showAuthGate({
+      error: "Firebase 설정이 없습니다. firebase-config.js를 확인해 주세요.",
+    });
+    throw new Error("Firebase not configured");
+  }
+
+  if (signedIn) {
+    setBootStatus("클라우드 데이터 불러오는 중…");
+    if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
+    await CloudSyncManager.waitUntilSignedInAndSynced();
+    return;
+  }
+
+  showAuthGate();
+  setBootStatus("");
+  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+  await CloudSyncManager.waitUntilSignedInAndSynced();
+  setBootStatus("클라우드 데이터 불러오는 중…");
+  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
+}
+
 function initCloudSyncUi() {
   if (!window.CloudSyncManager) {
     if (els.cloudSyncPanel) els.cloudSyncPanel.hidden = true;
+    if (window.FIREBASE_CONFIG?.requireCloudAuth) {
+      showAuthGate({ error: "Firebase 동기화 모듈을 불러오지 못했습니다. 페이지를 새로고침해 주세요." });
+    }
     return;
   }
 
@@ -662,16 +789,22 @@ function initCloudSyncUi() {
       signInBtn.hidden = true;
       signOutBtn.hidden = false;
     } else {
-      statusEl.textContent = "로컬 저장";
+      statusEl.textContent = CloudSyncManager.requiresAuth?.() ? "로그인 필요" : "로컬 저장";
       statusEl.className = "cloud-sync__status cloud-sync__status--local";
-      statusEl.title = "로그인하면 기기 간 데이터가 동기화됩니다";
+      statusEl.title = CloudSyncManager.requiresAuth?.()
+        ? "Google 로그인 후 클라우드에서 데이터를 불러옵니다"
+        : "로그인하면 기기 간 데이터가 동기화됩니다";
       signInBtn.hidden = false;
       signOutBtn.hidden = true;
     }
 
     if (wasSignedIn && !signedIn) {
-      loadAllFromLocalStorage();
-      refreshAfterCloudSync();
+      if (CloudSyncManager.requiresAuth?.()) {
+        showAuthGate();
+      } else {
+        loadAllFromLocalStorage();
+        refreshAfterCloudSync();
+      }
     }
     wasSignedIn = signedIn;
     updateReferenceCloudSyncLabel();
@@ -689,23 +822,13 @@ function initCloudSyncUi() {
   }
 
   els.cloudSignInBtn?.addEventListener("click", () => {
-    const btn = els.cloudSignInBtn;
-    const prevLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "로그인 중…";
+    triggerCloudSignIn(els.cloudSignInBtn);
+  });
 
-    CloudSyncManager.signInWithGoogle()
-      .catch((err) => {
-        console.error("Google login failed:", err);
-        if (err?.code !== "auth/popup-closed-by-user") {
-          const message = CloudSyncManager.formatAuthError?.(err) || "Google 로그인에 실패했습니다.";
-          alert(message);
-        }
-      })
-      .finally(() => {
-        btn.disabled = false;
-        btn.textContent = prevLabel;
-      });
+  els.authGateSignInBtn?.addEventListener("click", () => {
+    triggerCloudSignIn(els.authGateSignInBtn).catch(() => {
+      /* inline error */
+    });
   });
 
   els.cloudSignOutBtn?.addEventListener("click", () => {
@@ -726,6 +849,10 @@ function initCloudSyncUi() {
 function init() {
   applyUiScale();
   bootstrapApp().catch((err) => {
+    if (window.CloudSyncManager?.requiresAuth?.() && !CloudSyncManager.isSignedIn()) {
+      console.warn("로그인 대기 중:", err);
+      return;
+    }
     console.error("앱 초기화 실패:", err);
     alert(
       `앱을 초기화하는 중 오류가 발생했습니다.\n\n${err?.message || err}\n\nCtrl+Shift+R로 강력 새로고침하거나, PWA라면 앱을 재설치해 주세요.`
@@ -740,12 +867,15 @@ function bindEvent(target, event, handler) {
 async function bootstrapApp() {
   registerCloudSyncSources();
   initCloudSyncUi();
+
+  await ensureCloudAuthBeforeBootstrap();
+
   loadAllFromLocalStorage();
+  await finishAppBootstrap();
+  hideAuthOverlays();
+}
 
-  if (window.CloudSyncManager) {
-    await CloudSyncManager.init();
-  }
-
+async function finishAppBootstrap() {
   await seedSiteMasterIfEmpty();
   migrateMasterStructureV2();
   migrateStudySystemsToSystemMaster();
@@ -9028,7 +9158,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "65";
+const APP_BUILD = "66";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

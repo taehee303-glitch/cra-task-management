@@ -48,7 +48,25 @@
       <img id="mobileAccessQr" class="mobile-access-banner__qr" alt="휴대폰 접속 QR 코드" width="120" height="120" hidden />
     </div>
   </div>
-  <div class="workspace" id="workspace">
+  <div class="auth-gate" id="appBootSplash" aria-live="polite">
+    <div class="auth-gate__panel auth-gate__panel--boot">
+      <span class="auth-gate__logo" aria-hidden="true">📋</span>
+      <h1 class="auth-gate__title">CRA Workspace</h1>
+      <p class="auth-gate__status" id="appBootStatus">시작 중…</p>
+    </div>
+  </div>
+  <div class="auth-gate auth-gate--login" id="authGate" hidden>
+    <div class="auth-gate__panel">
+      <span class="auth-gate__logo" aria-hidden="true">📋</span>
+      <h1 class="auth-gate__title">CRA Workspace</h1>
+      <p class="auth-gate__lead">업무 데이터는 Google 계정 클라우드에 저장됩니다.<br />로그인하면 PC·휴대폰에서 동일한 Workspace를 사용할 수 있습니다.</p>
+      <button type="button" class="auth-gate__sign-in btn btn--primary" id="authGateSignInBtn">Google로 로그인</button>
+      <p class="auth-gate__hint" id="authGateHint"></p>
+      <p class="auth-gate__error" id="authGateError" hidden role="alert"></p>
+      <p class="auth-gate__sync-status" id="authGateSyncStatus" hidden>클라우드 데이터 불러오는 중…</p>
+    </div>
+  </div>
+  <div class="workspace workspace--locked" id="workspace" hidden>
     <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
     <aside class="sidebar" id="sidebar" aria-label="CRA Workspace">
       <div class="sidebar__brand">

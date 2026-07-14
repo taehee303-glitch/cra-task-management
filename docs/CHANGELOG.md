@@ -17,6 +17,24 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 66 — 2026-07-15 — Mandatory cloud login (Firebase SSOT)
+
+### Changed
+
+- **로그인 필수** — 앱 시작 시 Google 로그인 화면 표시, 미로그인 시 Dashboard 진입 불가
+- **Cloud SSOT** — Task·Study·Workflow·Routine 등 모든 데이터 Firestore 저장/불러오기
+- **LocalStorage** — 클라우드 동기화용 캐시·오프라인 버퍼로만 사용
+- 첫 로그인 시 기존 로컬 데이터 자동 클라우드 업로드 (확인 팝업 제거)
+- 사이드바 상태: 미로그인 시 「로그인 필요」 표시
+
+### Note
+
+- 인증: Firebase Auth (Google) — Supabase 아님
+- `firebase-config.js` → `requireCloudAuth: true`
+- Firebase Console → Authorized domains에 `taehee303-glitch.github.io` 등록 필요
+
+---
+
 ## [1.3.0] — build 65 — 2026-07-15 — My Tasks action-first UX
 
 ### Changed
