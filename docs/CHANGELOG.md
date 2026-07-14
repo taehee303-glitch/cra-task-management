@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 61 — 2026-07-15 — Dashboard daily priority UI
+
+### Changed
+
+- **Dashboard 레이아웃** — 2열 그리드, 인사 헤더, 오늘 업무 요약 바, 기한 임박 버킷
+- **오늘의 Task** — 마감 배지·Workflow/Routine 태그·진행률 표시
+- **우측 패널** — 진행 중 Workflow 스텝퍼, 이번 주 일정, 최근 업데이트 피드 스타일
+- 기존 Dashboard 기능(완료·상태 변경·Workflow 패널·필터 네비) 유지
+
+---
+
 ## [1.3.0] — build 60 — 2026-07-14 — Workflow suggest popup UX
 
 ### Changed

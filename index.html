@@ -363,106 +363,152 @@
 
       <!-- Dashboard View -->
       <div id="viewDashboard" class="view-panel">
-        <section class="dashboard dashboard--readable dashboard--time">
-          <header class="dashboard__header dashboard__header--compact">
-            <div class="dashboard__header-main">
-              <h2 class="section-title">Dashboard</h2>
+        <section class="dashboard dashboard--readable dashboard--time dashboard--v2">
+          <header class="dashboard-v2__top">
+            <div class="dashboard-v2__greeting">
+              <h2 class="dashboard-v2__greeting-title" id="dashboardGreeting">Good morning 👋</h2>
+              <p class="dashboard-v2__greeting-sub" id="dashboardGreetingSub">오늘도 좋은 하루 보내세요!</p>
             </div>
-            <span class="attention-panel__reminder-badge" id="reminderStatusBadge">Reminder ON</span>
+            <div class="dashboard-v2__top-actions">
+              <span class="dashboard-v2__date" id="dashboardHeaderDate"></span>
+              <button type="button" class="btn btn--ghost btn--sm dashboard-v2__calendar-btn" id="dashboardCalendarBtn">Calendar</button>
+              <button type="button" class="btn btn--primary btn--sm dashboard-v2__add-btn" id="dashboardAddTaskBtn">+ Task 생성</button>
+              <span class="attention-panel__reminder-badge dashboard-v2__reminder" id="reminderStatusBadge">Reminder ON</span>
+            </div>
           </header>
 
-          <button type="button" class="today-progress-hero today-progress-hero--compact" id="todayProgressHero" aria-label="오늘 업무 목록 보기">
-            <div class="today-progress-hero__row">
-              <h3 class="today-progress-hero__title">Today's Progress</h3>
-              <span class="today-progress-hero__percent" id="todayProgressPercent">0%</span>
-            </div>
-            <div class="today-progress-hero__meta">
-              <span id="todayProgressCount">0 / 0 완료</span>
-              <span class="today-progress-hero__sep" aria-hidden="true">·</span>
-              <span id="todayProgressRemaining">남은 0건</span>
-            </div>
-            <div class="progress-bar progress-bar--compact today-progress-hero__bar">
-              <div class="progress-bar__fill" id="todayProgressFill" style="width: 0%"></div>
-            </div>
-          </button>
-
-          <div class="dashboard-stack dashboard-stack--time">
-            <section class="dash-card dash-card--time-today dash-card--execute" aria-labelledby="attentionTodayHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">📅</span>
-                <div class="dash-card-header__text">
-                  <h3 id="attentionTodayHeading">오늘 마감</h3>
+          <section class="dashboard-v2__summary" aria-label="오늘 업무 요약">
+            <button type="button" class="dashboard-v2__summary-today today-progress-hero today-progress-hero--compact" id="todayProgressHero" aria-label="오늘 업무 목록 보기">
+              <span class="dashboard-v2__summary-icon" aria-hidden="true">📋</span>
+              <div class="dashboard-v2__summary-today-copy">
+                <span class="dashboard-v2__summary-label">오늘 해야 할 업무</span>
+                <span class="dashboard-v2__summary-total" id="todayProgressTotal">0</span>
+                <span class="dashboard-v2__summary-meta">
+                  <span id="todayProgressCount">0 / 0 완료</span>
+                  <span class="today-progress-hero__sep" aria-hidden="true">·</span>
+                  <span id="todayProgressRemaining">남은 0건</span>
+                </span>
+                <span class="today-progress-hero__percent dashboard-v2__summary-percent" id="todayProgressPercent" hidden>0%</span>
+                <div class="progress-bar progress-bar--compact today-progress-hero__bar dashboard-v2__summary-bar--hidden">
+                  <div class="progress-bar__fill" id="todayProgressFill" style="width: 0%"></div>
                 </div>
-                <span class="badge badge--today" id="attentionTodayCount">0</span>
               </div>
-              <div class="dash-list dash-list--execute dash-list--time" id="attentionTodayList">
-                <p class="empty-msg empty-msg--compact">✓ 오늘 마감 업무가 없습니다.</p>
+            </button>
+            <div class="dashboard-v2__summary-progress dashboard-overall-progress dashboard-overall-progress--compact" aria-label="전체 업무 완료율">
+              <div class="dashboard-overall-progress__header">
+                <h3 class="dashboard-overall-progress__title">전체 진행률</h3>
+                <span class="dashboard-overall-progress__percent" id="overallProgressPercent">0%</span>
               </div>
-            </section>
-
-            <section class="dash-card dash-card--time-week" aria-labelledby="dashboardWeekPrepHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">📆</span>
-                <div class="dash-card-header__text">
-                  <h3 id="dashboardWeekPrepHeading">이번 주 준비</h3>
-                </div>
-                <span class="badge badge--week" id="dashboardWeekPrepCount">0</span>
+              <p class="dashboard-overall-progress__subtitle dashboard-v2__summary-tip" id="overallProgressSubtitle">0 / 0 완료</p>
+              <div class="progress-bar progress-bar--compact">
+                <div class="progress-bar__fill" id="overallProgressFill" style="width: 0%"></div>
               </div>
-              <div class="dash-list dash-list--compact dash-list--time" id="dashboardWeekPrepList">
-                <p class="empty-msg empty-msg--compact">✓ 이번 주 준비 업무가 없습니다.</p>
-              </div>
-            </section>
-
-            <section class="dash-card dash-card--time-next-week" aria-labelledby="dashboardNextWeekHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">🗓️</span>
-                <div class="dash-card-header__text">
-                  <h3 id="dashboardNextWeekHeading">다음 주 예정</h3>
-                </div>
-                <span class="badge badge--next-week" id="dashboardNextWeekCount">0</span>
-              </div>
-              <div class="dash-list dash-list--compact dash-list--time" id="dashboardNextWeekList">
-                <p class="empty-msg empty-msg--compact">✓ 다음 주 예정 업무가 없습니다.</p>
-              </div>
-            </section>
-
-            <section class="dash-card dash-card--time-recent" aria-labelledby="dashboardRecentCompletedHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">✅</span>
-                <div class="dash-card-header__text">
-                  <h3 id="dashboardRecentCompletedHeading">최근 완료</h3>
-                </div>
-                <span class="badge badge--completed" id="dashboardRecentCompletedCount">0</span>
-              </div>
-              <div class="dash-list dash-list--compact dash-list--time" id="dashboardRecentCompletedList">
-                <p class="empty-msg empty-msg--compact">✓ 최근 완료 업무가 없습니다.</p>
-              </div>
-            </section>
-
-            <section class="dash-card dash-card--time-overdue" aria-labelledby="attentionOverdueHeading">
-              <div class="dash-card-header">
-                <span class="dash-icon">⚠️</span>
-                <div class="dash-card-header__text">
-                  <h3 id="attentionOverdueHeading">지연 업무</h3>
-                </div>
-                <span class="badge badge--danger" id="attentionOverdueCount">0</span>
-              </div>
-              <div class="dash-list dash-list--compact dash-list--time" id="attentionOverdueList">
-                <p class="empty-msg empty-msg--compact">✓ 지연된 업무가 없습니다.</p>
-              </div>
-            </section>
-          </div>
-
-          <section class="dashboard-overall-progress dashboard-overall-progress--compact" aria-label="전체 업무 완료율">
-            <div class="dashboard-overall-progress__header">
-              <h3 class="dashboard-overall-progress__title">전체 완료율</h3>
-              <span class="dashboard-overall-progress__percent" id="overallProgressPercent">0%</span>
             </div>
-            <p class="dashboard-overall-progress__subtitle" id="overallProgressSubtitle">0 / 0 완료</p>
-            <div class="progress-bar progress-bar--compact">
-              <div class="progress-bar__fill" id="overallProgressFill" style="width: 0%"></div>
-            </div>
+            <button type="button" class="dashboard-v2__start-btn" id="dashboardStartWorkBtn">
+              <span class="dashboard-v2__start-icon" aria-hidden="true">▶</span>
+              오늘 업무 시작
+            </button>
           </section>
+
+          <div class="dashboard-v2__grid">
+            <div class="dashboard-v2__col dashboard-v2__col--main">
+              <section class="dash-card dash-card--v2 dash-card--time-today dash-card--execute" aria-labelledby="attentionTodayHeading">
+                <div class="dash-card-header dash-card-header--v2">
+                  <div class="dash-card-header__text">
+                    <h3 id="attentionTodayHeading">오늘의 Task</h3>
+                  </div>
+                  <span class="badge badge--today" id="attentionTodayCount">0</span>
+                </div>
+                <div class="dash-list dash-list--execute dash-list--time dash-list--v2" id="attentionTodayList">
+                  <p class="empty-msg empty-msg--compact">✓ 오늘 마감 업무가 없습니다.</p>
+                </div>
+              </section>
+
+              <section class="dashboard-v2__urgent" aria-label="기한 임박 Task">
+                <h3 class="dashboard-v2__urgent-title">기한 임박 Task</h3>
+                <div class="dashboard-v2__urgent-grid">
+                  <button type="button" class="dashboard-v2__urgent-bucket dashboard-v2__urgent-bucket--today" data-dashboard-filter="today">
+                    <span class="dashboard-v2__urgent-label">오늘 마감</span>
+                    <span class="dashboard-v2__urgent-value" id="dashboardUrgentToday">0</span>
+                  </button>
+                  <button type="button" class="dashboard-v2__urgent-bucket dashboard-v2__urgent-bucket--d1" data-dashboard-filter="d1">
+                    <span class="dashboard-v2__urgent-label">D-1</span>
+                    <span class="dashboard-v2__urgent-value" id="dashboardUrgentD1">0</span>
+                  </button>
+                  <div class="dashboard-v2__urgent-bucket dashboard-v2__urgent-bucket--d2">
+                    <span class="dashboard-v2__urgent-label">D-2</span>
+                    <span class="dashboard-v2__urgent-value" id="dashboardUrgentD2">0</span>
+                  </div>
+                  <div class="dashboard-v2__urgent-bucket dashboard-v2__urgent-bucket--d3">
+                    <span class="dashboard-v2__urgent-label">D-3</span>
+                    <span class="dashboard-v2__urgent-value" id="dashboardUrgentD3">0</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="dash-card dash-card--v2 dash-card--time-overdue" aria-labelledby="attentionOverdueHeading">
+                <div class="dash-card-header dash-card-header--v2">
+                  <div class="dash-card-header__text">
+                    <h3 id="attentionOverdueHeading">지연 업무</h3>
+                  </div>
+                  <span class="badge badge--danger" id="attentionOverdueCount">0</span>
+                </div>
+                <div class="dash-list dash-list--compact dash-list--time dash-list--v2" id="attentionOverdueList">
+                  <p class="empty-msg empty-msg--compact">✓ 지연된 업무가 없습니다.</p>
+                </div>
+              </section>
+            </div>
+
+            <div class="dashboard-v2__col dashboard-v2__col--side">
+              <section class="dash-card dash-card--v2 dash-card--active-workflow dashboard-workflow-section" aria-labelledby="dashboardActiveWorkflowHeading">
+                <div class="dash-card-header dash-card-header--v2">
+                  <div class="dash-card-header__text">
+                    <h3 id="dashboardActiveWorkflowHeading">진행 중 Workflow</h3>
+                  </div>
+                  <span class="badge badge--workflow" id="dashboardActiveWorkflowCount">0</span>
+                </div>
+                <div class="workflow-active-list" id="dashboardActiveWorkflowList">
+                  <p class="empty-msg empty-msg--compact">진행 중인 Workflow가 없습니다.</p>
+                </div>
+              </section>
+
+              <section class="dash-card dash-card--v2 dash-card--time-week" aria-labelledby="dashboardWeekPrepHeading">
+                <div class="dash-card-header dash-card-header--v2">
+                  <div class="dash-card-header__text">
+                    <h3 id="dashboardWeekPrepHeading">이번 주 일정</h3>
+                  </div>
+                  <span class="badge badge--week" id="dashboardWeekPrepCount">0</span>
+                </div>
+                <div class="dash-list dash-list--compact dash-list--time dash-list--v2 dash-list--schedule" id="dashboardWeekPrepList">
+                  <p class="empty-msg empty-msg--compact">✓ 이번 주 준비 업무가 없습니다.</p>
+                </div>
+              </section>
+
+              <section class="dash-card dash-card--v2 dash-card--time-recent" aria-labelledby="dashboardRecentCompletedHeading">
+                <div class="dash-card-header dash-card-header--v2">
+                  <div class="dash-card-header__text">
+                    <h3 id="dashboardRecentCompletedHeading">최근 업데이트</h3>
+                  </div>
+                  <span class="badge badge--completed" id="dashboardRecentCompletedCount">0</span>
+                </div>
+                <div class="dash-list dash-list--compact dash-list--time dash-list--v2 dash-list--updates" id="dashboardRecentCompletedList">
+                  <p class="empty-msg empty-msg--compact">✓ 최근 완료 업무가 없습니다.</p>
+                </div>
+              </section>
+
+              <section class="dash-card dash-card--v2 dash-card--time-next-week dash-card--compact" aria-labelledby="dashboardNextWeekHeading">
+                <div class="dash-card-header dash-card-header--v2">
+                  <div class="dash-card-header__text">
+                    <h3 id="dashboardNextWeekHeading">다음 주 예정</h3>
+                  </div>
+                  <span class="badge badge--next-week" id="dashboardNextWeekCount">0</span>
+                </div>
+                <div class="dash-list dash-list--compact dash-list--time dash-list--v2" id="dashboardNextWeekList">
+                  <p class="empty-msg empty-msg--compact">✓ 다음 주 예정 업무가 없습니다.</p>
+                </div>
+              </section>
+            </div>
+          </div>
 
           <div class="stats-grid stats-grid--dashboard-footer">
             <button type="button" class="stat-card stat-card--total stat-card--filter" data-dashboard-filter="all" aria-pressed="false">
