@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 83 — 2026-07-18 — Corporate cache bust + VPN login escape hatches
+
+### Fixed
+
+- 회사 PC **구버전 캐시** (`클라우드 데이터 불러오는 중…` 구문) 자동 감지·`?b=83` 강제 새로고침
+- Service Worker·Cache Storage 시작 시 자동 삭제 (requireCloudAuth)
+- 로그인 Promise 실패해도 **auth 폴링 감시** 유지 (VPN에서 Firebase 연결 지연 대응)
+- Firebase `signInWithCredential` 25초 타임아웃
+- 「Dashboard 건너뛰기」「최신 버전 새로고침」 버튼 로그인 화면에 **항상 표시**
+
+---
+
 ## [1.3.0] — build 82 — 2026-07-18 — Google logout in Settings
 
 ### Added

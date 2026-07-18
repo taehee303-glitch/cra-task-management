@@ -571,6 +571,21 @@
     await writeMetaDoc({ initialized: true });
   }
 
+  async function signInWithCredentialTimeout(credential, timeoutMs = 25000) {
+    return withTimeout(state.auth.signInWithCredential(credential), timeoutMs, {
+      code: "auth/timeout",
+      message:
+        "Firebase 연결 시간 초과 — VPN/회사 네트워크에서 identitytoolkit.googleapis.com 허용이 필요할 수 있습니다.",
+    });
+  }
+
+  async function adoptAuthUserFromFirebase() {
+    if (!state.auth?.currentUser) return false;
+    if (isSignedIn()) return true;
+    await handleSignedIn(state.auth.currentUser);
+    return isSignedIn();
+  }
+
   async function runBackgroundCloudSync() {
     state.syncing = true;
     notifyUi();
@@ -962,7 +977,7 @@
             };
           }
           const credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
-          const result = await state.auth.signInWithCredential(credential);
+          const result = await signInWithCredentialTimeout(credential);
           const user = result?.user || state.auth.currentUser;
           if (!user) {
             throw {
@@ -1262,7 +1277,7 @@
                 null,
                 tokenResponse.access_token
               );
-              const result = await state.auth.signInWithCredential(credential);
+              const result = await signInWithCredentialTimeout(credential);
               const user = result?.user || state.auth.currentUser;
               if (!user) {
                 throw {
@@ -1464,6 +1479,7 @@
     shouldRecoverRedirectAuth,
     recoverRedirectAuth,
     syncCurrentAuthUser,
+    adoptAuthUserFromFirebase,
     getAuthDiagnostics,
   };
 })();

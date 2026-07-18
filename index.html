@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <meta name="description" content="Clinical Research Associate Task Manager" />
-  <meta name="app-build" content="82" />
+  <meta name="app-build" content="83" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -14,7 +17,34 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=83" />
+  <script>
+    (function () {
+      var BUILD = "83";
+      try {
+        var params = new URLSearchParams(location.search);
+        if (params.get("b") !== BUILD) {
+          params.set("b", BUILD);
+          location.replace(location.pathname + "?" + params.toString() + location.hash);
+          return;
+        }
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (reg) { reg.unregister(); });
+          });
+        }
+        if ("caches" in window) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (key) {
+              if (key.indexOf("cra-task-manager") === 0 || key.indexOf("fitspace") === 0) {
+                caches.delete(key);
+              }
+            });
+          });
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 </head>
 <body>
   <div class="file-protocol-banner" id="fileProtocolBanner" hidden>
@@ -70,11 +100,12 @@
         <p class="auth-gate__corp-hint">접속 후 주소창에 <code>mimecastprotect</code> 가 없어야 합니다. IT에 위 도메인 Mimecast 예외 등록을 요청할 수도 있습니다.</p>
       </div>
       <button type="button" class="auth-gate__sign-in btn btn--primary" id="authGateSignInBtn">Google로 로그인</button>
-      <button type="button" class="auth-gate__skip btn btn--ghost" id="authGateSkipBtn" hidden>Dashboard 건너뛰기 (VPN/느린 네트워크)</button>
+      <button type="button" class="auth-gate__skip btn btn--ghost" id="authGateSkipBtn">Dashboard 건너뛰기 (로그인 후에도 멈추면 클릭)</button>
+      <button type="button" class="auth-gate__refresh btn btn--ghost btn--sm" id="authGateCacheRefreshBtn">최신 버전 새로고침 (Build 83)</button>
       <p class="auth-gate__hint" id="authGateHint"></p>
       <p class="auth-gate__error" id="authGateError" hidden role="alert"></p>
       <p class="auth-gate__sync-status" id="authGateSyncStatus" hidden>Dashboard 준비 중…</p>
-      <p class="auth-gate__debug" id="authGateDebug">Build 82 · 준비 중…</p>
+      <p class="auth-gate__debug" id="authGateDebug">Build 83 · 준비 중…</p>
       <p class="auth-gate__alt-host" id="authGateAltHost" hidden></p>
       <p class="auth-gate__meta" id="authGateMeta"></p>
     </div>
@@ -1711,11 +1742,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=82"></script>
-  <script src="firebase-sync.js?v=82"></script>
-  <script src="calendar-config.js?v=82"></script>
-  <script src="calendar-sync.js?v=82"></script>
-  <script src="app.js?v=82"></script>
-  <script src="pwa.js?v=82"></script>
+  <script src="firebase-config.js?v=83"></script>
+  <script src="firebase-sync.js?v=83"></script>
+  <script src="calendar-config.js?v=83"></script>
+  <script src="calendar-sync.js?v=83"></script>
+  <script src="app.js?v=83"></script>
+  <script src="pwa.js?v=83"></script>
 </body>
 </html>

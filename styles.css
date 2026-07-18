@@ -9888,6 +9888,14 @@ button.dashboard-v2__urgent-bucket:hover {
   font-size: calc(12px * var(--ui-scale));
 }
 
+.auth-gate__refresh {
+  display: block;
+  width: 100%;
+  margin-top: calc(8px * var(--ui-scale));
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--text-muted);
+}
+
 .auth-gate__sync-status {
   margin: calc(16px * var(--ui-scale)) 0 0;
   font-size: calc(13px * var(--ui-scale));

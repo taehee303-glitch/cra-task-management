@@ -507,6 +507,7 @@ const els = {
   authGateCorpHost: document.getElementById("authGateCorpHost"),
   authGateDirectUrl: document.getElementById("authGateDirectUrl"),
   authGateSkipBtn: document.getElementById("authGateSkipBtn"),
+  authGateCacheRefreshBtn: document.getElementById("authGateCacheRefreshBtn"),
 };
 
 function notifyCloudSync(key) {
@@ -654,7 +655,7 @@ function setBootStatus(message) {
   if (els.appBootStatus) els.appBootStatus.textContent = message;
 }
 
-const BOOTSTRAP_TIMEOUT_MS = 20000;
+const BOOTSTRAP_TIMEOUT_MS = 45000;
 
 function withAppTimeout(promise, timeoutMs, timeoutMessage) {
   return Promise.race([
@@ -698,11 +699,24 @@ function stopAuthGateExitWatcher() {
     clearInterval(authGateExitWatcherId);
     authGateExitWatcherId = null;
   }
-  if (els.authGateSkipBtn) els.authGateSkipBtn.hidden = true;
+}
+
+async function adoptFirebaseAuthUserIfNeeded() {
+  const mgr = window.CloudSyncManager;
+  if (!mgr) return false;
+  if (mgr.isSignedIn?.()) return true;
+
+  await mgr.adoptAuthUserFromFirebase?.();
+  if (mgr.isSignedIn?.()) return true;
+
+  if (typeof firebase !== "undefined" && firebase.auth?.()?.currentUser) {
+    await mgr.syncCurrentAuthUser?.();
+  }
+  return Boolean(mgr.isSignedIn?.());
 }
 
 async function tryEnterAuthenticatedAppFromAuthGate() {
-  await window.CloudSyncManager?.syncCurrentAuthUser?.();
+  await adoptFirebaseAuthUserIfNeeded();
   if (!window.CloudSyncManager?.isSignedIn?.()) return false;
 
   stopAuthGateExitWatcher();
@@ -732,16 +746,18 @@ function startAuthGateExitWatcher({ buttonEl, prevLabel } = {}) {
 
       const elapsed = Date.now() - startedAt;
 
-      if (elapsed >= 8000 && els.authGateSkipBtn) {
-        els.authGateSkipBtn.hidden = false;
-      }
-
       if (await tryEnterAuthenticatedAppFromAuthGate()) {
         resetAuthGateSignInUi(btn, label);
         return;
       }
 
-      if (elapsed >= 50000) {
+      if (elapsed >= 15000 && els.authGateError && !CloudSyncManager.isSignedIn?.()) {
+        els.authGateError.hidden = false;
+        els.authGateError.textContent =
+          "Firebase 연결이 느립니다. Google 계정 선택을 완료했다면 「Dashboard 건너뛰기」를 눌러 보세요.";
+      }
+
+      if (elapsed >= 120000) {
         stopAuthGateExitWatcher();
         resetAuthGateSignInUi(btn, label);
         if (els.authGateError) {
@@ -756,12 +772,27 @@ function startAuthGateExitWatcher({ buttonEl, prevLabel } = {}) {
 
 async function forceEnterDashboardFromAuthGate() {
   logAuthStepUi("Dashboard 건너뛰기 시도…");
+  if (els.authGateSyncStatus) {
+    els.authGateSyncStatus.textContent = "Dashboard 준비 중…";
+    els.authGateSyncStatus.hidden = false;
+  }
   const entered = await tryEnterAuthenticatedAppFromAuthGate();
   if (entered) return;
 
   window.alert(
-    "아직 Google 로그인이 확인되지 않았습니다.\n\nGoogle 계정 선택을 완료한 뒤 다시 시도하거나, Ctrl+Shift+R로 새로고침해 주세요."
+    "아직 Google 로그인이 확인되지 않았습니다.\n\n1. Google 계정 선택을 완료했는지 확인\n2. 「최신 버전 새로고침」 클릭\n3. 그래도 안 되면 VPN 끄거나 휴대폰 LTE로 시도"
   );
+}
+
+function hardRefreshAuthGateCache() {
+  try {
+    localStorage.removeItem("cra_app_shell_build");
+    sessionStorage.removeItem("cra-firebase-auth-redirect");
+  } catch (e) { /* ignore */ }
+  const url = new URL(location.href);
+  url.searchParams.set("b", APP_BUILD);
+  url.searchParams.set("t", String(Date.now()));
+  location.replace(url.toString());
 }
 
 const APP_DIRECT_URLS = [
@@ -869,6 +900,9 @@ function showAuthGate(options = {}) {
     window.CloudSyncManager?.getAuthStatus?.() || "로그인 대기 중…";
   logAuthStepUi(debugText);
   applyCorporateGatewayAuthGateUi();
+  if (window.FIREBASE_CONFIG?.requireCloudAuth && els.authGateSkipBtn) {
+    els.authGateSkipBtn.hidden = false;
+  }
   if (els.authGateMeta) {
     const hostname = window.location.hostname || "unknown";
     const diag = window.CloudSyncManager?.getAuthDiagnostics?.() || {};
@@ -1025,8 +1059,9 @@ function triggerCloudSignIn(buttonEl, options = {}) {
       throw err;
     })
     .finally(() => {
-      stopAuthGateExitWatcher();
-      resetAuthGateSignInUi(btn, prevLabel);
+      if (!CloudSyncManager?.isSignedIn?.()) {
+        resetAuthGateSignInUi(btn, prevLabel);
+      }
     });
 }
 
@@ -1198,6 +1233,10 @@ function initCloudSyncUi() {
 
   els.authGateSkipBtn?.addEventListener("click", () => {
     void forceEnterDashboardFromAuthGate();
+  });
+
+  els.authGateCacheRefreshBtn?.addEventListener("click", () => {
+    hardRefreshAuthGateCache();
   });
 
   els.cloudSignOutBtn?.addEventListener("click", () => {
@@ -9580,7 +9619,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "82";
+const APP_BUILD = "83";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
