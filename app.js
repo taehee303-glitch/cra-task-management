@@ -514,6 +514,7 @@ function loadAllFromLocalStorage() {
 }
 
 function refreshAfterCloudSync() {
+  if (!window.__appBootstrapFinished) return;
   reconcileSiteNamesAfterMasterChange();
   WorkflowInstanceStore.load();
   RoutineStore.load();
@@ -686,7 +687,10 @@ function triggerCloudSignIn(buttonEl) {
     els.authGateError.hidden = true;
     els.authGateError.textContent = "";
   }
-  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
+  if (els.authGateSyncStatus) {
+    els.authGateSyncStatus.textContent = "Google 로그인 확인 중…";
+    els.authGateSyncStatus.hidden = false;
+  }
 
   return CloudSyncManager.signInWithGoogle()
     .catch((err) => {
@@ -703,6 +707,7 @@ function triggerCloudSignIn(buttonEl) {
       throw err;
     })
     .finally(() => {
+      if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
       if (btn) {
         btn.disabled = false;
         btn.textContent = prevLabel;
@@ -737,8 +742,6 @@ async function ensureCloudAuthBeforeBootstrap() {
   }
 
   if (signedIn) {
-    setBootStatus("클라우드 데이터 불러오는 중…");
-    if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
     await CloudSyncManager.waitUntilSignedInAndSynced();
     return;
   }
@@ -747,8 +750,6 @@ async function ensureCloudAuthBeforeBootstrap() {
   setBootStatus("");
   if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
   await CloudSyncManager.waitUntilSignedInAndSynced();
-  setBootStatus("클라우드 데이터 불러오는 중…");
-  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
 }
 
 function initCloudSyncUi() {
@@ -811,6 +812,10 @@ function initCloudSyncUi() {
 
   CloudSyncManager.setAuthErrorCallback((message) => {
     showToast(message.replace(/\n+/g, " "));
+    if (els.authGateError && els.authGate && !els.authGate.hidden) {
+      els.authGateError.textContent = message.replace(/\n+/g, " ");
+      els.authGateError.hidden = false;
+    }
   });
 
   const mobileHint = CloudSyncManager.getMobileLoginHint?.();
@@ -9164,7 +9169,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "67";
+const APP_BUILD = "68";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

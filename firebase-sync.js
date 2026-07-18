@@ -31,7 +31,6 @@
     initialAuthResolved: false,
     initialAuthWaiters: [],
     signedInSyncWaiters: [],
-    signInFlowPromise: null,
   };
 
   function requiresAuth() {
@@ -51,7 +50,7 @@
   }
 
   function resolveSignedInSyncWaiters() {
-    if (!isSignedIn() || !state.ready || state.syncing) return;
+    if (!isSignedIn() || !state.ready) return;
     const waiters = state.signedInSyncWaiters.splice(0);
     waiters.forEach(({ resolve, timer }) => {
       if (timer) clearTimeout(timer);
@@ -102,28 +101,54 @@
     });
   }
 
-  function waitUntilSignedInAndSynced(timeoutMs = 90000) {
-    if (isSignedIn() && state.ready && !state.syncing) {
+  function withTimeout(promise, timeoutMs, timeoutError) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          timeoutError || {
+            code: "auth/sync-timeout",
+            message: "클라우드 요청 시간이 초과되었습니다. 네트워크 또는 Firestore Rules를 확인해 주세요.",
+          }
+        );
+      }, timeoutMs);
+      Promise.resolve(promise)
+        .then((value) => {
+          clearTimeout(timer);
+          resolve(value);
+        })
+        .catch((err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+    });
+  }
+
+  function waitUntilSignedInAndSynced(timeoutMs = 30000) {
+    if (isSignedIn() && state.ready) {
       return Promise.resolve(state.user);
     }
 
-    if (state.signInFlowPromise) {
-      return state.signInFlowPromise;
-    }
-
-    return new Promise((resolve, reject) => {
-      const entry = { resolve, reject };
-      entry.timer = setTimeout(() => {
-        const idx = state.signedInSyncWaiters.indexOf(entry);
-        if (idx !== -1) state.signedInSyncWaiters.splice(idx, 1);
-        reject({
-          code: "auth/sync-timeout",
-          message:
-            "클라우드 동기화 시간이 초과되었습니다. 네트워크 연결과 Firebase Firestore Rules 배포 여부를 확인해 주세요.",
-        });
-      }, timeoutMs);
-      state.signedInSyncWaiters.push(entry);
-    });
+    return withTimeout(
+      new Promise((resolve, reject) => {
+        const entry = { resolve, reject };
+        entry.timer = setTimeout(() => {
+          const idx = state.signedInSyncWaiters.indexOf(entry);
+          if (idx !== -1) state.signedInSyncWaiters.splice(idx, 1);
+          reject({
+            code: "auth/sync-timeout",
+            message:
+              "로그인 확인 시간이 초과되었습니다. 팝업 차단·회사 네트워크·Firebase 설정을 확인해 주세요.",
+          });
+        }, timeoutMs);
+        state.signedInSyncWaiters.push(entry);
+      }),
+      timeoutMs + 1000,
+      {
+        code: "auth/sync-timeout",
+        message:
+          "로그인 확인 시간이 초과되었습니다. 팝업 차단·회사 네트워크·Firebase 설정을 확인해 주세요.",
+      }
+    );
   }
 
   function waitForInitialAuth() {
@@ -222,13 +247,32 @@
     });
   }
 
+  const FIRESTORE_OP_TIMEOUT_MS = 15000;
+
   async function readRemoteDoc(key) {
-    const snap = await dataDoc(key).get();
+    const snap = await withTimeout(
+      dataDoc(key).get({ source: "default" }),
+      FIRESTORE_OP_TIMEOUT_MS,
+      {
+        code: "auth/sync-timeout",
+        message: `Firestore 읽기 시간 초과 (${key}). 회사 네트워크에서 firestore.googleapis.com 차단 여부를 확인해 주세요.`,
+      }
+    );
     if (!snap.exists) return null;
     return snap.data();
   }
 
+  async function writeMetaDoc(payload) {
+    await withTimeout(metaDoc().set(payload, { merge: true }), FIRESTORE_OP_TIMEOUT_MS, {
+      code: "auth/sync-timeout",
+      message: "Firestore 메타 저장 시간 초과. Firestore Rules 배포와 네트워크를 확인해 주세요.",
+    });
+  }
+
   async function cloudHasAnyData() {
+    const meta = await readRemoteDoc(META_DOC);
+    if (meta?.initialized) return true;
+
     const keys = Object.keys(state.sources);
     for (const key of keys) {
       const remote = await readRemoteDoc(key);
@@ -411,10 +455,10 @@
   }
 
   async function resolveInitialSync() {
-    const metaSnap = await metaDoc().get();
+    const metaSnap = await withTimeout(metaDoc().get(), FIRESTORE_OP_TIMEOUT_MS);
     const initialized = metaSnap.exists && metaSnap.data()?.initialized;
     const hasLocal = localHasAnyData();
-    const hasCloud = await cloudHasAnyData();
+    const hasCloud = initialized ? true : await cloudHasAnyData();
     const mandatory = requiresAuth();
 
     if (initialized || hasCloud) {
@@ -437,51 +481,49 @@
         await uploadAllLocal();
         return;
       }
-      await metaDoc().set(
-        {
-          initialized: true,
-          skippedLocalUploadAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      await writeMetaDoc({
+        initialized: true,
+        skippedLocalUploadAt: new Date().toISOString(),
+      });
       return;
     }
 
-    await metaDoc().set({ initialized: true }, { merge: true });
+    await writeMetaDoc({ initialized: true });
+  }
+
+  async function runBackgroundCloudSync() {
+    state.syncing = true;
+    notifyUi();
+    try {
+      await resolveInitialSync();
+      startListeners();
+    } catch (err) {
+      console.error("Background cloud sync failed:", err);
+      const message =
+        err?.code === "permission-denied"
+          ? "Firestore 접근 거부 — Firebase Console에서 firestore.rules를 배포해 주세요."
+          : err?.message || "클라우드 동기화에 실패했습니다. 네트워크 연결을 확인해 주세요.";
+      reportAuthError(message);
+    } finally {
+      state.syncing = false;
+      notifyUi();
+      if (window.__appBootstrapFinished) {
+        notifyRefresh();
+      }
+    }
   }
 
   async function handleSignedIn(user) {
-    if (state.signInFlowPromise && state.user?.uid === user.uid) {
-      return state.signInFlowPromise;
+    if (state.user?.uid === user.uid && state.ready) {
+      return;
     }
 
-    state.signInFlowPromise = (async () => {
-      state.user = user;
-      state.ready = true;
-      notifyUi();
+    state.user = user;
+    state.ready = true;
+    notifyUi();
+    notifySignedInSyncReady();
 
-      try {
-        await resolveInitialSync();
-        startListeners();
-        notifyRefresh();
-      } catch (err) {
-        console.error("Cloud sync sign-in handling failed:", err);
-        const message =
-          err?.code === "permission-denied"
-            ? "Firestore 접근이 거부되었습니다. Firebase Console에서 firestore.rules를 배포했는지 확인해 주세요."
-            : "클라우드 동기화 초기화에 실패했습니다. 네트워크와 Firebase 설정을 확인해 주세요.";
-        reportAuthError(message);
-        throw err;
-      } finally {
-        notifySignedInSyncReady();
-      }
-    })();
-
-    try {
-      await state.signInFlowPromise;
-    } finally {
-      state.signInFlowPromise = null;
-    }
+    void runBackgroundCloudSync();
   }
 
   function handleSignedOut() {
@@ -520,6 +562,15 @@
       state.db = firebase.firestore();
 
       try {
+        state.db.settings({
+          experimentalForceLongPolling: true,
+          merge: true,
+        });
+      } catch (err) {
+        console.warn("Firestore long polling setting unavailable:", err);
+      }
+
+      try {
         await state.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
       } catch (err) {
         console.warn("Firebase auth persistence unavailable:", err);
@@ -555,7 +606,7 @@
         try {
           if (user) {
             sessionStorage.removeItem(REDIRECT_PENDING_KEY);
-            if (state.user?.uid === user.uid && state.ready && !state.signInFlowPromise) return;
+            if (state.user?.uid === user.uid && state.ready) return;
             await handleSignedIn(user);
             return;
           }

@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 68 — 2026-07-18 — Login infinite loading fix
+
+### Fixed
+
+- 로그인 후 Firestore 동기화 완료까지 로그인 화면이 막히던 문제 — **인증 직후 Dashboard 진입**, 동기화는 백그라운드
+- Firestore 요청 15초 타임아웃 (회사 네트워크 hang 방지)
+- Firestore long polling 활성화 (회사 방화벽 환경 대응)
+- 동기화 실패 시 Toast + 로그인 화면 에러 안내 (무한 「클라우드 데이터 불러오는 중…」 제거)
+
+---
+
 ## [1.3.0] — build 67 — 2026-07-18 — Login completion fix
 
 ### Fixed
