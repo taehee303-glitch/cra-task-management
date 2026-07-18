@@ -988,6 +988,12 @@
         "Google 로그인 확인 시간이 초과되었습니다. 팝업 차단·회사 보안 정책·네트워크를 확인한 뒤 다시 시도해 주세요.",
       "auth/redirect-result-missing":
         "Google 로그인 결과를 불러오지 못했습니다. 브라우저 쿠키·사이트 데이터를 허용한 뒤 다시 시도해 주세요.",
+      "auth/invalid-credential":
+        "Google OAuth 설정이 맞지 않습니다. Google Cloud Console → 사용자 인증 정보 → OAuth 클라이언트 → 승인된 JavaScript 원본에 https://taehee303-glitch.github.io 를 추가해 주세요.",
+      "auth/operation-not-supported-in-this-environment":
+        "이 브라우저/환경에서는 Google 로그인이 지원되지 않습니다. Chrome 최신 버전을 사용해 주세요.",
+      "auth/oauth-token-failed":
+        "Google OAuth 토큰 발급에 실패했습니다. Google Cloud Console OAuth 설정을 확인해 주세요.",
       "auth/sync-timeout":
         "클라우드 동기화 시간이 초과되었습니다. Firebase Firestore Rules 배포와 네트워크 연결을 확인해 주세요.",
       "permission-denied":
@@ -1008,6 +1014,95 @@
       return "iPhone 홈 화면 앱에서는 Google 로그인이 제한될 수 있습니다. Safari에서 https://taehee303-glitch.github.io/cra-task-management/ 주소를 열어 로그인해 주세요.";
     }
     return "";
+  }
+
+  async function signInWithGoogleOAuthToken() {
+    const clientId = getGoogleWebClientId();
+    if (!clientId) {
+      throw {
+        code: "auth/missing-client-id",
+        message:
+          "Google OAuth client ID가 없습니다. firebase-config.js 의 googleWebClientId 를 확인해 주세요.",
+      };
+    }
+
+    if (!state.auth) {
+      await init();
+    }
+
+    await waitForGis();
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (err) => {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err);
+        else resolve();
+      };
+
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: "openid email profile",
+          callback: async (tokenResponse) => {
+            if (tokenResponse.error) {
+              finish({
+                code: "auth/oauth-token-failed",
+                message: tokenResponse.error_description || tokenResponse.error,
+              });
+              return;
+            }
+            try {
+              const credential = firebase.auth.GoogleAuthProvider.credential(
+                null,
+                tokenResponse.access_token
+              );
+              await state.auth.signInWithCredential(credential);
+              finish(null);
+            } catch (err) {
+              finish(err);
+            }
+          },
+          error_callback: (err) => {
+            finish({
+              code: "auth/popup-closed-by-user",
+              message: err?.message || "Google OAuth가 취소되었습니다.",
+            });
+          },
+        });
+        client.requestAccessToken({ prompt: "select_account" });
+      } catch (err) {
+        finish(err);
+      }
+    });
+  }
+
+  async function syncCurrentAuthUser() {
+    if (!state.auth?.currentUser) return false;
+    if (isSignedIn()) return true;
+    await handleSignedIn(state.auth.currentUser);
+    return isSignedIn();
+  }
+
+  function getAuthDiagnostics() {
+    const origin = `${window.location.protocol}//${window.location.hostname}`;
+    let storageOk = "unknown";
+    try {
+      localStorage.setItem("cra-auth-probe", "1");
+      localStorage.removeItem("cra-auth-probe");
+      storageOk = "ok";
+    } catch {
+      storageOk = "blocked";
+    }
+
+    return {
+      origin,
+      storageOk,
+      persistenceMode: state.persistenceMode || "unknown",
+      hasClientId: Boolean(getGoogleWebClientId()),
+      swControlled: Boolean(navigator.serviceWorker?.controller),
+    };
   }
 
   async function signInWithGoogle(options = {}) {
@@ -1052,11 +1147,21 @@
           return waitUntilSignedInAndSynced();
         } catch (err) {
           if (err?.code === "auth/popup-closed-by-user") throw err;
-          console.warn("GIS sign-in failed, falling back to redirect:", err);
+          console.warn("GIS sign-in failed, trying OAuth token client:", err);
+        }
+
+        try {
+          await signInWithGoogleOAuthToken();
+          await waitForAuthUser(30000);
+          return waitUntilSignedInAndSynced();
+        } catch (err) {
+          if (err?.code === "auth/popup-closed-by-user") throw err;
+          persistAuthError(err);
+          throw err;
         }
       }
 
-      if (strategy === "redirect" || strategy === "gis-first") {
+      if (strategy === "redirect") {
         await signInWithRedirectFlow(provider);
         redirectStarted = true;
         return new Promise(() => {});
@@ -1122,5 +1227,7 @@
     persistAuthError,
     shouldRecoverRedirectAuth,
     recoverRedirectAuth,
+    syncCurrentAuthUser,
+    getAuthDiagnostics,
   };
 })();

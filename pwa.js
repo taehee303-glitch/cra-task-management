@@ -10,6 +10,40 @@ function hasPendingAuthRedirect() {
   return false;
 }
 
+async function purgeStaleAppShellCache() {
+  const expectedBuild = document.querySelector('meta[name="app-build"]')?.content || "";
+  const storageKey = "cra_app_shell_build";
+  const storedBuild = localStorage.getItem(storageKey) || "";
+  if (expectedBuild && storedBuild === expectedBuild) return false;
+
+  let shouldReload = false;
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      const stale = keys.filter(
+        (key) => key.startsWith("cra-task-manager-") || key.startsWith("fitspace")
+      );
+      if (stale.length) {
+        await Promise.all(stale.map((key) => caches.delete(key)));
+        shouldReload = true;
+      }
+    }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      if (regs.length) {
+        await Promise.all(regs.map((reg) => reg.unregister()));
+        shouldReload = true;
+      }
+    }
+    if (expectedBuild) {
+      localStorage.setItem(storageKey, expectedBuild);
+    }
+  } catch (error) {
+    console.warn("App shell cache purge failed:", error);
+  }
+  return shouldReload;
+}
+
 async function purgeFitSpaceServiceWorkerCache() {
   const KEY = "cra_purge_fitspace_sw_v1";
   if (localStorage.getItem(KEY)) return false;
@@ -48,7 +82,7 @@ function registerServiceWorker() {
     if (hasPendingAuthRedirect()) return;
 
     navigator.serviceWorker
-      .register("./service-worker.js", { scope: "./" })
+      .register("./service-worker.js?v=72", { scope: "./" })
       .then((registration) => {
         registration.addEventListener("updatefound", () => {
           const nextWorker = registration.installing;
@@ -90,10 +124,23 @@ function applyPwaDisplayMode() {
 }
 
 applyPwaDisplayMode();
-purgeFitSpaceServiceWorkerCache().then((shouldReload) => {
-  if (shouldReload) {
+
+async function bootstrapPwa() {
+  if (window.FIREBASE_CONFIG?.requireCloudAuth && !window.__appBootstrapFinished) {
+    const purged = await purgeStaleAppShellCache();
+    if (purged) {
+      window.location.reload();
+      return;
+    }
+  }
+
+  const fitspaceReload = await purgeFitSpaceServiceWorkerCache();
+  if (fitspaceReload) {
     window.location.reload();
     return;
   }
+
   registerServiceWorkerWhenReady();
-});
+}
+
+bootstrapPwa();

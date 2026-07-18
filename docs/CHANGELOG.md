@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 72 — 2026-07-18 — OAuth token login + cache bust
+
+### Fixed
+
+- Service Worker 캐시로 Build 70/71 JS가 남던 문제 — 스크립트 cache-bust + 로그인 전 SW/캐시 자동 삭제
+- GIS 실패 시 Redirect로 넘어가며 세션이 사라지던 문제 — OAuth Token Client fallback 추가, Redirect는 「대체」 버튼만
+- Google Cloud OAuth JavaScript origin 미설정 시 안내 메시지 추가
+
+---
+
 ## [1.3.0] — build 71 — 2026-07-18 — GIS-first login + redirect recovery
 
 ### Fixed

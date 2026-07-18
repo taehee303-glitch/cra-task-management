@@ -669,7 +669,9 @@ function showAuthGate(options = {}) {
   }
   if (els.authGateMeta) {
     const hostname = window.location.hostname || "unknown";
-    els.authGateMeta.textContent = `Build ${APP_BUILD} · ${hostname}`;
+    const diag = window.CloudSyncManager?.getAuthDiagnostics?.() || {};
+    const storageLabel = diag.storageOk === "blocked" ? " · 저장소 차단" : "";
+    els.authGateMeta.textContent = `Build ${APP_BUILD} · ${hostname}${storageLabel}`;
   }
 }
 
@@ -765,6 +767,7 @@ async function ensureCloudAuthBeforeBootstrap() {
     setBootStatus("로그인 확인 중…");
   }
   await CloudSyncManager.init();
+  await CloudSyncManager.syncCurrentAuthUser?.();
 
   if (!CloudSyncManager.isSignedIn() && CloudSyncManager.shouldRecoverRedirectAuth?.()) {
     setBootStatus("Google 로그인 확인 중…");
@@ -9239,7 +9242,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "71";
+const APP_BUILD = "72";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
