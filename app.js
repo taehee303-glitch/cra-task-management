@@ -510,6 +510,69 @@ const els = {
   authGateCacheRefreshBtn: document.getElementById("authGateCacheRefreshBtn"),
 };
 
+function removeStaleAuthGateSyncStatus() {
+  const stale = document.getElementById("authGateSyncStatus");
+  if (!stale) return;
+  if (/클라우드 데이터/.test(stale.textContent || "")) {
+    stale.remove();
+    els.authGateSyncStatus = null;
+    return;
+  }
+  stale.classList.remove("auth-gate__sync-status--active");
+  stale.hidden = true;
+}
+
+function ensureAuthGateSyncStatusElement() {
+  removeStaleAuthGateSyncStatus();
+  if (els.authGateSyncStatus) return els.authGateSyncStatus;
+
+  const panel = document.querySelector("#authGate .auth-gate__panel");
+  if (!panel) return null;
+
+  const el = document.createElement("p");
+  el.id = "authGateSyncStatus";
+  el.className = "auth-gate__sync-status";
+  el.hidden = true;
+  el.setAttribute("aria-live", "polite");
+
+  const debug = document.getElementById("authGateDebug");
+  if (debug) {
+    panel.insertBefore(el, debug);
+  } else {
+    panel.appendChild(el);
+  }
+
+  els.authGateSyncStatus = el;
+  return el;
+}
+
+function setAuthGateSyncMessage(message, active = false) {
+  if (!active) {
+    if (els.authGateSyncStatus) {
+      els.authGateSyncStatus.classList.remove("auth-gate__sync-status--active");
+      els.authGateSyncStatus.hidden = true;
+    }
+    return;
+  }
+
+  const el = ensureAuthGateSyncStatusElement();
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add("auth-gate__sync-status--active");
+  el.hidden = false;
+}
+
+function resetAuthGateIdleUi() {
+  setAuthGateSyncMessage("", false);
+  removeStaleAuthGateSyncStatus();
+  if (els.authGateSignInBtn && els.authGateSignInBtn.textContent === "로그인 중…") {
+    els.authGateSignInBtn.disabled = false;
+    els.authGateSignInBtn.textContent = "Google로 로그인";
+  }
+}
+
+removeStaleAuthGateSyncStatus();
+
 function notifyCloudSync(key) {
   window.CloudSyncManager?.notifyChange?.(key);
 }
@@ -686,7 +749,7 @@ function hidePostAuthBootSplash() {
 let authGateExitWatcherId = null;
 
 function resetAuthGateSignInUi(btn, prevLabel) {
-  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+  setAuthGateSyncMessage("", false);
   const button = btn || els.authGateSignInBtn;
   if (button) {
     button.disabled = false;
@@ -772,10 +835,7 @@ function startAuthGateExitWatcher({ buttonEl, prevLabel } = {}) {
 
 async function forceEnterDashboardFromAuthGate() {
   logAuthStepUi("Dashboard 건너뛰기 시도…");
-  if (els.authGateSyncStatus) {
-    els.authGateSyncStatus.textContent = "Dashboard 준비 중…";
-    els.authGateSyncStatus.hidden = false;
-  }
+  setAuthGateSyncMessage("Dashboard 준비 중…", true);
   const entered = await tryEnterAuthenticatedAppFromAuthGate();
   if (entered) return;
 
@@ -943,8 +1003,10 @@ function showAuthGate(options = {}) {
     els.authGateError.hidden = !errorText;
     els.authGateError.textContent = errorText;
   }
-  if (els.authGateSyncStatus) {
-    els.authGateSyncStatus.hidden = !options.syncing;
+  if (options.syncing && options.syncMessage) {
+    setAuthGateSyncMessage(options.syncMessage, true);
+  } else {
+    resetAuthGateIdleUi();
   }
   if (els.authGateHint) {
     const mobileHint = window.CloudSyncManager?.getMobileLoginHint?.() || "";
@@ -1010,7 +1072,7 @@ async function enterAuthenticatedApp() {
   try {
     loadAllFromLocalStorage();
     hideAuthOverlays();
-    if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+    setAuthGateSyncMessage("", false);
     showPostAuthBootSplash("Dashboard 준비 중…");
     logAuthStepUi("Dashboard 준비 중…");
     await finishAppBootstrapOnce();
@@ -1091,8 +1153,7 @@ function triggerCloudSignIn(buttonEl, options = {}) {
     els.authGateError.textContent = "";
   }
   if (els.authGateSyncStatus) {
-    els.authGateSyncStatus.textContent = "Google 계정 선택 중…";
-    els.authGateSyncStatus.hidden = false;
+    setAuthGateSyncMessage("Google 계정 선택 중…", true);
   }
 
   startAuthGateExitWatcher({ buttonEl: btn, prevLabel });
@@ -1177,7 +1238,7 @@ async function ensureCloudAuthBeforeBootstrap() {
   const persistedError = CloudSyncManager.consumePersistedAuthError?.() || "";
   showAuthGate({ error: persistedError || undefined });
   setBootStatus("");
-  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+  setAuthGateSyncMessage("", false);
   startAuthGateExitWatcher();
   await CloudSyncManager.waitUntilSignedIn();
   if (!CloudSyncManager.isSignedIn()) {
@@ -1309,6 +1370,8 @@ function initCloudSyncUi() {
 }
 
 function init() {
+  removeStaleAuthGateSyncStatus();
+  resetAuthGateIdleUi();
   ensureAuthGateEscapeHatches();
   bindAuthGateEscapeHandlers();
   applyUiScale();
@@ -9674,7 +9737,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "84";
+const APP_BUILD = "85";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

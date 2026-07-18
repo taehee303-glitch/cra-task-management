@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 85 — 2026-07-18 — Remove pre-login cloud loading message
+
+### Fixed
+
+- 로그인 **전** 「클라우드 데이터 불러오는 중…」 표시 (구버전 HTML 캐시) — 해당 요소 제거·자동 삭제
+- 동기화 상태 메시지는 **Google 로그인 클릭 후**에만 JS로 생성·표시
+- CSS로 기본 숨김 (`auth-gate__sync-status--active` 일 때만 표시)
+
+---
+
 ## [1.3.0] — build 84 — 2026-07-18 — Fixed skip button always visible at bottom
 
 ### Fixed

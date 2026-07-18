@@ -9922,10 +9922,15 @@ button.dashboard-v2__urgent-bucket:hover {
 }
 
 .auth-gate__sync-status {
+  display: none !important;
   margin: calc(16px * var(--ui-scale)) 0 0;
   font-size: calc(13px * var(--ui-scale));
   color: var(--primary);
   font-weight: 600;
+}
+
+.auth-gate__sync-status.auth-gate__sync-status--active {
+  display: block !important;
 }
 
 .auth-gate__meta {
