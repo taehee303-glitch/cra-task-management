@@ -583,11 +583,9 @@
     notifySignedInSyncReady();
 
     if (typeof state.signedInEntryCallback === "function") {
-      try {
-        await state.signedInEntryCallback(user);
-      } catch (err) {
+      void Promise.resolve(state.signedInEntryCallback(user)).catch((err) => {
         console.error("Signed-in entry callback failed:", err);
-      }
+      });
     }
 
     void runBackgroundCloudSync();

@@ -649,6 +649,34 @@ function setBootStatus(message) {
   if (els.appBootStatus) els.appBootStatus.textContent = message;
 }
 
+const BOOTSTRAP_TIMEOUT_MS = 20000;
+
+function withAppTimeout(promise, timeoutMs, timeoutMessage) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(timeoutMessage || "작업 시간이 초과되었습니다."));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
+function showPostAuthBootSplash(message) {
+  if (els.appBootSplash) {
+    els.appBootSplash.hidden = false;
+    els.appBootSplash.classList.remove("auth-gate--hidden");
+  }
+  setBootStatus(message || "Dashboard 준비 중…");
+}
+
+function hidePostAuthBootSplash() {
+  if (els.appBootSplash) {
+    els.appBootSplash.hidden = true;
+    els.appBootSplash.classList.add("auth-gate--hidden");
+  }
+}
+
 const APP_DIRECT_URLS = [
   "https://taehee303-glitch.github.io/cra-task-management/",
   "https://cra-task-management.web.app/",
@@ -793,14 +821,37 @@ function hideAuthOverlays() {
 async function enterAuthenticatedApp() {
   if (!window.CloudSyncManager?.isSignedIn?.()) return;
   if (window.__appBootstrapFinished) return;
-  if (window.__enterAppInProgress) return;
+  if (window.__enterAppInProgress) {
+    if (finishBootstrapPromise) await finishBootstrapPromise;
+    return;
+  }
 
   window.__enterAppInProgress = true;
   try {
     loadAllFromLocalStorage();
     hideAuthOverlays();
+    if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+    showPostAuthBootSplash("Dashboard 준비 중…");
+    logAuthStepUi("Dashboard 준비 중…");
     await finishAppBootstrapOnce();
+  } catch (err) {
+    console.error("Authenticated app entry failed:", err);
+    hideAuthOverlays();
+    const message =
+      err?.message || "앱을 시작하는 중 오류가 발생했습니다. Ctrl+Shift+R로 새로고침해 주세요.";
+    showToast(message.replace(/\n+/g, " "));
+    if (!window.__appBootstrapFinished) {
+      try {
+        renderAll();
+        window.__appBootstrapFinished = true;
+        window.dispatchEvent(new Event("app-ready"));
+      } catch (renderErr) {
+        console.error("Emergency render failed:", renderErr);
+        showAuthGate({ error: message });
+      }
+    }
   } finally {
+    hidePostAuthBootSplash();
     window.__enterAppInProgress = false;
   }
 }
@@ -866,9 +917,17 @@ function triggerCloudSignIn(buttonEl, options = {}) {
 
   return CloudSyncManager.signInWithGoogle(options)
     .then(async () => {
-      if (window.__appBootstrapFinished) {
-        await completeLoginFlow();
+      logAuthStepUi("로그인 성공 → Dashboard 준비 중…");
+      if (els.authGateSyncStatus) {
+        els.authGateSyncStatus.textContent = "Dashboard 준비 중…";
+        els.authGateSyncStatus.hidden = false;
       }
+      hideAuthOverlays();
+      if (!window.__appBootstrapFinished) {
+        await enterAuthenticatedApp();
+        return;
+      }
+      await completeLoginFlow();
     })
     .catch((err) => {
       console.error("Google login failed:", err);
@@ -953,6 +1012,9 @@ async function ensureCloudAuthBeforeBootstrap() {
       error: "Google 로그인이 완료되지 않았습니다. 다시 시도해 주세요.",
     });
     throw new Error("Login did not complete");
+  }
+  if (finishBootstrapPromise) {
+    await finishBootstrapPromise;
   }
 }
 
@@ -1098,6 +1160,8 @@ async function bootstrapApp() {
     await ensureCloudAuthBeforeBootstrap();
     if (!window.__appBootstrapFinished) {
       await enterAuthenticatedApp();
+    } else if (finishBootstrapPromise) {
+      await finishBootstrapPromise;
     }
   } catch (err) {
     if (CloudSyncManager?.isSignedIn?.()) {
@@ -1116,7 +1180,17 @@ async function finishAppBootstrapOnce() {
   if (finishBootstrapPromise) return finishBootstrapPromise;
 
   finishBootstrapPromise = (async () => {
-    await finishAppBootstrap();
+    try {
+      await withAppTimeout(
+        finishAppBootstrap(),
+        BOOTSTRAP_TIMEOUT_MS,
+        "앱 시작 시간이 초과되었습니다. 회사 네트워크가 느릴 수 있습니다 — Ctrl+Shift+R 후 다시 시도해 주세요."
+      );
+    } catch (err) {
+      console.error("App bootstrap failed:", err);
+      showToast(String(err?.message || err).replace(/\n+/g, " "));
+      throw err;
+    }
     window.__appBootstrapFinished = true;
     window.dispatchEvent(new Event("app-ready"));
   })().finally(() => {
@@ -9409,7 +9483,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "79";
+const APP_BUILD = "80";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

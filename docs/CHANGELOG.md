@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 80 — 2026-07-18 — Fix post-login bootstrap hang
+
+### Fixed
+
+- Google 로그인 성공 후 「클라우드 데이터 불러오는 중…」에서 멈추던 문제
+- `handleSignedIn`이 앱 bootstrap 완료까지 기다리며 로그인 UI가 해제되지 않던 병목
+- 로그인 직후 Dashboard 준비 splash 표시 + bootstrap 20초 타임아웃
+- bootstrap race — 로그인 콜백과 `bootstrapApp()`이 동시에 진입할 때 한쪽만 대기하던 문제
+
+---
+
 ## [1.3.0] — build 79 — 2026-07-18 — Mimecast corporate URL gateway warning
 
 ### Added
