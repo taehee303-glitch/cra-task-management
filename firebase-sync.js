@@ -34,6 +34,7 @@
     authInProgress: false,
     suppressSignOutUntil: 0,
     initialAuthNullSeen: false,
+    signInWaiters: [],
   };
 
   function isAuthInProgress() {
@@ -143,6 +144,32 @@
           reject(err);
         });
     });
+  }
+
+  function waitUntilSignedIn(timeoutMs = 0) {
+    if (isSignedIn()) {
+      return Promise.resolve(state.user);
+    }
+
+    const waitPromise = new Promise((resolve, reject) => {
+      state.signInWaiters.push({ resolve, reject });
+    });
+
+    if (!timeoutMs) return waitPromise;
+
+    return withTimeout(waitPromise, timeoutMs, {
+      code: "auth/timeout",
+      message: "Google 로그인 확인 시간이 초과되었습니다. 다시 시도해 주세요.",
+    });
+  }
+
+  function notifySignedInWaiters() {
+    if (!isSignedIn()) return;
+    state.signInWaiters.splice(0).forEach((entry) => entry.resolve(state.user));
+  }
+
+  function rejectSignedInWaiters(err) {
+    state.signInWaiters.splice(0).forEach((entry) => entry.reject(err));
   }
 
   function waitUntilSignedInAndSynced(timeoutMs = 30000) {
@@ -544,6 +571,7 @@
     state.ready = true;
     state.suppressSignOutUntil = Date.now() + 15000;
     notifyUi();
+    notifySignedInWaiters();
     notifySignedInSyncReady();
 
     void runBackgroundCloudSync();
@@ -558,6 +586,10 @@
     state.ready = false;
     state.pendingKeys.clear();
     clearTimeout(state.debounceTimer);
+    rejectSignedInWaiters({
+      code: "auth/signed-out",
+      message: "로그아웃되었습니다.",
+    });
     notifyUi();
   }
 
@@ -608,17 +640,24 @@
         sessionStorage.removeItem(REDIRECT_PENDING_KEY);
 
         if (redirectResult?.error) {
+          persistAuthError(redirectResult.error);
           reportAuthError(formatAuthError(redirectResult.error));
         } else if (redirectResult?.user) {
           await handleSignedIn(redirectResult.user);
         } else if (hasPendingAuthRedirect()) {
+          persistAuthError({
+            code: "auth/redirect-result-missing",
+            message:
+              "Google 로그인 결과를 불러오지 못했습니다. 브라우저 쿠키·사이트 데이터를 허용한 뒤 다시 시도해 주세요.",
+          });
           reportAuthError(
-            "Google 로그인 결과를 불러오지 못했습니다. Chrome에서 사이트 데이터를 삭제한 뒤 다시 시도해 주세요."
+            "Google 로그인 결과를 불러오지 못했습니다. Chrome에서 사이트 데이터/쿠키를 허용한 뒤 다시 시도해 주세요."
           );
         }
       } catch (err) {
         sessionStorage.removeItem(REDIRECT_PENDING_KEY);
         console.warn("Firebase redirect sign-in result failed:", err);
+        persistAuthError(err);
         reportAuthError(formatAuthError(err));
       }
 
@@ -809,8 +848,26 @@
 
   function getSignInStrategy() {
     if (isInAppBrowser()) return "blocked-in-app";
-    if (getGoogleWebClientId()) return "gis";
-    return "popup-first";
+    return "redirect";
+  }
+
+  function persistAuthError(err) {
+    try {
+      const message = formatAuthError(err);
+      sessionStorage.setItem("cra-last-auth-error", message);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function consumePersistedAuthError() {
+    try {
+      const message = sessionStorage.getItem("cra-last-auth-error");
+      sessionStorage.removeItem("cra-last-auth-error");
+      return message || "";
+    } catch {
+      return "";
+    }
   }
 
   function shouldUseRedirectSignIn() {
@@ -849,6 +906,8 @@
         "모바일 Google 로그인 설정이 필요합니다. Firebase Console → Authentication → Google → Web client ID 를 firebase-config.js 의 googleWebClientId 에 입력해 주세요.",
       "auth/timeout":
         "Google 로그인 확인 시간이 초과되었습니다. 팝업 차단·회사 보안 정책·네트워크를 확인한 뒤 다시 시도해 주세요.",
+      "auth/redirect-result-missing":
+        "Google 로그인 결과를 불러오지 못했습니다. 브라우저 쿠키·사이트 데이터를 허용한 뒤 다시 시도해 주세요.",
       "auth/sync-timeout":
         "클라우드 동기화 시간이 초과되었습니다. Firebase Firestore Rules 배포와 네트워크 연결을 확인해 주세요.",
       "permission-denied":
@@ -892,6 +951,7 @@
     }
 
     setAuthInProgress(true);
+    let redirectStarted = false;
     try {
       await unregisterServiceWorkersForAuth();
 
@@ -903,6 +963,12 @@
 
       if (strategy === "blocked-in-app") {
         throw { code: "auth/blocked-in-app", message: mobileHint };
+      }
+
+      if (strategy === "redirect") {
+        await signInWithRedirectFlow(provider);
+        redirectStarted = true;
+        return new Promise(() => {});
       }
 
       if (strategy === "gis") {
@@ -930,7 +996,9 @@
       }
       return waitUntilSignedInAndSynced();
     } finally {
-      setAuthInProgress(false);
+      if (!redirectStarted) {
+        setAuthInProgress(false);
+      }
     }
   }
 
@@ -946,6 +1014,7 @@
     isActive,
     requiresAuth,
     waitForInitialAuth,
+    waitUntilSignedIn,
     waitUntilSignedInAndSynced,
     registerSources,
     setRefreshCallback,
@@ -958,5 +1027,7 @@
     setAuthErrorCallback,
     hasPendingAuthRedirect,
     isAuthInProgress,
+    consumePersistedAuthError,
+    persistAuthError,
   };
 })();

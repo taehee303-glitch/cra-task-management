@@ -74,6 +74,14 @@ function registerServiceWorker() {
   });
 }
 
+function registerServiceWorkerWhenReady() {
+  if (window.FIREBASE_CONFIG?.requireCloudAuth && !window.__appBootstrapFinished) {
+    window.addEventListener("app-ready", registerServiceWorker, { once: true });
+    return;
+  }
+  registerServiceWorker();
+}
+
 function applyPwaDisplayMode() {
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -87,5 +95,5 @@ purgeFitSpaceServiceWorkerCache().then((shouldReload) => {
     window.location.reload();
     return;
   }
-  registerServiceWorker();
+  registerServiceWorkerWhenReady();
 });

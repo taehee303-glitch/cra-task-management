@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 70 — 2026-07-18 — Redirect login for corporate PC
+
+### Fixed
+
+- Google 로그인을 **Redirect 방식**으로 전환 (회사 PC 팝업 차단·쿠키 제한 환경 대응)
+- 로그인 화면 대기 중 30초 타임아웃으로 초기화가 끊기던 문제 — 로그인 완료까지 무제한 대기
+- Redirect 복귀 시 로그인 실패 원인을 화면에 표시 (쿠키 차단·도메인 미등록 등)
+- Service Worker 등록을 로그인 완료 후로 지연 (인증 중 reload 방지)
+
+---
+
 ## [1.3.0] — build 69 — 2026-07-18 — Login session stability fix
 
 ### Fixed

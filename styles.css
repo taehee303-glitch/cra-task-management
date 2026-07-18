@@ -9841,6 +9841,13 @@ button.dashboard-v2__urgent-bucket:hover {
   font-weight: 600;
 }
 
+.auth-gate__meta {
+  margin: calc(20px * var(--ui-scale)) 0 0;
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--text-muted, #94a3b8);
+  letter-spacing: 0.02em;
+}
+
 .workspace--locked {
   visibility: hidden;
 }
