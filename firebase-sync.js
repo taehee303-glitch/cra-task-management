@@ -25,6 +25,7 @@
     uiCallback: null,
     authErrorCallback: null,
     signedInEntryCallback: null,
+    authStepCallback: null,
     ready: false,
     syncing: false,
     gisInitialized: false,
@@ -997,8 +998,20 @@
     return "native-first";
   }
 
+  function setAuthStepCallback(fn) {
+    state.authStepCallback = typeof fn === "function" ? fn : null;
+  }
+
   function logAuthStep(message) {
-    persistAuthStatus(String(message || ""));
+    const text = String(message || "");
+    persistAuthStatus(text);
+    if (state.authStepCallback) {
+      try {
+        state.authStepCallback(text);
+      } catch (err) {
+        console.warn("Auth step callback failed:", err);
+      }
+    }
   }
 
   async function checkFirebaseConnectivity() {
@@ -1417,6 +1430,7 @@
     getMobileLoginHint,
     setAuthErrorCallback,
     setSignedInEntryCallback,
+    setAuthStepCallback,
     hasPendingAuthRedirect,
     isAuthInProgress,
     consumePersistedAuthError,

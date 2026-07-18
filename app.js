@@ -646,15 +646,21 @@ function setBootStatus(message) {
   if (els.appBootStatus) els.appBootStatus.textContent = message;
 }
 
+function logAuthStepUi(message) {
+  const text = String(message || "");
+  if (els.authGateDebug) {
+    els.authGateDebug.hidden = false;
+    els.authGateDebug.textContent = text || "로그인 대기 중…";
+  }
+  if (els.appBootStatus && els.appBootSplash && !els.appBootSplash.hidden) {
+    els.appBootStatus.textContent = text || "시작 중…";
+  }
+}
+
 function logAuthStep(message) {
   const text = String(message || "");
-  if (window.CloudSyncManager?.logAuthStep) {
-    CloudSyncManager.logAuthStep(text);
-  }
-  if (els.authGateDebug) {
-    els.authGateDebug.hidden = !text;
-    els.authGateDebug.textContent = text;
-  }
+  logAuthStepUi(text);
+  window.CloudSyncManager?.logAuthStep?.(text);
 }
 
 function showAuthGate(options = {}) {
@@ -683,6 +689,9 @@ function showAuthGate(options = {}) {
     els.authGateHint.textContent = mobileHint || redirectHint;
     els.authGateHint.hidden = false;
   }
+  const debugText =
+    window.CloudSyncManager?.getAuthStatus?.() || "로그인 대기 중…";
+  logAuthStepUi(debugText);
   if (els.authGateMeta) {
     const hostname = window.location.hostname || "unknown";
     const diag = window.CloudSyncManager?.getAuthDiagnostics?.() || {};
@@ -880,6 +889,10 @@ function initCloudSyncUi() {
   CloudSyncManager.setSignedInEntryCallback?.((user) => {
     if (!CloudSyncManager.requiresAuth?.()) return;
     void enterAuthenticatedApp();
+  });
+
+  CloudSyncManager.setAuthStepCallback?.((text) => {
+    logAuthStepUi(text);
   });
 
   let wasSignedIn = CloudSyncManager.isSignedIn();
@@ -9317,7 +9330,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "76";
+const APP_BUILD = "77";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

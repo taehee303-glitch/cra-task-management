@@ -17,6 +17,15 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 77 — 2026-07-18 — Fix auth debug panel visibility
+
+### Fixed
+
+- 로그인 단계 메시지가 화면에 안 보이던 버그 — `authGateDebug` UI 콜백 연결
+- HTML에 `Build 77 · 준비 중…` 기본 표시 (캐시 확인용)
+
+---
+
 ## [1.3.0] — build 76 — 2026-07-18 — Auth diagnostics + Firebase Hosting
 
 ### Added
