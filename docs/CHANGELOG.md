@@ -17,6 +17,15 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 78 — 2026-07-18 — Fix auth gate not hiding after login
+
+### Fixed
+
+- **로그인 성공 후에도 로그인 화면이 남던 CSS 버그** — `.auth-gate { display:flex }` 가 `[hidden]` 을 무시하던 문제
+- 로그인 성공 시 Dashboard 즉시 표시 (`auth-gate--hidden` + `!important`)
+
+---
+
 ## [1.3.0] — build 77 — 2026-07-18 — Fix auth debug panel visibility
 
 ### Fixed

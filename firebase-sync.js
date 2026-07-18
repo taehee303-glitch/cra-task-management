@@ -584,7 +584,7 @@
 
     if (typeof state.signedInEntryCallback === "function") {
       try {
-        void state.signedInEntryCallback(user);
+        await state.signedInEntryCallback(user);
       } catch (err) {
         console.error("Signed-in entry callback failed:", err);
       }

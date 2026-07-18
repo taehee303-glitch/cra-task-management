@@ -9765,6 +9765,11 @@ button.dashboard-v2__urgent-bucket:hover {
 }
 
 /* Auth gate — mandatory cloud login */
+.auth-gate[hidden],
+.auth-gate.auth-gate--hidden {
+  display: none !important;
+}
+
 .auth-gate {
   position: fixed;
   inset: 0;

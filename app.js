@@ -667,6 +667,7 @@ function showAuthGate(options = {}) {
   if (els.appBootSplash) els.appBootSplash.hidden = true;
   if (els.authGate) {
     els.authGate.hidden = false;
+    els.authGate.classList.remove("auth-gate--hidden");
   }
   if (els.workspace) {
     els.workspace.hidden = true;
@@ -714,8 +715,14 @@ function showAuthGate(options = {}) {
 }
 
 function hideAuthOverlays() {
-  if (els.appBootSplash) els.appBootSplash.hidden = true;
-  if (els.authGate) els.authGate.hidden = true;
+  if (els.appBootSplash) {
+    els.appBootSplash.hidden = true;
+    els.appBootSplash.classList.add("auth-gate--hidden");
+  }
+  if (els.authGate) {
+    els.authGate.hidden = true;
+    els.authGate.classList.add("auth-gate--hidden");
+  }
   if (els.workspace) {
     els.workspace.hidden = false;
     els.workspace.classList.remove("workspace--locked");
@@ -886,9 +893,9 @@ function initCloudSyncUi() {
     return;
   }
 
-  CloudSyncManager.setSignedInEntryCallback?.((user) => {
+  CloudSyncManager.setSignedInEntryCallback?.(async () => {
     if (!CloudSyncManager.requiresAuth?.()) return;
-    void enterAuthenticatedApp();
+    await enterAuthenticatedApp();
   });
 
   CloudSyncManager.setAuthStepCallback?.((text) => {
@@ -9330,7 +9337,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "77";
+const APP_BUILD = "78";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
