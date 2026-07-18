@@ -24,6 +24,7 @@
     refreshCallback: null,
     uiCallback: null,
     authErrorCallback: null,
+    signedInEntryCallback: null,
     ready: false,
     syncing: false,
     gisInitialized: false,
@@ -35,6 +36,8 @@
     suppressSignOutUntil: 0,
     initialAuthNullSeen: false,
     persistenceMode: null,
+    everAuthenticatedThisPage: false,
+    pageLoadedAt: Date.now(),
     signInWaiters: [],
   };
 
@@ -568,13 +571,23 @@
       return;
     }
 
+    state.everAuthenticatedThisPage = true;
     state.user = user;
     state.ready = true;
-    state.suppressSignOutUntil = Date.now() + 60000;
+    state.suppressSignOutUntil = Date.now() + 120000;
+    clearPersistedAuthError();
     persistAuthStatus(`signed-in:${user.uid}`);
     notifyUi();
     notifySignedInWaiters();
     notifySignedInSyncReady();
+
+    if (typeof state.signedInEntryCallback === "function") {
+      try {
+        void state.signedInEntryCallback(user);
+      } catch (err) {
+        console.error("Signed-in entry callback failed:", err);
+      }
+    }
 
     void runBackgroundCloudSync();
   }
@@ -586,6 +599,7 @@
       void syncCurrentAuthUser();
       return;
     }
+    if (!state.everAuthenticatedThisPage && !state.user) return;
 
     stopListeners();
     state.user = null;
@@ -593,11 +607,13 @@
     state.pendingKeys.clear();
     clearTimeout(state.debounceTimer);
     persistAuthStatus("signed-out");
-    persistAuthError({
-      code: "auth/session-lost",
-      message:
-        "로그인 세션이 유지되지 않았습니다. Chrome에서 taehee303-glitch.github.io 쿠키·사이트 데이터를 허용한 뒤 다시 로그인해 주세요.",
-    });
+    if (state.everAuthenticatedThisPage) {
+      persistAuthError({
+        code: "auth/session-lost",
+        message:
+          "로그인 세션이 유지되지 않았습니다. Chrome에서 taehee303-glitch.github.io 쿠키·사이트 데이터를 허용한 뒤 다시 로그인해 주세요.",
+      });
+    }
     rejectSignedInWaiters({
       code: "auth/signed-out",
       message: "로그아웃되었습니다.",
@@ -613,6 +629,7 @@
   }
 
   async function init() {
+    clearStaleAuthMessages();
     if (!isConfigured()) {
       notifyUi();
       markInitialAuthResolved();
@@ -901,10 +918,27 @@
 
       state.gisCredentialHandler = async (response) => {
         try {
+          if (!response?.credential) {
+            throw {
+              code: "auth/invalid-credential",
+              message: "Google 계정 정보를 받지 못했습니다. 다시 시도해 주세요.",
+            };
+          }
           const credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
-          await state.auth.signInWithCredential(credential);
+          const result = await state.auth.signInWithCredential(credential);
+          const user = result?.user || state.auth.currentUser;
+          if (!user) {
+            throw {
+              code: "auth/invalid-credential",
+              message:
+                "Firebase에 Google 계정을 연결하지 못했습니다. Google Cloud OAuth 설정을 확인해 주세요.",
+            };
+          }
+          sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+          await handleSignedIn(user);
           finish(null);
         } catch (err) {
+          persistAuthError(err);
           finish(err);
         }
       };
@@ -946,13 +980,30 @@
   function getSignInStrategy(options = {}) {
     if (isInAppBrowser()) return "blocked-in-app";
     if (options.forceRedirect) return "redirect";
-    if (getGoogleWebClientId()) return "gis-first";
-    return "redirect";
+    return "native-first";
+  }
+
+  function setSignedInEntryCallback(fn) {
+    state.signedInEntryCallback = typeof fn === "function" ? fn : null;
+  }
+
+  function clearStaleAuthMessages() {
+    try {
+      const ts = Number(localStorage.getItem("cra-last-auth-error-ts") || "0");
+      if (ts && Date.now() - ts > 10 * 60 * 1000) {
+        localStorage.removeItem("cra-last-auth-error");
+        localStorage.removeItem("cra-last-auth-error-ts");
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   function persistAuthError(err) {
     try {
       const message = formatAuthError(err);
+      localStorage.setItem("cra-last-auth-error", message);
+      localStorage.setItem("cra-last-auth-error-ts", String(Date.now()));
       sessionStorage.setItem("cra-last-auth-error", message);
     } catch {
       /* ignore */
@@ -961,7 +1012,10 @@
 
   function consumePersistedAuthError() {
     try {
-      const message = sessionStorage.getItem("cra-last-auth-error");
+      const message =
+        sessionStorage.getItem("cra-last-auth-error") ||
+        localStorage.getItem("cra-last-auth-error") ||
+        "";
       sessionStorage.removeItem("cra-last-auth-error");
       return message || "";
     } catch {
@@ -971,9 +1025,23 @@
 
   function peekPersistedAuthError() {
     try {
-      return sessionStorage.getItem("cra-last-auth-error") || "";
+      return (
+        sessionStorage.getItem("cra-last-auth-error") ||
+        localStorage.getItem("cra-last-auth-error") ||
+        ""
+      );
     } catch {
       return "";
+    }
+  }
+
+  function clearPersistedAuthError() {
+    try {
+      sessionStorage.removeItem("cra-last-auth-error");
+      localStorage.removeItem("cra-last-auth-error");
+      localStorage.removeItem("cra-last-auth-error-ts");
+    } catch {
+      /* ignore */
     }
   }
 
@@ -1103,9 +1171,19 @@
                 null,
                 tokenResponse.access_token
               );
-              await state.auth.signInWithCredential(credential);
+              const result = await state.auth.signInWithCredential(credential);
+              const user = result?.user || state.auth.currentUser;
+              if (!user) {
+                throw {
+                  code: "auth/invalid-credential",
+                  message: "Firebase에 Google 계정을 연결하지 못했습니다.",
+                };
+              }
+              sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+              await handleSignedIn(user);
               finish(null);
             } catch (err) {
+              persistAuthError(err);
               finish(err);
             }
           },
@@ -1183,6 +1261,39 @@
 
       if (strategy === "blocked-in-app") {
         throw { code: "auth/blocked-in-app", message: mobileHint };
+      }
+
+      if (strategy === "native-first") {
+        try {
+          const popupResult = await state.auth.signInWithPopup(provider);
+          if (popupResult?.user) {
+            await handleSignedIn(popupResult.user);
+          }
+          await waitForAuthUser(10000);
+          return waitUntilSignedInAndSynced();
+        } catch (err) {
+          if (err?.code === "auth/popup-closed-by-user") throw err;
+          console.warn("Popup sign-in failed, trying GIS:", err);
+        }
+
+        try {
+          await signInWithGoogleGisModal();
+          await waitForAuthUser(30000);
+          return waitUntilSignedInAndSynced();
+        } catch (err) {
+          if (err?.code === "auth/popup-closed-by-user") throw err;
+          console.warn("GIS sign-in failed, trying OAuth token client:", err);
+        }
+
+        try {
+          await signInWithGoogleOAuthToken();
+          await waitForAuthUser(30000);
+          return waitUntilSignedInAndSynced();
+        } catch (err) {
+          if (err?.code === "auth/popup-closed-by-user") throw err;
+          persistAuthError(err);
+          throw err;
+        }
       }
 
       if (strategy === "gis-first") {
@@ -1266,6 +1377,7 @@
     formatAuthError,
     getMobileLoginHint,
     setAuthErrorCallback,
+    setSignedInEntryCallback,
     hasPendingAuthRedirect,
     isAuthInProgress,
     consumePersistedAuthError,

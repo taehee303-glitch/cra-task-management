@@ -496,7 +496,6 @@ const els = {
   authGateHint: document.getElementById("authGateHint"),
   authGateError: document.getElementById("authGateError"),
   authGateMeta: document.getElementById("authGateMeta"),
-  authGateRedirectBtn: document.getElementById("authGateRedirectBtn"),
   authGateSyncStatus: document.getElementById("authGateSyncStatus"),
 };
 
@@ -690,6 +689,21 @@ function hideAuthOverlays() {
   }
 }
 
+async function enterAuthenticatedApp() {
+  if (!window.CloudSyncManager?.isSignedIn?.()) return;
+  if (window.__appBootstrapFinished) return;
+  if (window.__enterAppInProgress) return;
+
+  window.__enterAppInProgress = true;
+  try {
+    loadAllFromLocalStorage();
+    hideAuthOverlays();
+    await finishAppBootstrapOnce();
+  } finally {
+    window.__enterAppInProgress = false;
+  }
+}
+
 async function completeLoginFlow() {
   if (!window.CloudSyncManager?.isSignedIn?.()) return;
   if (window.__appBootstrapInProgress) return;
@@ -839,6 +853,11 @@ function initCloudSyncUi() {
     return;
   }
 
+  CloudSyncManager.setSignedInEntryCallback?.((user) => {
+    if (!CloudSyncManager.requiresAuth?.()) return;
+    void enterAuthenticatedApp();
+  });
+
   let wasSignedIn = CloudSyncManager.isSignedIn();
 
   const updateCloudSyncUi = ({ configured, signedIn, syncing, user }) => {
@@ -919,16 +938,6 @@ function initCloudSyncUi() {
     });
   });
 
-  els.authGateRedirectBtn?.addEventListener("click", () => {
-    if (els.authGateSyncStatus) {
-      els.authGateSyncStatus.textContent = "Google 로그인 페이지로 이동 중…";
-      els.authGateSyncStatus.hidden = false;
-    }
-    triggerCloudSignIn(els.authGateRedirectBtn, { forceRedirect: true }).catch(() => {
-      /* inline error */
-    });
-  });
-
   els.cloudSignOutBtn?.addEventListener("click", () => {
     CloudSyncManager.signOut().catch((err) => {
       console.error("Sign out failed:", err);
@@ -971,9 +980,9 @@ async function bootstrapApp() {
 
   try {
     await ensureCloudAuthBeforeBootstrap();
-    loadAllFromLocalStorage();
-    hideAuthOverlays();
-    await finishAppBootstrapOnce();
+    if (!window.__appBootstrapFinished) {
+      await enterAuthenticatedApp();
+    }
   } catch (err) {
     if (CloudSyncManager?.isSignedIn?.()) {
       hideAuthOverlays();
@@ -9284,7 +9293,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "74";
+const APP_BUILD = "75";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 75 — 2026-07-18 — Immediate dashboard entry after auth
+
+### Fixed
+
+- Google 로그인 성공 직후 Dashboard 즉시 진입 (`setSignedInEntryCallback`)
+- Redirect(페이지 이동) 로그인 버튼 제거 — 세션이 끊기는 주된 원인
+- 로그인 순서: Firebase Popup → GIS → OAuth Token (같은 페이지 유지)
+- `requireCloudAuth` 모드에서 Service Worker 완전 비활성화
+- 페이지 로드 직후 `signed-out` 오탐 제거, 실제 로그인 시도 후에만 세션 오류 표시
+
+---
+
 ## [1.3.0] — build 74 — 2026-07-18 — Fix silent session loss after login
 
 ### Fixed

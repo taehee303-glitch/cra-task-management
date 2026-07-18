@@ -73,47 +73,6 @@ async function purgeFitSpaceServiceWorkerCache() {
   return shouldReload;
 }
 
-function registerServiceWorkerNow() {
-  if (!("serviceWorker" in navigator)) return;
-  if (location.protocol !== "http:" && location.protocol !== "https:") return;
-  if (hasPendingAuthRedirect()) return;
-
-  navigator.serviceWorker
-    .register("./service-worker.js?v=74", { scope: "./", updateViaCache: "none" })
-    .catch((error) => {
-      console.warn("Service Worker 등록 실패:", error);
-    });
-}
-
-function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
-  if (location.protocol !== "http:" && location.protocol !== "https:") return;
-  if (hasPendingAuthRedirect()) return;
-
-  if (document.readyState === "complete") {
-    registerServiceWorkerNow();
-    return;
-  }
-
-  window.addEventListener("load", registerServiceWorkerNow, { once: true });
-}
-
-function registerServiceWorkerWhenReady() {
-  if (window.FIREBASE_CONFIG?.requireCloudAuth) {
-    if (!window.__appBootstrapFinished) {
-      window.addEventListener(
-        "app-ready",
-        () => {
-          window.setTimeout(registerServiceWorkerNow, 8000);
-        },
-        { once: true }
-      );
-    }
-    return;
-  }
-  registerServiceWorker();
-}
-
 function applyPwaDisplayMode() {
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -124,26 +83,30 @@ function applyPwaDisplayMode() {
 applyPwaDisplayMode();
 
 async function bootstrapPwa() {
-  if (hasPendingAuthRedirect()) {
-    registerServiceWorkerWhenReady();
+  if (window.FIREBASE_CONFIG?.requireCloudAuth) {
+    try {
+      const regs = await navigator.serviceWorker?.getRegistrations?.();
+      if (regs?.length) {
+        await Promise.all(regs.map((reg) => reg.unregister()));
+      }
+    } catch (error) {
+      console.warn("Service Worker cleanup for auth mode failed:", error);
+    }
     return;
   }
 
-  if (window.FIREBASE_CONFIG?.requireCloudAuth && !window.__appBootstrapFinished) {
-    const purged = await purgeStaleAppShellCache();
-    if (purged) {
-      window.location.reload();
-      return;
-    }
+  if (hasPendingAuthRedirect()) return;
+
+  const purged = await purgeStaleAppShellCache();
+  if (purged) {
+    window.location.reload();
+    return;
   }
 
   const fitspaceReload = await purgeFitSpaceServiceWorkerCache();
   if (fitspaceReload) {
     window.location.reload();
-    return;
   }
-
-  registerServiceWorkerWhenReady();
 }
 
 bootstrapPwa();
