@@ -226,6 +226,32 @@
     return Boolean(cfg.apiKey && cfg.authDomain && cfg.projectId && cfg.appId);
   }
 
+  async function assertSignedInAfterLoginFlow(timeoutMs = 12000) {
+    if (isSignedIn() && state.ready) return state.user;
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (state.auth?.currentUser) {
+        if (!isSignedIn() || !state.ready) {
+          await handleSignedIn(state.auth.currentUser);
+        }
+        if (isSignedIn()) return state.user;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    if (state.auth?.currentUser) {
+      await handleSignedIn(state.auth.currentUser);
+      if (isSignedIn()) return state.user;
+    }
+
+    throw {
+      code: "auth/timeout",
+      message:
+        "Google 로그인 확인 시간이 초과되었습니다. VPN이 느리면 「Dashboard 건너뛰기」를 눌러 보세요.",
+    };
+  }
+
   function isSignedIn() {
     return Boolean(state.user);
   }
@@ -1017,6 +1043,8 @@
     if (!cfg?.apiKey) return { ok: false, message: "Firebase API key missing" };
 
     try {
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${encodeURIComponent(cfg.apiKey)}`,
         {
@@ -1026,8 +1054,10 @@
             continueUri: window.location.origin + window.location.pathname,
             providerId: "google.com",
           }),
+          signal: controller.signal,
         }
       );
+      clearTimeout(abortTimer);
       const data = await response.json();
       if (!response.ok) {
         return {
@@ -1328,8 +1358,7 @@
         logAuthStep("Google 계정 선택 창 열기…");
         try {
           await signInWithGoogleGisModal();
-          await waitForAuthUser(30000);
-          return waitUntilSignedInAndSynced();
+          return assertSignedInAfterLoginFlow(12000);
         } catch (err) {
           if (err?.code === "auth/popup-closed-by-user") throw err;
           logAuthStep(`GIS 실패 → OAuth Token 시도…`);
@@ -1337,8 +1366,7 @@
 
         try {
           await signInWithGoogleOAuthToken();
-          await waitForAuthUser(30000);
-          return waitUntilSignedInAndSynced();
+          return assertSignedInAfterLoginFlow(12000);
         } catch (err) {
           if (err?.code === "auth/popup-closed-by-user") throw err;
           persistAuthError(err);
@@ -1349,8 +1377,7 @@
       if (strategy === "gis-first") {
         try {
           await signInWithGoogleGisModal();
-          await waitForAuthUser(30000);
-          return waitUntilSignedInAndSynced();
+          return assertSignedInAfterLoginFlow(12000);
         } catch (err) {
           if (err?.code === "auth/popup-closed-by-user") throw err;
           console.warn("GIS sign-in failed, trying OAuth token client:", err);
@@ -1358,8 +1385,7 @@
 
         try {
           await signInWithGoogleOAuthToken();
-          await waitForAuthUser(30000);
-          return waitUntilSignedInAndSynced();
+          return assertSignedInAfterLoginFlow(12000);
         } catch (err) {
           if (err?.code === "auth/popup-closed-by-user") throw err;
           persistAuthError(err);
@@ -1375,8 +1401,7 @@
 
       if (strategy === "gis") {
         await signInWithGoogleGisModal();
-        await waitForAuthUser();
-        return waitUntilSignedInAndSynced();
+        return assertSignedInAfterLoginFlow(12000);
       }
 
       try {
@@ -1385,18 +1410,12 @@
         if (err?.code === "auth/popup-closed-by-user") throw err;
         if (getGoogleWebClientId()) {
           await signInWithGoogleGisModal();
-          await waitForAuthUser();
-          return waitUntilSignedInAndSynced();
+          return assertSignedInAfterLoginFlow(12000);
         }
         throw err;
       }
 
-      await waitForAuthUser();
-      if (!state.auth.currentUser && getGoogleWebClientId()) {
-        await signInWithGoogleGisModal();
-        await waitForAuthUser();
-      }
-      return waitUntilSignedInAndSynced();
+      return assertSignedInAfterLoginFlow(12000);
     } finally {
       if (!redirectStarted) {
         setAuthInProgress(false);

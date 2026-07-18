@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 81 — 2026-07-18 — VPN slow network login unblock
+
+### Fixed
+
+- VPN/느린 네트워크에서 「로그인 중…」「클라우드 데이터 불러오는 중…」 무한 대기
+- 로그인 상태 **폴링 감시** — Firebase 인증만 확인되면 즉시 Dashboard 진입 (signInWithGoogle Promise 대기 안 함)
+- 8초 후 「Dashboard 건너뛰기」 버튼 표시
+- Calendar·Reminder·IRB 암호화 마이그레이션을 bootstrap **백그라운드**로 이동 (VPN에서 Dashboard 더 빨리 열림)
+- `signInWithGoogle`에서 Firestore 동기화 대기 제거
+
+---
+
 ## [1.3.0] — build 80 — 2026-07-18 — Fix post-login bootstrap hang
 
 ### Fixed

@@ -9846,6 +9846,13 @@ button.dashboard-v2__urgent-bucket:hover {
   line-height: 1.45;
 }
 
+.auth-gate__skip {
+  display: block;
+  width: 100%;
+  margin-top: calc(10px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
+}
+
 .auth-gate__sync-status {
   margin: calc(16px * var(--ui-scale)) 0 0;
   font-size: calc(13px * var(--ui-scale));

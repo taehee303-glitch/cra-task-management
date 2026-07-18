@@ -502,6 +502,7 @@ const els = {
   authGateCorpWarning: document.getElementById("authGateCorpWarning"),
   authGateCorpHost: document.getElementById("authGateCorpHost"),
   authGateDirectUrl: document.getElementById("authGateDirectUrl"),
+  authGateSkipBtn: document.getElementById("authGateSkipBtn"),
 };
 
 function notifyCloudSync(key) {
@@ -675,6 +676,88 @@ function hidePostAuthBootSplash() {
     els.appBootSplash.hidden = true;
     els.appBootSplash.classList.add("auth-gate--hidden");
   }
+}
+
+let authGateExitWatcherId = null;
+
+function resetAuthGateSignInUi(btn, prevLabel) {
+  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+  const button = btn || els.authGateSignInBtn;
+  if (button) {
+    button.disabled = false;
+    button.textContent = prevLabel || "Google로 로그인";
+  }
+}
+
+function stopAuthGateExitWatcher() {
+  if (authGateExitWatcherId) {
+    clearInterval(authGateExitWatcherId);
+    authGateExitWatcherId = null;
+  }
+  if (els.authGateSkipBtn) els.authGateSkipBtn.hidden = true;
+}
+
+async function tryEnterAuthenticatedAppFromAuthGate() {
+  await window.CloudSyncManager?.syncCurrentAuthUser?.();
+  if (!window.CloudSyncManager?.isSignedIn?.()) return false;
+
+  stopAuthGateExitWatcher();
+  resetAuthGateSignInUi();
+  logAuthStepUi("로그인 확인됨 → Dashboard 진입…");
+  hideAuthOverlays();
+  if (!window.__appBootstrapFinished) {
+    await enterAuthenticatedApp();
+  } else {
+    await completeLoginFlow();
+  }
+  return true;
+}
+
+function startAuthGateExitWatcher({ buttonEl, prevLabel } = {}) {
+  stopAuthGateExitWatcher();
+  const startedAt = Date.now();
+  const btn = buttonEl || els.authGateSignInBtn;
+  const label = prevLabel ?? btn?.textContent;
+
+  authGateExitWatcherId = setInterval(() => {
+    void (async () => {
+      if (!window.CloudSyncManager?.requiresAuth?.()) {
+        stopAuthGateExitWatcher();
+        return;
+      }
+
+      const elapsed = Date.now() - startedAt;
+
+      if (elapsed >= 8000 && els.authGateSkipBtn) {
+        els.authGateSkipBtn.hidden = false;
+      }
+
+      if (await tryEnterAuthenticatedAppFromAuthGate()) {
+        resetAuthGateSignInUi(btn, label);
+        return;
+      }
+
+      if (elapsed >= 50000) {
+        stopAuthGateExitWatcher();
+        resetAuthGateSignInUi(btn, label);
+        if (els.authGateError) {
+          els.authGateError.hidden = false;
+          els.authGateError.textContent =
+            "로그인 응답이 너무 느립니다. VPN·회사 네트워크가 느리면 「Dashboard 건너뛰기」를 눌러 보세요.";
+        }
+      }
+    })();
+  }, 400);
+}
+
+async function forceEnterDashboardFromAuthGate() {
+  logAuthStepUi("Dashboard 건너뛰기 시도…");
+  const entered = await tryEnterAuthenticatedAppFromAuthGate();
+  if (entered) return;
+
+  window.alert(
+    "아직 Google 로그인이 확인되지 않았습니다.\n\nGoogle 계정 선택을 완료한 뒤 다시 시도하거나, Ctrl+Shift+R로 새로고침해 주세요."
+  );
 }
 
 const APP_DIRECT_URLS = [
@@ -915,19 +998,11 @@ function triggerCloudSignIn(buttonEl, options = {}) {
     els.authGateSyncStatus.hidden = false;
   }
 
+  startAuthGateExitWatcher({ buttonEl: btn, prevLabel });
+
   return CloudSyncManager.signInWithGoogle(options)
     .then(async () => {
-      logAuthStepUi("로그인 성공 → Dashboard 준비 중…");
-      if (els.authGateSyncStatus) {
-        els.authGateSyncStatus.textContent = "Dashboard 준비 중…";
-        els.authGateSyncStatus.hidden = false;
-      }
-      hideAuthOverlays();
-      if (!window.__appBootstrapFinished) {
-        await enterAuthenticatedApp();
-        return;
-      }
-      await completeLoginFlow();
+      await tryEnterAuthenticatedAppFromAuthGate();
     })
     .catch((err) => {
       console.error("Google login failed:", err);
@@ -939,16 +1014,15 @@ function triggerCloudSignIn(buttonEl, options = {}) {
           els.authGateError.textContent = message.replace(/\n+/g, " ");
           els.authGateError.hidden = false;
         }
-        window.alert(message.replace(/\n+/g, "\n"));
+        if (err?.code !== "auth/timeout") {
+          window.alert(message.replace(/\n+/g, "\n"));
+        }
       }
       throw err;
     })
     .finally(() => {
-      if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = prevLabel;
-      }
+      stopAuthGateExitWatcher();
+      resetAuthGateSignInUi(btn, prevLabel);
     });
 }
 
@@ -1006,6 +1080,7 @@ async function ensureCloudAuthBeforeBootstrap() {
   showAuthGate({ error: persistedError || undefined });
   setBootStatus("");
   if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
+  startAuthGateExitWatcher();
   await CloudSyncManager.waitUntilSignedIn();
   if (!CloudSyncManager.isSignedIn()) {
     showAuthGate({
@@ -1116,6 +1191,10 @@ function initCloudSyncUi() {
     });
   });
 
+  els.authGateSkipBtn?.addEventListener("click", () => {
+    void forceEnterDashboardFromAuthGate();
+  });
+
   els.cloudSignOutBtn?.addEventListener("click", () => {
     CloudSyncManager.signOut().catch((err) => {
       console.error("Sign out failed:", err);
@@ -1200,11 +1279,50 @@ async function finishAppBootstrapOnce() {
   return finishBootstrapPromise;
 }
 
+async function initDeferredBootstrapServices() {
+  if (window.CalendarSyncManager) {
+    try {
+      await withAppTimeout(
+        (async () => {
+          await CalendarSyncManager.init();
+          CalendarSyncManager.registerHelpers({
+            getStandardSiteName,
+            getTaskById: (id) => tasks.find((t) => t.id === id),
+            updateTaskCalendarSync: (taskId, calendarSync) => TaskStore.update(taskId, { calendarSync }),
+            clearTaskCalendarSync: (taskId) => {
+              const idx = tasks.findIndex((t) => t.id === taskId);
+              if (idx === -1) return false;
+              const updated = { ...tasks[idx], updatedAt: new Date().toISOString() };
+              delete updated.calendarSync;
+              tasks[idx] = updated;
+              TaskStore.persist();
+              return true;
+            },
+          });
+          CalendarSyncManager.reconcileAuthWithSettings();
+        })(),
+        10000,
+        "Calendar init timeout"
+      );
+    } catch (err) {
+      console.warn("Calendar Sync 초기화를 건너뜁니다:", err);
+    }
+  }
+
+  try {
+    await withAppTimeout(initDesktopReminders(), 8000, "Reminder init timeout");
+  } catch (err) {
+    console.warn("Reminder 초기화를 건너뜁니다:", err);
+  }
+}
+
 async function finishAppBootstrap() {
   await seedSiteMasterIfEmpty();
   migrateMasterStructureV2();
   migrateStudySystemsToSystemMaster();
-  await migrateIrbPortalPasswords();
+  void migrateIrbPortalPasswords().catch((err) => {
+    console.warn("IRB password migration deferred:", err);
+  });
   await seedStudyMasterIfEmpty();
   seedSampleDataIfEmpty();
   migrateTaskStatuses();
@@ -1227,35 +1345,6 @@ async function finishAppBootstrap() {
     refreshTaskStudySiteSelects();
   } catch (err) {
     console.warn("Master 화면 초기화 중 일부 오류:", err);
-  }
-
-  if (window.CalendarSyncManager) {
-    try {
-      await CalendarSyncManager.init();
-      CalendarSyncManager.registerHelpers({
-        getStandardSiteName,
-        getTaskById: (id) => tasks.find((t) => t.id === id),
-        updateTaskCalendarSync: (taskId, calendarSync) => TaskStore.update(taskId, { calendarSync }),
-        clearTaskCalendarSync: (taskId) => {
-          const idx = tasks.findIndex((t) => t.id === taskId);
-          if (idx === -1) return false;
-          const updated = { ...tasks[idx], updatedAt: new Date().toISOString() };
-          delete updated.calendarSync;
-          tasks[idx] = updated;
-          TaskStore.persist();
-          return true;
-        },
-      });
-      CalendarSyncManager.reconcileAuthWithSettings();
-    } catch (err) {
-      console.warn("Calendar Sync 초기화를 건너뜁니다:", err);
-    }
-  }
-
-  try {
-    await initDesktopReminders();
-  } catch (err) {
-    console.warn("Reminder 초기화를 건너뜁니다:", err);
   }
 
   if (!els.taskForm || !els.editForm) {
@@ -1555,6 +1644,8 @@ async function finishAppBootstrap() {
   });
 
   window.addEventListener("storage", handleStorageSync);
+
+  void initDeferredBootstrapServices();
 
   initAppMode();
   switchView("dashboard");
@@ -9483,7 +9574,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "80";
+const APP_BUILD = "81";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
