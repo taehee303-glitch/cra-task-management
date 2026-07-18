@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 73 — 2026-07-18 — Fix login bootstrap race
+
+### Fixed
+
+- Google 로그인 성공 직후 `completeLoginFlow()`와 `bootstrapApp()`이 동시 실행되며 로그인 화면으로 되돌아가던 race condition
+- Redirect 복귀 중 PWA 캐시 purge reload가 auth 세션을 지우던 문제
+- 로그인은 됐는데 bootstrap 실패 시 로그인 화면 대신 Dashboard + Toast로 안내
+
+---
+
 ## [1.3.0] — build 72 — 2026-07-18 — OAuth token login + cache bust
 
 ### Fixed

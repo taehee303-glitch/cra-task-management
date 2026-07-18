@@ -82,7 +82,7 @@ function registerServiceWorker() {
     if (hasPendingAuthRedirect()) return;
 
     navigator.serviceWorker
-      .register("./service-worker.js?v=72", { scope: "./" })
+      .register("./service-worker.js?v=73", { scope: "./" })
       .then((registration) => {
         registration.addEventListener("updatefound", () => {
           const nextWorker = registration.installing;
@@ -126,6 +126,11 @@ function applyPwaDisplayMode() {
 applyPwaDisplayMode();
 
 async function bootstrapPwa() {
+  if (hasPendingAuthRedirect()) {
+    registerServiceWorkerWhenReady();
+    return;
+  }
+
   if (window.FIREBASE_CONFIG?.requireCloudAuth && !window.__appBootstrapFinished) {
     const purged = await purgeStaleAppShellCache();
     if (purged) {

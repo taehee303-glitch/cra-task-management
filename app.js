@@ -686,15 +686,14 @@ function hideAuthOverlays() {
 
 async function completeLoginFlow() {
   if (!window.CloudSyncManager?.isSignedIn?.()) return;
+  if (window.__appBootstrapInProgress) return;
 
   try {
     loadAllFromLocalStorage();
     hideAuthOverlays();
 
     if (!window.__appBootstrapFinished) {
-      await finishAppBootstrap();
-      window.__appBootstrapFinished = true;
-      window.dispatchEvent(new Event("app-ready"));
+      await finishAppBootstrapOnce();
       return;
     }
 
@@ -705,6 +704,11 @@ async function completeLoginFlow() {
       CloudSyncManager?.formatAuthError?.(err) ||
       err?.message ||
       "로그인 후 앱을 시작하지 못했습니다.";
+    if (CloudSyncManager.isSignedIn()) {
+      hideAuthOverlays();
+      showToast(message.replace(/\n+/g, " "));
+      return;
+    }
     showAuthGate({ error: message });
     throw err;
   }
@@ -729,7 +733,11 @@ function triggerCloudSignIn(buttonEl, options = {}) {
   }
 
   return CloudSyncManager.signInWithGoogle(options)
-    .then(() => completeLoginFlow())
+    .then(async () => {
+      if (window.__appBootstrapFinished) {
+        await completeLoginFlow();
+      }
+    })
     .catch((err) => {
       console.error("Google login failed:", err);
       if (err?.code !== "auth/popup-closed-by-user") {
@@ -808,6 +816,12 @@ async function ensureCloudAuthBeforeBootstrap() {
   setBootStatus("");
   if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = true;
   await CloudSyncManager.waitUntilSignedIn();
+  if (!CloudSyncManager.isSignedIn()) {
+    showAuthGate({
+      error: "Google 로그인이 완료되지 않았습니다. 다시 시도해 주세요.",
+    });
+    throw new Error("Login did not complete");
+  }
 }
 
 function initCloudSyncUi() {
@@ -939,6 +953,9 @@ function bindEvent(target, event, handler) {
 }
 
 async function bootstrapApp() {
+  if (window.__appBootstrapInProgress) return;
+  window.__appBootstrapInProgress = true;
+
   registerCloudSyncSources();
   initCloudSyncUi();
 
@@ -946,17 +963,32 @@ async function bootstrapApp() {
     await ensureCloudAuthBeforeBootstrap();
     loadAllFromLocalStorage();
     hideAuthOverlays();
-    if (!window.__appBootstrapFinished) {
-      await finishAppBootstrap();
-      window.__appBootstrapFinished = true;
-    }
-    window.dispatchEvent(new Event("app-ready"));
+    await finishAppBootstrapOnce();
   } catch (err) {
     if (CloudSyncManager?.isSignedIn?.()) {
       hideAuthOverlays();
     }
     throw err;
+  } finally {
+    window.__appBootstrapInProgress = false;
   }
+}
+
+let finishBootstrapPromise = null;
+
+async function finishAppBootstrapOnce() {
+  if (window.__appBootstrapFinished) return;
+  if (finishBootstrapPromise) return finishBootstrapPromise;
+
+  finishBootstrapPromise = (async () => {
+    await finishAppBootstrap();
+    window.__appBootstrapFinished = true;
+    window.dispatchEvent(new Event("app-ready"));
+  })().finally(() => {
+    finishBootstrapPromise = null;
+  });
+
+  return finishBootstrapPromise;
 }
 
 async function finishAppBootstrap() {
@@ -9242,7 +9274,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "72";
+const APP_BUILD = "73";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
