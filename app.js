@@ -499,6 +499,9 @@ const els = {
   authGateSyncStatus: document.getElementById("authGateSyncStatus"),
   authGateDebug: document.getElementById("authGateDebug"),
   authGateAltHost: document.getElementById("authGateAltHost"),
+  authGateCorpWarning: document.getElementById("authGateCorpWarning"),
+  authGateCorpHost: document.getElementById("authGateCorpHost"),
+  authGateDirectUrl: document.getElementById("authGateDirectUrl"),
 };
 
 function notifyCloudSync(key) {
@@ -646,6 +649,63 @@ function setBootStatus(message) {
   if (els.appBootStatus) els.appBootStatus.textContent = message;
 }
 
+const APP_DIRECT_URLS = [
+  "https://taehee303-glitch.github.io/cra-task-management/",
+  "https://cra-task-management.web.app/",
+];
+
+const APP_TRUSTED_HOSTS = [
+  "localhost",
+  "127.0.0.1",
+  "taehee303-glitch.github.io",
+  "cra-task-management.web.app",
+  "cra-task-management.firebaseapp.com",
+];
+
+function isCorporateUrlGateway() {
+  const host = (window.location.hostname || "").toLowerCase();
+  if (!host) return false;
+  if (APP_TRUSTED_HOSTS.some((trusted) => host === trusted || host.endsWith(`.${trusted}`))) {
+    return false;
+  }
+  return (
+    /mimecastprotect\.com$/i.test(host) ||
+    /mimecast\.com$/i.test(host) ||
+    /safelinks\.protection\.outlook\.com$/i.test(host) ||
+    /urldefense\.proofpoint\.com$/i.test(host) ||
+    /avanan\.net$/i.test(host)
+  );
+}
+
+function getCorporateGatewayLabel() {
+  const host = window.location.hostname || "";
+  if (/mimecast/i.test(host)) return "Mimecast";
+  if (/safelinks/i.test(host)) return "Microsoft Safe Links";
+  if (/proofpoint/i.test(host)) return "Proofpoint";
+  return "회사 보안 프록시";
+}
+
+function applyCorporateGatewayAuthGateUi() {
+  const wrapped = isCorporateUrlGateway();
+  if (els.authGateCorpWarning) {
+    els.authGateCorpWarning.hidden = !wrapped;
+  }
+  if (els.authGateCorpHost && wrapped) {
+    els.authGateCorpHost.textContent = window.location.hostname;
+  }
+  if (els.authGateSignInBtn) {
+    els.authGateSignInBtn.disabled = wrapped;
+    els.authGateSignInBtn.title = wrapped
+      ? "Mimecast 등 회사 URL 래핑 환경에서는 Google 로그인이 불가능합니다. 주소창에 직접 URL을 입력해 주세요."
+      : "";
+  }
+  if (wrapped && els.authGateError) {
+    els.authGateError.hidden = false;
+    els.authGateError.textContent = `${getCorporateGatewayLabel()} URL 래핑 감지 — 주소창에 직접 ${APP_DIRECT_URLS[0]} 를 입력해 주세요.`;
+  }
+  return wrapped;
+}
+
 function logAuthStepUi(message) {
   const text = String(message || "");
   if (els.authGateDebug) {
@@ -693,6 +753,7 @@ function showAuthGate(options = {}) {
   const debugText =
     window.CloudSyncManager?.getAuthStatus?.() || "로그인 대기 중…";
   logAuthStepUi(debugText);
+  applyCorporateGatewayAuthGateUi();
   if (els.authGateMeta) {
     const hostname = window.location.hostname || "unknown";
     const diag = window.CloudSyncManager?.getAuthDiagnostics?.() || {};
@@ -776,6 +837,17 @@ async function completeLoginFlow() {
 
 function triggerCloudSignIn(buttonEl, options = {}) {
   if (!window.CloudSyncManager) return Promise.resolve();
+
+  if (isCorporateUrlGateway()) {
+    const message = `${getCorporateGatewayLabel()} URL 래핑 환경에서는 Google 로그인이 불가능합니다.\n\nEdge 주소창에 직접 입력:\n${APP_DIRECT_URLS.join("\n")}`;
+    logAuthStep(message.split("\n")[0]);
+    if (els.authGateError) {
+      els.authGateError.textContent = message.replace(/\n+/g, " ");
+      els.authGateError.hidden = false;
+    }
+    window.alert(message);
+    return Promise.reject({ code: "auth/corporate-gateway", message });
+  }
 
   const btn = buttonEl;
   const prevLabel = btn?.textContent;
@@ -9337,7 +9409,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "78";
+const APP_BUILD = "79";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

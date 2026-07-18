@@ -9860,6 +9860,49 @@ button.dashboard-v2__urgent-bucket:hover {
   letter-spacing: 0.02em;
 }
 
+.auth-gate__corp-warning {
+  margin: calc(16px * var(--ui-scale)) 0;
+  padding: calc(14px * var(--ui-scale));
+  border-radius: calc(10px * var(--ui-scale));
+  border: 1px solid #fbbf24;
+  background: #fffbeb;
+  color: #92400e;
+  text-align: left;
+  font-size: calc(13px * var(--ui-scale));
+  line-height: 1.55;
+}
+
+.auth-gate__corp-warning strong {
+  display: block;
+  margin-bottom: calc(8px * var(--ui-scale));
+  color: #b45309;
+  font-size: calc(14px * var(--ui-scale));
+}
+
+.auth-gate__corp-warning p {
+  margin: calc(8px * var(--ui-scale)) 0 0;
+}
+
+.auth-gate__corp-warning code {
+  font-size: calc(12px * var(--ui-scale));
+  word-break: break-all;
+}
+
+.auth-gate__direct-url {
+  margin: calc(6px * var(--ui-scale)) 0 0 !important;
+  word-break: break-all;
+}
+
+.auth-gate__direct-url a {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.auth-gate__corp-hint {
+  font-size: calc(12px * var(--ui-scale)) !important;
+  color: #a16207 !important;
+}
+
 .auth-gate__debug {
   margin: calc(12px * var(--ui-scale)) 0 0;
   padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));

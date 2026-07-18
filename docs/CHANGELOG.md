@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 79 — 2026-07-18 — Mimecast corporate URL gateway warning
+
+### Added
+
+- Mimecast / Safe Links / Proofpoint 등 **회사 URL 래핑** 자동 감지
+- 래핑 환경에서 Google 로그인 불가 안내 + **직접 URL 입력** 가이드
+- 래핑 감지 시 로그인 버튼 비활성화
+
+---
+
 ## [1.3.0] — build 78 — 2026-07-18 — Fix auth gate not hiding after login
 
 ### Fixed
