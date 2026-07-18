@@ -414,6 +414,10 @@ const els = {
   settingsPanelAppearance: document.getElementById("settingsPanelAppearance"),
   settingsPanelData: document.getElementById("settingsPanelData"),
   settingsPanelAbout: document.getElementById("settingsPanelAbout"),
+  settingsAccountCard: document.getElementById("settingsAccountCard"),
+  settingsAccountEmail: document.getElementById("settingsAccountEmail"),
+  settingsAccountStatus: document.getElementById("settingsAccountStatus"),
+  settingsCloudSignOutBtn: document.getElementById("settingsCloudSignOutBtn"),
   calendarSyncToggle: document.getElementById("calendarSyncToggle"),
   calendarSyncStatus: document.getElementById("calendarSyncStatus"),
   calendarLastSync: document.getElementById("calendarLastSync"),
@@ -1164,6 +1168,7 @@ function initCloudSyncUi() {
     }
     wasSignedIn = signedIn;
     updateReferenceCloudSyncLabel();
+    updateAccountSettingsUi();
   };
 
   CloudSyncManager.setUiCallback(updateCloudSyncUi);
@@ -1196,10 +1201,11 @@ function initCloudSyncUi() {
   });
 
   els.cloudSignOutBtn?.addEventListener("click", () => {
-    CloudSyncManager.signOut().catch((err) => {
-      console.error("Sign out failed:", err);
-      alert("로그아웃에 실패했습니다.");
-    });
+    void handleCloudSignOut();
+  });
+
+  els.settingsCloudSignOutBtn?.addEventListener("click", () => {
+    void handleCloudSignOut();
   });
 
   updateCloudSyncUi({
@@ -9574,7 +9580,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "81";
+const APP_BUILD = "82";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10147,6 +10153,53 @@ function estimateLocalStorageUsage() {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function updateAccountSettingsUi() {
+  if (!els.settingsAccountCard) return;
+
+  const configured = window.CloudSyncManager?.isConfigured?.();
+  const signedIn = window.CloudSyncManager?.isSignedIn?.();
+  const user = window.CloudSyncManager?.getCurrentUser?.() || null;
+
+  if (!configured || !signedIn || !user) {
+    els.settingsAccountCard.hidden = true;
+    return;
+  }
+
+  els.settingsAccountCard.hidden = false;
+  if (els.settingsAccountEmail) {
+    els.settingsAccountEmail.textContent = user.displayName
+      ? `${user.displayName} (${user.email || ""})`
+      : user.email || "Google 계정";
+  }
+  if (els.settingsAccountStatus) {
+    els.settingsAccountStatus.textContent = CloudSyncManager.requiresAuth?.()
+      ? "클라우드에 연결됨 · PC와 휴대폰 데이터 동기화 중"
+      : "클라우드에 연결됨";
+  }
+}
+
+async function handleCloudSignOut() {
+  if (!window.CloudSyncManager) return;
+  if (
+    !confirm(
+      "Google 계정에서 로그아웃할까요?\n\n다른 기기와의 클라우드 동기화가 중단되며, 로그인 화면으로 돌아갑니다."
+    )
+  ) {
+    return;
+  }
+
+  try {
+    await CloudSyncManager.signOut();
+    closeSettingsModal();
+    if (CloudSyncManager.requiresAuth?.()) {
+      showAuthGate();
+    }
+  } catch (err) {
+    console.error("Sign out failed:", err);
+    alert("로그아웃에 실패했습니다.");
+  }
+}
+
 function updateDataSettingsUi() {
   if (els.settingsFirebaseSyncStatus) {
     if (!window.CloudSyncManager || !CloudSyncManager.isConfigured()) {
@@ -10207,6 +10260,7 @@ function openSettingsModal(panel = "main") {
   updateNotificationSettingsUi();
   updateDataSettingsUi();
   updateAboutSettingsUi();
+  updateAccountSettingsUi();
   if (els.uiScaleSelect) {
     els.uiScaleSelect.value = UiSettingsStore.getSize();
   }

@@ -17,6 +17,15 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 82 — 2026-07-18 — Google logout in Settings
+
+### Added
+
+- **Settings** 상단에 Google 계정 카드 + **Google 로그아웃** 버튼
+- 사이드바 하단 로그아웃 버튼 문구를 「Google 로그아웃」으로 명확화
+
+---
+
 ## [1.3.0] — build 81 — 2026-07-18 — VPN slow network login unblock
 
 ### Fixed

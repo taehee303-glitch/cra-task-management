@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <meta name="description" content="Clinical Research Associate Task Manager" />
-  <meta name="app-build" content="81" />
+  <meta name="app-build" content="82" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -74,7 +74,7 @@
       <p class="auth-gate__hint" id="authGateHint"></p>
       <p class="auth-gate__error" id="authGateError" hidden role="alert"></p>
       <p class="auth-gate__sync-status" id="authGateSyncStatus" hidden>Dashboard 준비 중…</p>
-      <p class="auth-gate__debug" id="authGateDebug">Build 81 · 준비 중…</p>
+      <p class="auth-gate__debug" id="authGateDebug">Build 82 · 준비 중…</p>
       <p class="auth-gate__alt-host" id="authGateAltHost" hidden></p>
       <p class="auth-gate__meta" id="authGateMeta"></p>
     </div>
@@ -131,7 +131,7 @@
         <div class="cloud-sync cloud-sync--sidebar" id="cloudSyncPanel">
           <span class="cloud-sync__status" id="cloudSyncStatus" title="데이터 동기화 상태">로컬 저장</span>
           <button type="button" class="cloud-sync__btn" id="cloudSignInBtn">Google 로그인</button>
-          <button type="button" class="cloud-sync__btn cloud-sync__btn--out" id="cloudSignOutBtn" hidden>로그아웃</button>
+          <button type="button" class="cloud-sync__btn cloud-sync__btn--out" id="cloudSignOutBtn" hidden>Google 로그아웃</button>
         </div>
       </div>
     </aside>
@@ -1525,6 +1525,12 @@
       <div class="settings-body">
         <!-- Main: menu only -->
         <div id="settingsPanelMain" class="settings-screen" data-settings-screen="main">
+          <div class="settings-account-card" id="settingsAccountCard" hidden>
+            <div class="settings-account-card__label">Google 계정</div>
+            <div class="settings-account-card__email" id="settingsAccountEmail">—</div>
+            <p class="settings-account-card__status" id="settingsAccountStatus">클라우드에 연결됨</p>
+            <button type="button" class="settings-action-btn settings-action-btn--danger settings-account-card__sign-out" id="settingsCloudSignOutBtn">Google 로그아웃</button>
+          </div>
           <nav class="settings-menu" aria-label="설정 메뉴">
             <button type="button" class="settings-menu__item" data-settings-panel="calendar">
               <span class="settings-menu__icon" aria-hidden="true">📅</span>
@@ -1705,11 +1711,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=81"></script>
-  <script src="firebase-sync.js?v=81"></script>
-  <script src="calendar-config.js?v=81"></script>
-  <script src="calendar-sync.js?v=81"></script>
-  <script src="app.js?v=81"></script>
-  <script src="pwa.js?v=81"></script>
+  <script src="firebase-config.js?v=82"></script>
+  <script src="firebase-sync.js?v=82"></script>
+  <script src="calendar-config.js?v=82"></script>
+  <script src="calendar-sync.js?v=82"></script>
+  <script src="app.js?v=82"></script>
+  <script src="pwa.js?v=82"></script>
 </body>
 </html>

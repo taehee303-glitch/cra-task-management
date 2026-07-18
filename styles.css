@@ -1354,6 +1354,41 @@ body.body--settings-open {
   color: #059669;
 }
 
+.settings-account-card {
+  margin-bottom: calc(16px * var(--ui-scale));
+  padding: calc(16px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(12px * var(--ui-scale));
+  background: linear-gradient(160deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.settings-account-card__label {
+  font-size: calc(12px * var(--ui-scale));
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-account-card__email {
+  margin-top: calc(6px * var(--ui-scale));
+  font-size: calc(15px * var(--ui-scale));
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.settings-account-card__status {
+  margin: calc(8px * var(--ui-scale)) 0 0;
+  font-size: calc(13px * var(--ui-scale));
+  color: #059669;
+}
+
+.settings-account-card__sign-out {
+  width: 100%;
+  margin-top: calc(14px * var(--ui-scale));
+}
+
 .settings-about-hero {
   text-align: center;
   padding: calc(20px * var(--ui-scale)) calc(12px * var(--ui-scale)) calc(16px * var(--ui-scale));

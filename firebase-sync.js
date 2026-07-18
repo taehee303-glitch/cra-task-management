@@ -1428,6 +1428,10 @@
     await state.auth.signOut();
   }
 
+  function getCurrentUser() {
+    return state.user || state.auth?.currentUser || null;
+  }
+
   window.CloudSyncManager = {
     init,
     isConfigured,
@@ -1443,6 +1447,7 @@
     notifyChange,
     signInWithGoogle,
     signOut,
+    getCurrentUser,
     formatAuthError,
     getMobileLoginHint,
     setAuthErrorCallback,
