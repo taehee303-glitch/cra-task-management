@@ -852,6 +852,63 @@ function applyCorporateGatewayAuthGateUi() {
   return wrapped;
 }
 
+function ensureAuthGateEscapeHatches() {
+  const gate = document.getElementById("authGate");
+  if (!gate) return;
+
+  let bar = document.getElementById("authGateEscapeBar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.className = "auth-gate__escape-bar";
+    bar.id = "authGateEscapeBar";
+    gate.appendChild(bar);
+  }
+
+  if (!document.getElementById("authGateSkipBtn")) {
+    const skip = document.createElement("button");
+    skip.type = "button";
+    skip.id = "authGateSkipBtn";
+    skip.className = "auth-gate__skip btn btn--primary btn--sm";
+    skip.textContent = "▶ Dashboard 건너뛰기";
+    bar.appendChild(skip);
+  }
+
+  if (!document.getElementById("authGateCacheRefreshBtn")) {
+    const refresh = document.createElement("button");
+    refresh.type = "button";
+    refresh.id = "authGateCacheRefreshBtn";
+    refresh.className = "auth-gate__refresh btn btn--ghost btn--sm";
+    refresh.textContent = `최신 버전 새로고침 (Build ${APP_BUILD})`;
+    bar.appendChild(refresh);
+  }
+
+  els.authGateSkipBtn = document.getElementById("authGateSkipBtn");
+  els.authGateCacheRefreshBtn = document.getElementById("authGateCacheRefreshBtn");
+
+  if (els.authGateSkipBtn) els.authGateSkipBtn.hidden = false;
+  if (els.authGateCacheRefreshBtn) els.authGateCacheRefreshBtn.hidden = false;
+  if (bar) bar.hidden = false;
+}
+
+function bindAuthGateEscapeHandlers() {
+  if (window.__authGateEscapeBound) return;
+  window.__authGateEscapeBound = true;
+
+  document.addEventListener("click", (event) => {
+    const skipBtn = event.target.closest("#authGateSkipBtn");
+    if (skipBtn) {
+      event.preventDefault();
+      void forceEnterDashboardFromAuthGate();
+      return;
+    }
+    const refreshBtn = event.target.closest("#authGateCacheRefreshBtn");
+    if (refreshBtn) {
+      event.preventDefault();
+      hardRefreshAuthGateCache();
+    }
+  });
+}
+
 function logAuthStepUi(message) {
   const text = String(message || "");
   if (els.authGateDebug) {
@@ -899,9 +956,11 @@ function showAuthGate(options = {}) {
   const debugText =
     window.CloudSyncManager?.getAuthStatus?.() || "로그인 대기 중…";
   logAuthStepUi(debugText);
+  ensureAuthGateEscapeHatches();
   applyCorporateGatewayAuthGateUi();
-  if (window.FIREBASE_CONFIG?.requireCloudAuth && els.authGateSkipBtn) {
-    els.authGateSkipBtn.hidden = false;
+  if (els.authGateSkipBtn) els.authGateSkipBtn.hidden = false;
+  if (document.getElementById("authGateEscapeBar")) {
+    document.getElementById("authGateEscapeBar").hidden = false;
   }
   if (els.authGateMeta) {
     const hostname = window.location.hostname || "unknown";
@@ -1231,13 +1290,7 @@ function initCloudSyncUi() {
     });
   });
 
-  els.authGateSkipBtn?.addEventListener("click", () => {
-    void forceEnterDashboardFromAuthGate();
-  });
-
-  els.authGateCacheRefreshBtn?.addEventListener("click", () => {
-    hardRefreshAuthGateCache();
-  });
+  bindAuthGateEscapeHandlers();
 
   els.cloudSignOutBtn?.addEventListener("click", () => {
     void handleCloudSignOut();
@@ -1256,6 +1309,8 @@ function initCloudSyncUi() {
 }
 
 function init() {
+  ensureAuthGateEscapeHatches();
+  bindAuthGateEscapeHandlers();
   applyUiScale();
   bootstrapApp().catch((err) => {
     if (window.CloudSyncManager?.requiresAuth?.() && !CloudSyncManager.isSignedIn()) {
@@ -9619,7 +9674,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "83";
+const APP_BUILD = "84";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

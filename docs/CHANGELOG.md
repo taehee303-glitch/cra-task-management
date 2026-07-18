@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 84 — 2026-07-18 — Fixed skip button always visible at bottom
+
+### Fixed
+
+- 「Dashboard 건너뛰기」 버튼을 로그인 화면 **하단 고정 바**로 이동 (스크롤/캐시와 무관하게 항상 표시)
+- 구버전 HTML 캐시 시에도 app.js가 버튼을 **자동 생성**
+- DOMContentLoaded 인라인 스크립트로 escape bar 주입 (부분 캐시 대응)
+
+---
+
 ## [1.3.0] — build 83 — 2026-07-18 — Corporate cache bust + VPN login escape hatches
 
 ### Fixed
