@@ -674,6 +674,21 @@ function hideAuthOverlays() {
   }
 }
 
+async function completeLoginFlow() {
+  if (!window.CloudSyncManager?.isSignedIn?.()) return;
+
+  loadAllFromLocalStorage();
+  hideAuthOverlays();
+
+  if (!window.__appBootstrapFinished) {
+    await finishAppBootstrap();
+    window.__appBootstrapFinished = true;
+    return;
+  }
+
+  refreshAfterCloudSync();
+}
+
 function triggerCloudSignIn(buttonEl) {
   if (!window.CloudSyncManager) return Promise.resolve();
 
@@ -693,6 +708,7 @@ function triggerCloudSignIn(buttonEl) {
   }
 
   return CloudSyncManager.signInWithGoogle()
+    .then(() => completeLoginFlow())
     .catch((err) => {
       console.error("Google login failed:", err);
       if (err?.code !== "auth/popup-closed-by-user") {
@@ -797,9 +813,13 @@ function initCloudSyncUi() {
     }
 
     if (wasSignedIn && !signedIn) {
-      if (CloudSyncManager.requiresAuth?.()) {
+      if (
+        CloudSyncManager.requiresAuth?.() &&
+        !CloudSyncManager.isAuthInProgress?.() &&
+        window.__appBootstrapFinished
+      ) {
         showAuthGate();
-      } else {
+      } else if (!CloudSyncManager.requiresAuth?.()) {
         loadAllFromLocalStorage();
         refreshAfterCloudSync();
       }
@@ -9169,7 +9189,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "68";
+const APP_BUILD = "69";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

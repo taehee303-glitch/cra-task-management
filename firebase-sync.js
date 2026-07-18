@@ -31,7 +31,29 @@
     initialAuthResolved: false,
     initialAuthWaiters: [],
     signedInSyncWaiters: [],
+    authInProgress: false,
+    suppressSignOutUntil: 0,
+    initialAuthNullSeen: false,
   };
+
+  function isAuthInProgress() {
+    return Boolean(state.authInProgress || window.__authInProgress);
+  }
+
+  function setAuthInProgress(active) {
+    state.authInProgress = Boolean(active);
+    window.__authInProgress = Boolean(active);
+  }
+
+  async function unregisterServiceWorkersForAuth() {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    } catch (err) {
+      console.warn("Service Worker unregister before auth failed:", err);
+    }
+  }
 
   function requiresAuth() {
     if (!isConfigured()) return Boolean(window.FIREBASE_CONFIG?.requireCloudAuth);
@@ -520,6 +542,7 @@
 
     state.user = user;
     state.ready = true;
+    state.suppressSignOutUntil = Date.now() + 15000;
     notifyUi();
     notifySignedInSyncReady();
 
@@ -527,6 +550,9 @@
   }
 
   function handleSignedOut() {
+    if (isAuthInProgress()) return;
+    if (Date.now() < state.suppressSignOutUntil) return;
+
     stopListeners();
     state.user = null;
     state.ready = false;
@@ -606,13 +632,21 @@
         try {
           if (user) {
             sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+            state.initialAuthNullSeen = true;
             if (state.user?.uid === user.uid && state.ready) return;
             await handleSignedIn(user);
             return;
           }
 
+          if (!state.initialAuthNullSeen) {
+            state.initialAuthNullSeen = true;
+            return;
+          }
+
           if (redirectResult?.user) return;
           if (hasPendingAuthRedirect()) return;
+          if (isAuthInProgress()) return;
+          if (Date.now() < state.suppressSignOutUntil) return;
           handleSignedOut();
         } catch (err) {
           console.error("Auth state handler failed:", err);
@@ -775,7 +809,7 @@
 
   function getSignInStrategy() {
     if (isInAppBrowser()) return "blocked-in-app";
-    if (isMobileBrowser()) return "gis";
+    if (getGoogleWebClientId()) return "gis";
     return "popup-first";
   }
 
@@ -857,36 +891,47 @@
       };
     }
 
-    const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-
-    const strategy = getSignInStrategy();
-    const mobileHint = getMobileLoginHint();
-
-    if (strategy === "blocked-in-app") {
-      throw { code: "auth/blocked-in-app", message: mobileHint };
-    }
-
-    if (strategy === "gis") {
-      await signInWithGoogleGisModal();
-      await waitForAuthUser();
-      return waitUntilSignedInAndSynced();
-    }
-
+    setAuthInProgress(true);
     try {
-      await state.auth.signInWithPopup(provider);
-    } catch (err) {
-      if (err?.code === "auth/popup-closed-by-user") throw err;
-      if (err?.code === "auth/popup-blocked" && getGoogleWebClientId()) {
+      await unregisterServiceWorkersForAuth();
+
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+
+      const strategy = getSignInStrategy();
+      const mobileHint = getMobileLoginHint();
+
+      if (strategy === "blocked-in-app") {
+        throw { code: "auth/blocked-in-app", message: mobileHint };
+      }
+
+      if (strategy === "gis") {
         await signInWithGoogleGisModal();
         await waitForAuthUser();
         return waitUntilSignedInAndSynced();
       }
-      throw err;
-    }
 
-    await waitForAuthUser();
-    return waitUntilSignedInAndSynced();
+      try {
+        await state.auth.signInWithPopup(provider);
+      } catch (err) {
+        if (err?.code === "auth/popup-closed-by-user") throw err;
+        if (getGoogleWebClientId()) {
+          await signInWithGoogleGisModal();
+          await waitForAuthUser();
+          return waitUntilSignedInAndSynced();
+        }
+        throw err;
+      }
+
+      await waitForAuthUser();
+      if (!state.auth.currentUser && getGoogleWebClientId()) {
+        await signInWithGoogleGisModal();
+        await waitForAuthUser();
+      }
+      return waitUntilSignedInAndSynced();
+    } finally {
+      setAuthInProgress(false);
+    }
   }
 
   async function signOut() {
@@ -912,5 +957,6 @@
     getMobileLoginHint,
     setAuthErrorCallback,
     hasPendingAuthRedirect,
+    isAuthInProgress,
   };
 })();

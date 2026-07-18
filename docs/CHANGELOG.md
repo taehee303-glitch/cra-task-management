@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 69 — 2026-07-18 — Login session stability fix
+
+### Fixed
+
+- Google 팝업 로그인 후 첫 화면으로 돌아가던 문제 — GIS(계정 선택) 방식으로 전환, 회사 PC 팝업 차단 대응
+- 로그인 직후 `handleSignedOut` 오작동 방지 (초기 null 이벤트·로그인 중 sign-out 차단)
+- Service Worker가 로그인 중 페이지를 reload하던 문제 방지
+- 로그인 성공 시 `completeLoginFlow()`로 Dashboard 즉시 진입
+
+---
+
 ## [1.3.0] — build 68 — 2026-07-18 — Login infinite loading fix
 
 ### Fixed

@@ -4,7 +4,10 @@ function hasPendingAuthRedirect() {
   }
 
   const href = window.location.href || "";
-  return href.includes("__/auth/") || Boolean(sessionStorage.getItem("cra-firebase-auth-redirect"));
+  if (href.includes("__/auth/")) return true;
+  if (sessionStorage.getItem("cra-firebase-auth-redirect")) return true;
+  if (window.__authInProgress || window.CloudSyncManager?.isAuthInProgress?.()) return true;
+  return false;
 }
 
 async function purgeFitSpaceServiceWorkerCache() {
