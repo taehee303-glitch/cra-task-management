@@ -34,6 +34,7 @@
     authInProgress: false,
     suppressSignOutUntil: 0,
     initialAuthNullSeen: false,
+    persistenceMode: null,
     signInWaiters: [],
   };
 
@@ -629,37 +630,12 @@
       }
 
       try {
-        await state.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        await configureAuthPersistence();
       } catch (err) {
         console.warn("Firebase auth persistence unavailable:", err);
       }
 
-      let redirectResult = null;
-      try {
-        redirectResult = await state.auth.getRedirectResult();
-        sessionStorage.removeItem(REDIRECT_PENDING_KEY);
-
-        if (redirectResult?.error) {
-          persistAuthError(redirectResult.error);
-          reportAuthError(formatAuthError(redirectResult.error));
-        } else if (redirectResult?.user) {
-          await handleSignedIn(redirectResult.user);
-        } else if (hasPendingAuthRedirect()) {
-          persistAuthError({
-            code: "auth/redirect-result-missing",
-            message:
-              "Google 로그인 결과를 불러오지 못했습니다. 브라우저 쿠키·사이트 데이터를 허용한 뒤 다시 시도해 주세요.",
-          });
-          reportAuthError(
-            "Google 로그인 결과를 불러오지 못했습니다. Chrome에서 사이트 데이터/쿠키를 허용한 뒤 다시 시도해 주세요."
-          );
-        }
-      } catch (err) {
-        sessionStorage.removeItem(REDIRECT_PENDING_KEY);
-        console.warn("Firebase redirect sign-in result failed:", err);
-        persistAuthError(err);
-        reportAuthError(formatAuthError(err));
-      }
+      const redirectResult = await processRedirectSignInResult();
 
       try {
         await state.db.enablePersistence({ synchronizeTabs: true });
@@ -679,11 +655,11 @@
 
           if (!state.initialAuthNullSeen) {
             state.initialAuthNullSeen = true;
-            return;
+            if (shouldRecoverRedirectAuth()) return;
           }
 
           if (redirectResult?.user) return;
-          if (hasPendingAuthRedirect()) return;
+          if (shouldRecoverRedirectAuth()) return;
           if (isAuthInProgress()) return;
           if (Date.now() < state.suppressSignOutUntil) return;
           handleSignedOut();
@@ -702,8 +678,110 @@
   }
 
   function hasPendingAuthRedirect() {
-    const href = window.location.href || "";
-    return href.includes("__/auth/") || Boolean(sessionStorage.getItem(REDIRECT_PENDING_KEY));
+    return shouldRecoverRedirectAuth();
+  }
+
+  function isAuthCallbackUrl() {
+    const target = `${window.location.href}${window.location.search}${window.location.hash}`;
+    return /(authType=signInViaRedirect|signInViaRedirect|\/__\/auth\/handler)/i.test(target);
+  }
+
+  function shouldRecoverRedirectAuth() {
+    if (isAuthCallbackUrl()) return true;
+    return Boolean(sessionStorage.getItem(REDIRECT_PENDING_KEY));
+  }
+
+  async function configureAuthPersistence() {
+    const modes = [
+      firebase.auth.Auth.Persistence.LOCAL,
+      firebase.auth.Auth.Persistence.SESSION,
+    ];
+    for (const mode of modes) {
+      try {
+        await state.auth.setPersistence(mode);
+        state.persistenceMode = mode;
+        return mode;
+      } catch (err) {
+        console.warn("Auth persistence unavailable:", mode, err);
+      }
+    }
+    return null;
+  }
+
+  async function processRedirectSignInResult() {
+    const hadPendingRedirect = Boolean(sessionStorage.getItem(REDIRECT_PENDING_KEY));
+    const authCallback = isAuthCallbackUrl();
+    let redirectResult = null;
+
+    try {
+      redirectResult = await state.auth.getRedirectResult();
+
+      if (redirectResult?.error) {
+        persistAuthError(redirectResult.error);
+        reportAuthError(formatAuthError(redirectResult.error));
+        return redirectResult;
+      }
+
+      if (redirectResult?.user) {
+        await handleSignedIn(redirectResult.user);
+        return redirectResult;
+      }
+
+      if (state.auth.currentUser) {
+        await handleSignedIn(state.auth.currentUser);
+        return redirectResult;
+      }
+
+      if (hadPendingRedirect || authCallback) {
+        setAuthInProgress(true);
+        try {
+          const user = await waitForAuthUser(20000);
+          await handleSignedIn(user);
+        } catch (err) {
+          console.warn("Redirect auth recovery failed:", err);
+          persistAuthError({
+            code: "auth/redirect-result-missing",
+            message:
+              "Google 로그인 결과를 불러오지 못했습니다. 아래 「Google로 로그인」을 다시 시도하거나, 회사 PC에서는 Chrome에서 taehee303-glitch.github.io 쿠키를 허용해 주세요.",
+          });
+          reportAuthError(formatAuthError({ code: "auth/redirect-result-missing" }));
+        } finally {
+          setAuthInProgress(false);
+        }
+      }
+    } catch (err) {
+      console.warn("Firebase redirect sign-in result failed:", err);
+      persistAuthError(err);
+      reportAuthError(formatAuthError(err));
+    } finally {
+      sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+    }
+
+    return redirectResult;
+  }
+
+  async function recoverRedirectAuth(timeoutMs = 20000) {
+    if (isSignedIn()) return true;
+    if (!shouldRecoverRedirectAuth() && !sessionStorage.getItem("cra-last-auth-error")) return false;
+
+    setAuthInProgress(true);
+    try {
+      if (state.auth.currentUser) {
+        await handleSignedIn(state.auth.currentUser);
+        return isSignedIn();
+      }
+      const user = await waitForAuthUser(timeoutMs);
+      await handleSignedIn(user);
+      return isSignedIn();
+    } catch (err) {
+      console.warn("recoverRedirectAuth failed:", err);
+      return false;
+    } finally {
+      setAuthInProgress(false);
+      sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+      markInitialAuthResolved();
+      notifySignedInSyncReady();
+    }
   }
 
   function getGoogleWebClientId() {
@@ -846,8 +924,10 @@
     return /(KAKAOTALK|Instagram|FBAN|FBAV|Line\/|NAVER)/i.test(ua);
   }
 
-  function getSignInStrategy() {
+  function getSignInStrategy(options = {}) {
     if (isInAppBrowser()) return "blocked-in-app";
+    if (options.forceRedirect) return "redirect";
+    if (getGoogleWebClientId()) return "gis-first";
     return "redirect";
   }
 
@@ -930,7 +1010,7 @@
     return "";
   }
 
-  async function signInWithGoogle() {
+  async function signInWithGoogle(options = {}) {
     if (!isConfigured()) {
       throw {
         code: "auth/not-configured",
@@ -958,14 +1038,25 @@
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
 
-      const strategy = getSignInStrategy();
+      const strategy = getSignInStrategy(options);
       const mobileHint = getMobileLoginHint();
 
       if (strategy === "blocked-in-app") {
         throw { code: "auth/blocked-in-app", message: mobileHint };
       }
 
-      if (strategy === "redirect") {
+      if (strategy === "gis-first") {
+        try {
+          await signInWithGoogleGisModal();
+          await waitForAuthUser(30000);
+          return waitUntilSignedInAndSynced();
+        } catch (err) {
+          if (err?.code === "auth/popup-closed-by-user") throw err;
+          console.warn("GIS sign-in failed, falling back to redirect:", err);
+        }
+      }
+
+      if (strategy === "redirect" || strategy === "gis-first") {
         await signInWithRedirectFlow(provider);
         redirectStarted = true;
         return new Promise(() => {});
@@ -1029,5 +1120,7 @@
     isAuthInProgress,
     consumePersistedAuthError,
     persistAuthError,
+    shouldRecoverRedirectAuth,
+    recoverRedirectAuth,
   };
 })();

@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 71 — 2026-07-18 — GIS-first login + redirect recovery
+
+### Fixed
+
+- Redirect 복귀 후 세션이 사라지던 문제 — `getRedirectResult` 실패 시 20초간 auth 상태 복구 시도
+- Google 로그인을 **GIS(같은 페이지 계정 선택)** 우선으로 전환, Redirect는 「대체」 버튼으로 분리
+- Auth persistence LOCAL → SESSION 순으로 fallback (회사 PC 저장소 제한 대응)
+- Redirect 복귀 직후 로그인 화면이 먼저 뜨던 race condition 완화
+
+---
+
 ## [1.3.0] — build 70 — 2026-07-18 — Redirect login for corporate PC
 
 ### Fixed

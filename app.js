@@ -496,6 +496,7 @@ const els = {
   authGateHint: document.getElementById("authGateHint"),
   authGateError: document.getElementById("authGateError"),
   authGateMeta: document.getElementById("authGateMeta"),
+  authGateRedirectBtn: document.getElementById("authGateRedirectBtn"),
   authGateSyncStatus: document.getElementById("authGateSyncStatus"),
 };
 
@@ -662,7 +663,7 @@ function showAuthGate(options = {}) {
   if (els.authGateHint) {
     const mobileHint = window.CloudSyncManager?.getMobileLoginHint?.() || "";
     const redirectHint =
-      "클릭하면 Google 로그인 페이지로 이동합니다. (회사 PC·팝업 차단 환경에서도 동작)";
+      "클릭하면 Google 계정 선택 창이 열립니다. (페이지 이동 없이 로그인)";
     els.authGateHint.textContent = mobileHint || redirectHint;
     els.authGateHint.hidden = false;
   }
@@ -707,7 +708,7 @@ async function completeLoginFlow() {
   }
 }
 
-function triggerCloudSignIn(buttonEl) {
+function triggerCloudSignIn(buttonEl, options = {}) {
   if (!window.CloudSyncManager) return Promise.resolve();
 
   const btn = buttonEl;
@@ -721,11 +722,11 @@ function triggerCloudSignIn(buttonEl) {
     els.authGateError.textContent = "";
   }
   if (els.authGateSyncStatus) {
-    els.authGateSyncStatus.textContent = "Google 로그인 페이지로 이동 중…";
+    els.authGateSyncStatus.textContent = "Google 계정 선택 중…";
     els.authGateSyncStatus.hidden = false;
   }
 
-  return CloudSyncManager.signInWithGoogle()
+  return CloudSyncManager.signInWithGoogle(options)
     .then(() => completeLoginFlow())
     .catch((err) => {
       console.error("Google login failed:", err);
@@ -764,6 +765,12 @@ async function ensureCloudAuthBeforeBootstrap() {
     setBootStatus("로그인 확인 중…");
   }
   await CloudSyncManager.init();
+
+  if (!CloudSyncManager.isSignedIn() && CloudSyncManager.shouldRecoverRedirectAuth?.()) {
+    setBootStatus("Google 로그인 확인 중…");
+    await CloudSyncManager.recoverRedirectAuth(20000);
+  }
+
   const { signedIn } = await CloudSyncManager.waitForInitialAuth();
 
   if (!CloudSyncManager.requiresAuth()) {
@@ -881,6 +888,16 @@ function initCloudSyncUi() {
 
   els.authGateSignInBtn?.addEventListener("click", () => {
     triggerCloudSignIn(els.authGateSignInBtn).catch(() => {
+      /* inline error */
+    });
+  });
+
+  els.authGateRedirectBtn?.addEventListener("click", () => {
+    if (els.authGateSyncStatus) {
+      els.authGateSyncStatus.textContent = "Google 로그인 페이지로 이동 중…";
+      els.authGateSyncStatus.hidden = false;
+    }
+    triggerCloudSignIn(els.authGateRedirectBtn, { forceRedirect: true }).catch(() => {
       /* inline error */
     });
   });
@@ -9222,7 +9239,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "70";
+const APP_BUILD = "71";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

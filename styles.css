@@ -9817,6 +9817,13 @@ button.dashboard-v2__urgent-bucket:hover {
   font-size: calc(15px * var(--ui-scale));
 }
 
+.auth-gate__sign-in-alt {
+  width: 100%;
+  min-height: calc(40px * var(--ui-scale));
+  margin-top: calc(10px * var(--ui-scale));
+  font-size: calc(13px * var(--ui-scale));
+}
+
 .auth-gate__hint {
   margin: calc(14px * var(--ui-scale)) 0 0;
   font-size: calc(12px * var(--ui-scale));
