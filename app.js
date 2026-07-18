@@ -497,6 +497,8 @@ const els = {
   authGateError: document.getElementById("authGateError"),
   authGateMeta: document.getElementById("authGateMeta"),
   authGateSyncStatus: document.getElementById("authGateSyncStatus"),
+  authGateDebug: document.getElementById("authGateDebug"),
+  authGateAltHost: document.getElementById("authGateAltHost"),
 };
 
 function notifyCloudSync(key) {
@@ -644,6 +646,17 @@ function setBootStatus(message) {
   if (els.appBootStatus) els.appBootStatus.textContent = message;
 }
 
+function logAuthStep(message) {
+  const text = String(message || "");
+  if (window.CloudSyncManager?.logAuthStep) {
+    CloudSyncManager.logAuthStep(text);
+  }
+  if (els.authGateDebug) {
+    els.authGateDebug.hidden = !text;
+    els.authGateDebug.textContent = text;
+  }
+}
+
 function showAuthGate(options = {}) {
   if (els.appBootSplash) els.appBootSplash.hidden = true;
   if (els.authGate) {
@@ -677,6 +690,17 @@ function showAuthGate(options = {}) {
     const authStatus = window.CloudSyncManager?.getAuthStatus?.() || "";
     const statusLabel = authStatus ? ` · ${authStatus}` : "";
     els.authGateMeta.textContent = `Build ${APP_BUILD} · ${hostname}${storageLabel}${statusLabel}`;
+  }
+  if (els.authGateAltHost) {
+    const onGithubPages = /github\.io$/i.test(window.location.hostname || "");
+    if (onGithubPages) {
+      els.authGateAltHost.hidden = false;
+      els.authGateAltHost.innerHTML =
+        '회사 PC에서 GitHub Pages 로그인이 안 되면 <a href="https://cra-task-management.web.app/" target="_blank" rel="noopener">cra-task-management.web.app</a> 에서 시도해 보세요.';
+    } else {
+      els.authGateAltHost.hidden = true;
+      els.authGateAltHost.textContent = "";
+    }
   }
 }
 
@@ -763,12 +787,12 @@ function triggerCloudSignIn(buttonEl, options = {}) {
       if (err?.code !== "auth/popup-closed-by-user") {
         const message = CloudSyncManager.formatAuthError?.(err) || err?.message || "Google 로그인에 실패했습니다.";
         CloudSyncManager.persistAuthError?.(err);
+        logAuthStep(`실패: ${message.replace(/\n+/g, " ").slice(0, 120)}`);
         if (els.authGateError) {
           els.authGateError.textContent = message.replace(/\n+/g, " ");
           els.authGateError.hidden = false;
-        } else {
-          alert(message);
         }
+        window.alert(message.replace(/\n+/g, "\n"));
       }
       throw err;
     })
@@ -9293,7 +9317,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "75";
+const APP_BUILD = "76";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

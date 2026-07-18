@@ -9855,6 +9855,29 @@ button.dashboard-v2__urgent-bucket:hover {
   letter-spacing: 0.02em;
 }
 
+.auth-gate__debug {
+  margin: calc(12px * var(--ui-scale)) 0 0;
+  padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  border-radius: calc(8px * var(--ui-scale));
+  background: #f8fafc;
+  color: #475569;
+  font-size: calc(12px * var(--ui-scale));
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.auth-gate__alt-host {
+  margin: calc(12px * var(--ui-scale)) 0 0;
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--primary, #2563eb);
+  line-height: 1.5;
+}
+
+.auth-gate__alt-host a {
+  color: inherit;
+  font-weight: 600;
+}
+
 .workspace--locked {
   visibility: hidden;
 }

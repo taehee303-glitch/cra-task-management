@@ -630,6 +630,7 @@
 
   async function init() {
     clearStaleAuthMessages();
+    logAuthStep("Firebase 초기화 중…");
     if (!isConfigured()) {
       notifyUi();
       markInitialAuthResolved();
@@ -661,6 +662,15 @@
         await configureAuthPersistence();
       } catch (err) {
         console.warn("Firebase auth persistence unavailable:", err);
+      }
+
+      const connectivity = await checkFirebaseConnectivity();
+      if (!connectivity.ok) {
+        logAuthStep(connectivity.message);
+        persistAuthError({ code: "auth/network-request-failed", message: connectivity.message });
+        reportAuthError(connectivity.message);
+      } else {
+        logAuthStep(connectivity.message);
       }
 
       const redirectResult = await processRedirectSignInResult();
@@ -861,6 +871,7 @@
       auto_select: false,
       cancel_on_tap_outside: false,
       itp_support: true,
+      use_fedcm_for_prompt: true,
     });
 
     state.gisInitialized = true;
@@ -918,6 +929,7 @@
 
       state.gisCredentialHandler = async (response) => {
         try {
+          logAuthStep("Google 계정 확인됨 → Firebase 연결 중…");
           if (!response?.credential) {
             throw {
               code: "auth/invalid-credential",
@@ -935,9 +947,11 @@
             };
           }
           sessionStorage.removeItem(REDIRECT_PENDING_KEY);
+          logAuthStep(`Firebase 로그인 성공 (${user.email || user.uid})`);
           await handleSignedIn(user);
           finish(null);
         } catch (err) {
+          logAuthStep(`Firebase 연결 실패: ${formatAuthError(err)}`.slice(0, 120));
           persistAuthError(err);
           finish(err);
         }
@@ -981,6 +995,42 @@
     if (isInAppBrowser()) return "blocked-in-app";
     if (options.forceRedirect) return "redirect";
     return "native-first";
+  }
+
+  function logAuthStep(message) {
+    persistAuthStatus(String(message || ""));
+  }
+
+  async function checkFirebaseConnectivity() {
+    const cfg = window.FIREBASE_CONFIG;
+    if (!cfg?.apiKey) return { ok: false, message: "Firebase API key missing" };
+
+    try {
+      const response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${encodeURIComponent(cfg.apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            continueUri: window.location.origin + window.location.pathname,
+            providerId: "google.com",
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        return {
+          ok: false,
+          message: data?.error?.message || `Firebase API HTTP ${response.status}`,
+        };
+      }
+      return { ok: true, message: "Firebase 연결 OK" };
+    } catch (err) {
+      return {
+        ok: false,
+        message: `Firebase API 차단됨 — 회사 네트워크/VPN에서 identitytoolkit.googleapis.com 허용 필요 (${err?.message || err})`,
+      };
+    }
   }
 
   function setSignedInEntryCallback(fn) {
@@ -1264,25 +1314,14 @@
       }
 
       if (strategy === "native-first") {
-        try {
-          const popupResult = await state.auth.signInWithPopup(provider);
-          if (popupResult?.user) {
-            await handleSignedIn(popupResult.user);
-          }
-          await waitForAuthUser(10000);
-          return waitUntilSignedInAndSynced();
-        } catch (err) {
-          if (err?.code === "auth/popup-closed-by-user") throw err;
-          console.warn("Popup sign-in failed, trying GIS:", err);
-        }
-
+        logAuthStep("Google 계정 선택 창 열기…");
         try {
           await signInWithGoogleGisModal();
           await waitForAuthUser(30000);
           return waitUntilSignedInAndSynced();
         } catch (err) {
           if (err?.code === "auth/popup-closed-by-user") throw err;
-          console.warn("GIS sign-in failed, trying OAuth token client:", err);
+          logAuthStep(`GIS 실패 → OAuth Token 시도…`);
         }
 
         try {
@@ -1384,6 +1423,8 @@
     peekPersistedAuthError,
     persistAuthError,
     getAuthStatus,
+    logAuthStep,
+    checkFirebaseConnectivity,
     shouldRecoverRedirectAuth,
     recoverRedirectAuth,
     syncCurrentAuthUser,

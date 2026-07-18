@@ -1,0 +1,34 @@
+name: Deploy Firebase Hosting
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "FIREBASE_TOKEN secret is not set."
+            echo "Run: firebase login:ci"
+            echo "Then add the token as GitHub repo secret FIREBASE_TOKEN"
+            exit 1
+          fi
+          firebase deploy --only hosting --project cra-task-management --token "$FIREBASE_TOKEN"

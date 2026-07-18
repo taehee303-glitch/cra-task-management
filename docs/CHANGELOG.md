@@ -17,6 +17,22 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 76 — 2026-07-18 — Auth diagnostics + Firebase Hosting
+
+### Added
+
+- 로그인 화면 단계별 진단 메시지 (Firebase 연결 / GIS / Firebase credential)
+- Firebase API 연결 차단 감지 (회사 네트워크)
+- Firebase Hosting 배포 설정 (`firebase.json`, 수동 deploy workflow)
+- GitHub Pages에서 안 될 때 `cra-task-management.web.app` 안내 링크
+
+### Fixed
+
+- Popup 로그인 제거 → GIS + OAuth Token만 사용 (같은 페이지)
+- 로그인 실패 시 alert로 반드시 오류 표시
+
+---
+
 ## [1.3.0] — build 75 — 2026-07-18 — Immediate dashboard entry after auth
 
 ### Fixed
