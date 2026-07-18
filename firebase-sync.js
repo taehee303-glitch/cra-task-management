@@ -31,6 +31,7 @@
     initialAuthResolved: false,
     initialAuthWaiters: [],
     signedInSyncWaiters: [],
+    signInFlowPromise: null,
   };
 
   function requiresAuth() {
@@ -50,13 +51,78 @@
   }
 
   function resolveSignedInSyncWaiters() {
+    if (!isSignedIn() || !state.ready || state.syncing) return;
     const waiters = state.signedInSyncWaiters.splice(0);
-    waiters.forEach((fn) => {
+    waiters.forEach(({ resolve, timer }) => {
+      if (timer) clearTimeout(timer);
       try {
-        fn();
+        resolve(state.user);
       } catch {
         /* ignore */
       }
+    });
+  }
+
+  function rejectSignedInSyncWaiters(err) {
+    const waiters = state.signedInSyncWaiters.splice(0);
+    waiters.forEach(({ reject, timer }) => {
+      if (timer) clearTimeout(timer);
+      try {
+        reject(err);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  function waitForAuthUser(timeoutMs = 30000) {
+    if (!state.auth) {
+      return Promise.reject(new Error("Firebase Auth가 초기화되지 않았습니다."));
+    }
+    if (state.auth.currentUser) {
+      return Promise.resolve(state.auth.currentUser);
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsub();
+        reject({
+          code: "auth/timeout",
+          message:
+            "Google 로그인 확인 시간이 초과되었습니다. 팝업 차단·회사 보안 정책·네트워크를 확인한 뒤 다시 시도해 주세요.",
+        });
+      }, timeoutMs);
+
+      const unsub = state.auth.onAuthStateChanged((user) => {
+        if (!user) return;
+        clearTimeout(timer);
+        unsub();
+        resolve(user);
+      });
+    });
+  }
+
+  function waitUntilSignedInAndSynced(timeoutMs = 90000) {
+    if (isSignedIn() && state.ready && !state.syncing) {
+      return Promise.resolve(state.user);
+    }
+
+    if (state.signInFlowPromise) {
+      return state.signInFlowPromise;
+    }
+
+    return new Promise((resolve, reject) => {
+      const entry = { resolve, reject };
+      entry.timer = setTimeout(() => {
+        const idx = state.signedInSyncWaiters.indexOf(entry);
+        if (idx !== -1) state.signedInSyncWaiters.splice(idx, 1);
+        reject({
+          code: "auth/sync-timeout",
+          message:
+            "클라우드 동기화 시간이 초과되었습니다. 네트워크 연결과 Firebase Firestore Rules 배포 여부를 확인해 주세요.",
+        });
+      }, timeoutMs);
+      state.signedInSyncWaiters.push(entry);
     });
   }
 
@@ -71,23 +137,8 @@
     });
   }
 
-  function waitUntilSignedInAndSynced() {
-    if (isSignedIn() && state.ready && !state.syncing) {
-      return Promise.resolve(state.user);
-    }
-    return new Promise((resolve) => {
-      state.signedInSyncWaiters.push(() => {
-        if (isSignedIn() && state.ready && !state.syncing) {
-          resolve(state.user);
-        }
-      });
-    });
-  }
-
   function notifySignedInSyncReady() {
-    if (isSignedIn() && state.ready && !state.syncing) {
-      resolveSignedInSyncWaiters();
-    }
+    resolveSignedInSyncWaiters();
   }
 
   function isConfigured() {
@@ -400,20 +451,36 @@
   }
 
   async function handleSignedIn(user) {
-    state.user = user;
-    state.ready = true;
-    notifyUi();
+    if (state.signInFlowPromise && state.user?.uid === user.uid) {
+      return state.signInFlowPromise;
+    }
+
+    state.signInFlowPromise = (async () => {
+      state.user = user;
+      state.ready = true;
+      notifyUi();
+
+      try {
+        await resolveInitialSync();
+        startListeners();
+        notifyRefresh();
+      } catch (err) {
+        console.error("Cloud sync sign-in handling failed:", err);
+        const message =
+          err?.code === "permission-denied"
+            ? "Firestore 접근이 거부되었습니다. Firebase Console에서 firestore.rules를 배포했는지 확인해 주세요."
+            : "클라우드 동기화 초기화에 실패했습니다. 네트워크와 Firebase 설정을 확인해 주세요.";
+        reportAuthError(message);
+        throw err;
+      } finally {
+        notifySignedInSyncReady();
+      }
+    })();
 
     try {
-      await resolveInitialSync();
-      startListeners();
-      notifyRefresh();
-    } catch (err) {
-      console.error("Cloud sync sign-in handling failed:", err);
-      reportAuthError("클라우드 동기화 초기화에 실패했습니다. 네트워크와 Firebase 설정을 확인해 주세요.");
-      throw err;
+      await state.signInFlowPromise;
     } finally {
-      notifySignedInSyncReady();
+      state.signInFlowPromise = null;
     }
   }
 
@@ -488,7 +555,7 @@
         try {
           if (user) {
             sessionStorage.removeItem(REDIRECT_PENDING_KEY);
-            if (state.user?.uid === user.uid && state.ready) return;
+            if (state.user?.uid === user.uid && state.ready && !state.signInFlowPromise) return;
             await handleSignedIn(user);
             return;
           }
@@ -496,6 +563,9 @@
           if (redirectResult?.user) return;
           if (hasPendingAuthRedirect()) return;
           handleSignedOut();
+        } catch (err) {
+          console.error("Auth state handler failed:", err);
+          rejectSignedInSyncWaiters(err);
         } finally {
           markInitialAuthResolved();
           notifySignedInSyncReady();
@@ -692,6 +762,12 @@
         "네트워크 연결을 확인한 뒤 다시 시도해 주세요.",
       "auth/missing-client-id":
         "모바일 Google 로그인 설정이 필요합니다. Firebase Console → Authentication → Google → Web client ID 를 firebase-config.js 의 googleWebClientId 에 입력해 주세요.",
+      "auth/timeout":
+        "Google 로그인 확인 시간이 초과되었습니다. 팝업 차단·회사 보안 정책·네트워크를 확인한 뒤 다시 시도해 주세요.",
+      "auth/sync-timeout":
+        "클라우드 동기화 시간이 초과되었습니다. Firebase Firestore Rules 배포와 네트워크 연결을 확인해 주세요.",
+      "permission-denied":
+        "Firestore 접근이 거부되었습니다. Firebase Console → Firestore → Rules 에 firestore.rules 내용을 배포해 주세요.",
     };
     const hostname = window.location.hostname || "현재 사이트";
     if (code === "auth/unauthorized-domain") {
@@ -712,10 +788,11 @@
 
   async function signInWithGoogle() {
     if (!isConfigured()) {
-      alert(
-        "Firebase 설정이 비어 있습니다.\nfirebase-config.js 파일에 Firebase Console에서 발급받은 설정값을 입력해 주세요."
-      );
-      return;
+      throw {
+        code: "auth/not-configured",
+        message:
+          "Firebase 설정이 비어 있습니다.\nfirebase-config.js 파일에 Firebase Console에서 발급받은 설정값을 입력해 주세요.",
+      };
     }
 
     if (!state.auth) {
@@ -723,8 +800,10 @@
     }
 
     if (!state.auth) {
-      alert("Firebase Auth를 초기화하지 못했습니다. 페이지를 새로고침해 주세요.");
-      return;
+      throw {
+        code: "auth/not-initialized",
+        message: "Firebase Auth를 초기화하지 못했습니다. 페이지를 새로고침해 주세요.",
+      };
     }
 
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -734,25 +813,29 @@
     const mobileHint = getMobileLoginHint();
 
     if (strategy === "blocked-in-app") {
-      reportAuthError(mobileHint);
-      return;
+      throw { code: "auth/blocked-in-app", message: mobileHint };
     }
 
     if (strategy === "gis") {
       await signInWithGoogleGisModal();
-      return;
+      await waitForAuthUser();
+      return waitUntilSignedInAndSynced();
     }
 
     try {
       await state.auth.signInWithPopup(provider);
     } catch (err) {
-      if (err?.code === "auth/popup-closed-by-user") return;
+      if (err?.code === "auth/popup-closed-by-user") throw err;
       if (err?.code === "auth/popup-blocked" && getGoogleWebClientId()) {
         await signInWithGoogleGisModal();
-        return;
+        await waitForAuthUser();
+        return waitUntilSignedInAndSynced();
       }
       throw err;
     }
+
+    await waitForAuthUser();
+    return waitUntilSignedInAndSynced();
   }
 
   async function signOut() {

@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 67 — 2026-07-18 — Login completion fix
+
+### Fixed
+
+- Google 로그인 후 무한 대기 — 인증·동기화 완료 대기 로직 보강 (타임아웃·에러 표시)
+- 팝업만 닫히고 로그인 미완료 시 영구 대기하던 버그 수정
+- 로그인 성공 직후 Dashboard 표시 (bootstrap 완료 전에도 게이트 해제)
+- Firestore Rules 미배포 시 permission-denied 안내 메시지 추가
+
+---
+
 ## [1.3.0] — build 66 — 2026-07-15 — Mandatory cloud login (Firebase SSOT)
 
 ### Changed

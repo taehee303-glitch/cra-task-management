@@ -686,16 +686,13 @@ function triggerCloudSignIn(buttonEl) {
     els.authGateError.hidden = true;
     els.authGateError.textContent = "";
   }
+  if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
 
   return CloudSyncManager.signInWithGoogle()
-    .then(() => {
-      if (els.authGateSyncStatus) els.authGateSyncStatus.hidden = false;
-      return CloudSyncManager.waitUntilSignedInAndSynced();
-    })
     .catch((err) => {
       console.error("Google login failed:", err);
       if (err?.code !== "auth/popup-closed-by-user") {
-        const message = CloudSyncManager.formatAuthError?.(err) || "Google 로그인에 실패했습니다.";
+        const message = CloudSyncManager.formatAuthError?.(err) || err?.message || "Google 로그인에 실패했습니다.";
         if (els.authGateError) {
           els.authGateError.textContent = message.replace(/\n+/g, " ");
           els.authGateError.hidden = false;
@@ -868,11 +865,20 @@ async function bootstrapApp() {
   registerCloudSyncSources();
   initCloudSyncUi();
 
-  await ensureCloudAuthBeforeBootstrap();
-
-  loadAllFromLocalStorage();
-  await finishAppBootstrap();
-  hideAuthOverlays();
+  try {
+    await ensureCloudAuthBeforeBootstrap();
+    loadAllFromLocalStorage();
+    hideAuthOverlays();
+    if (!window.__appBootstrapFinished) {
+      await finishAppBootstrap();
+      window.__appBootstrapFinished = true;
+    }
+  } catch (err) {
+    if (CloudSyncManager?.isSignedIn?.()) {
+      hideAuthOverlays();
+    }
+    throw err;
+  }
 }
 
 async function finishAppBootstrap() {
@@ -9158,7 +9164,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "66";
+const APP_BUILD = "67";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

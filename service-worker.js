@@ -1,4 +1,4 @@
-const CACHE_VERSION = "66";
+const CACHE_VERSION = "67";
 const CACHE_NAME = `cra-task-manager-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
