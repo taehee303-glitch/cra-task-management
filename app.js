@@ -654,8 +654,12 @@ function showAuthGate(options = {}) {
     els.workspace.hidden = true;
   }
   if (els.authGateError) {
-    els.authGateError.hidden = !options.error;
-    els.authGateError.textContent = options.error || "";
+    const errorText =
+      options.error ||
+      window.CloudSyncManager?.peekPersistedAuthError?.() ||
+      "";
+    els.authGateError.hidden = !errorText;
+    els.authGateError.textContent = errorText;
   }
   if (els.authGateSyncStatus) {
     els.authGateSyncStatus.hidden = !options.syncing;
@@ -671,7 +675,9 @@ function showAuthGate(options = {}) {
     const hostname = window.location.hostname || "unknown";
     const diag = window.CloudSyncManager?.getAuthDiagnostics?.() || {};
     const storageLabel = diag.storageOk === "blocked" ? " · 저장소 차단" : "";
-    els.authGateMeta.textContent = `Build ${APP_BUILD} · ${hostname}${storageLabel}`;
+    const authStatus = window.CloudSyncManager?.getAuthStatus?.() || "";
+    const statusLabel = authStatus ? ` · ${authStatus}` : "";
+    els.authGateMeta.textContent = `Build ${APP_BUILD} · ${hostname}${storageLabel}${statusLabel}`;
   }
 }
 
@@ -874,7 +880,11 @@ function initCloudSyncUi() {
         !CloudSyncManager.isAuthInProgress?.() &&
         window.__appBootstrapFinished
       ) {
-        showAuthGate();
+        showAuthGate({
+          error:
+            CloudSyncManager.peekPersistedAuthError?.() ||
+            "로그인 세션이 끊어졌습니다. 다시 로그인해 주세요.",
+        });
       } else if (!CloudSyncManager.requiresAuth?.()) {
         loadAllFromLocalStorage();
         refreshAfterCloudSync();
@@ -9274,7 +9284,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "73";
+const APP_BUILD = "74";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

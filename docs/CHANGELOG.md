@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 74 — 2026-07-18 — Fix silent session loss after login
+
+### Fixed
+
+- 로그인 직후 Firebase null 이벤트로 세션이 끊기며 **에러 없이** 로그인 화면으로 돌아가던 문제
+- `handleSignedOut`이 `auth.currentUser`가 있는데도 실행되던 버그
+- Service Worker `controllerchange` 자동 reload 제거, 로그인 8초 후에만 SW 등록
+- 세션 끊김 시 로그인 화면에 원인 메시지·상태(`signed-in` / `signed-out`) 표시
+
+---
+
 ## [1.3.0] — build 73 — 2026-07-18 — Fix login bootstrap race
 
 ### Fixed

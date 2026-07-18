@@ -570,7 +570,8 @@
 
     state.user = user;
     state.ready = true;
-    state.suppressSignOutUntil = Date.now() + 15000;
+    state.suppressSignOutUntil = Date.now() + 60000;
+    persistAuthStatus(`signed-in:${user.uid}`);
     notifyUi();
     notifySignedInWaiters();
     notifySignedInSyncReady();
@@ -581,12 +582,22 @@
   function handleSignedOut() {
     if (isAuthInProgress()) return;
     if (Date.now() < state.suppressSignOutUntil) return;
+    if (state.auth?.currentUser) {
+      void syncCurrentAuthUser();
+      return;
+    }
 
     stopListeners();
     state.user = null;
     state.ready = false;
     state.pendingKeys.clear();
     clearTimeout(state.debounceTimer);
+    persistAuthStatus("signed-out");
+    persistAuthError({
+      code: "auth/session-lost",
+      message:
+        "로그인 세션이 유지되지 않았습니다. Chrome에서 taehee303-glitch.github.io 쿠키·사이트 데이터를 허용한 뒤 다시 로그인해 주세요.",
+    });
     rejectSignedInWaiters({
       code: "auth/signed-out",
       message: "로그아웃되었습니다.",
@@ -655,6 +666,10 @@
 
           if (!state.initialAuthNullSeen) {
             state.initialAuthNullSeen = true;
+            if (state.auth?.currentUser) {
+              await handleSignedIn(state.auth.currentUser);
+              return;
+            }
             if (shouldRecoverRedirectAuth()) return;
           }
 
@@ -662,6 +677,10 @@
           if (shouldRecoverRedirectAuth()) return;
           if (isAuthInProgress()) return;
           if (Date.now() < state.suppressSignOutUntil) return;
+          if (state.auth?.currentUser) {
+            await handleSignedIn(state.auth.currentUser);
+            return;
+          }
           handleSignedOut();
         } catch (err) {
           console.error("Auth state handler failed:", err);
@@ -950,6 +969,30 @@
     }
   }
 
+  function peekPersistedAuthError() {
+    try {
+      return sessionStorage.getItem("cra-last-auth-error") || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function persistAuthStatus(message) {
+    try {
+      sessionStorage.setItem("cra-auth-status", String(message || ""));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function getAuthStatus() {
+    try {
+      return sessionStorage.getItem("cra-auth-status") || "";
+    } catch {
+      return "";
+    }
+  }
+
   function shouldUseRedirectSignIn() {
     return getSignInStrategy() === "redirect";
   }
@@ -994,6 +1037,8 @@
         "이 브라우저/환경에서는 Google 로그인이 지원되지 않습니다. Chrome 최신 버전을 사용해 주세요.",
       "auth/oauth-token-failed":
         "Google OAuth 토큰 발급에 실패했습니다. Google Cloud Console OAuth 설정을 확인해 주세요.",
+      "auth/session-lost":
+        "로그인 세션이 유지되지 않았습니다. Chrome에서 taehee303-glitch.github.io 쿠키·사이트 데이터를 허용한 뒤 다시 로그인해 주세요.",
       "auth/sync-timeout":
         "클라우드 동기화 시간이 초과되었습니다. Firebase Firestore Rules 배포와 네트워크 연결을 확인해 주세요.",
       "permission-denied":
@@ -1224,7 +1269,9 @@
     hasPendingAuthRedirect,
     isAuthInProgress,
     consumePersistedAuthError,
+    peekPersistedAuthError,
     persistAuthError,
+    getAuthStatus,
     shouldRecoverRedirectAuth,
     recoverRedirectAuth,
     syncCurrentAuthUser,

@@ -73,44 +73,42 @@ async function purgeFitSpaceServiceWorkerCache() {
   return shouldReload;
 }
 
+function registerServiceWorkerNow() {
+  if (!("serviceWorker" in navigator)) return;
+  if (location.protocol !== "http:" && location.protocol !== "https:") return;
+  if (hasPendingAuthRedirect()) return;
+
+  navigator.serviceWorker
+    .register("./service-worker.js?v=74", { scope: "./", updateViaCache: "none" })
+    .catch((error) => {
+      console.warn("Service Worker 등록 실패:", error);
+    });
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   if (location.protocol !== "http:" && location.protocol !== "https:") return;
   if (hasPendingAuthRedirect()) return;
 
-  window.addEventListener("load", () => {
-    if (hasPendingAuthRedirect()) return;
+  if (document.readyState === "complete") {
+    registerServiceWorkerNow();
+    return;
+  }
 
-    navigator.serviceWorker
-      .register("./service-worker.js?v=73", { scope: "./" })
-      .then((registration) => {
-        registration.addEventListener("updatefound", () => {
-          const nextWorker = registration.installing;
-          if (!nextWorker) return;
-
-          nextWorker.addEventListener("statechange", () => {
-            if (nextWorker.state === "installed" && navigator.serviceWorker.controller) {
-              nextWorker.postMessage({ type: "SKIP_WAITING" });
-            }
-          });
-        });
-      })
-      .catch((error) => {
-        console.warn("Service Worker 등록 실패:", error);
-      });
-  });
-
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloaded || hasPendingAuthRedirect()) return;
-    reloaded = true;
-    window.location.reload();
-  });
+  window.addEventListener("load", registerServiceWorkerNow, { once: true });
 }
 
 function registerServiceWorkerWhenReady() {
-  if (window.FIREBASE_CONFIG?.requireCloudAuth && !window.__appBootstrapFinished) {
-    window.addEventListener("app-ready", registerServiceWorker, { once: true });
+  if (window.FIREBASE_CONFIG?.requireCloudAuth) {
+    if (!window.__appBootstrapFinished) {
+      window.addEventListener(
+        "app-ready",
+        () => {
+          window.setTimeout(registerServiceWorkerNow, 8000);
+        },
+        { once: true }
+      );
+    }
     return;
   }
   registerServiceWorker();
