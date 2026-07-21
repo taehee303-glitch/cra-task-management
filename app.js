@@ -289,8 +289,15 @@ const els = {
   topbarTitle: document.getElementById("topbarTitle"),
   quickAddInput: document.getElementById("quickAddInput"),
   quickAddBtn: document.getElementById("quickAddBtn"),
-  inboxQuickAddInput: document.getElementById("inboxQuickAddInput"),
-  inboxQuickAddBtn: document.getElementById("inboxQuickAddBtn"),
+  dashboardQuickAddInput: document.getElementById("dashboardQuickAddInput"),
+  dashboardQuickAddBtn: document.getElementById("dashboardQuickAddBtn"),
+  taskReadModal: document.getElementById("taskReadModal"),
+  taskReadBody: document.getElementById("taskReadBody"),
+  taskReadTitle: document.getElementById("taskReadTitle"),
+  taskReadPriority: document.getElementById("taskReadPriority"),
+  closeTaskReadModalBtn: document.getElementById("closeTaskReadModalBtn"),
+  taskReadCloseBtn: document.getElementById("taskReadCloseBtn"),
+  taskReadEditBtn: document.getElementById("taskReadEditBtn"),
   inboxNavBadge: document.getElementById("inboxNavBadge"),
   inboxTaskList: document.getElementById("inboxTaskList"),
   inboxCount: document.getElementById("inboxCount"),
@@ -1559,6 +1566,26 @@ async function finishAppBootstrap() {
       handleQuickAddInput(els.quickAddInput);
     }
   });
+  els.dashboardQuickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.dashboardQuickAddInput));
+  els.dashboardQuickAddInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleQuickAddInput(els.dashboardQuickAddInput);
+    }
+  });
+  els.closeTaskReadModalBtn?.addEventListener("click", closeTaskReadView);
+  els.taskReadCloseBtn?.addEventListener("click", closeTaskReadView);
+  els.taskReadModal?.addEventListener("click", (event) => {
+    if (event.target === els.taskReadModal) closeTaskReadView();
+  });
+  els.taskReadEditBtn?.addEventListener("click", () => {
+    const taskId = els.taskReadModal?.dataset.taskId;
+    closeTaskReadView();
+    if (taskId) {
+      switchView("tasks");
+      openTaskDetail(taskId);
+    }
+  });
   els.mobileFilterBtns.forEach((btn) => {
     btn.addEventListener("click", () => handleMobileFilterClick(btn.dataset.mobileFilter));
   });
@@ -1570,13 +1597,6 @@ async function finishAppBootstrap() {
   });
   document.querySelectorAll("[data-master-edit]").forEach((btn) => {
     btn.addEventListener("click", () => openMasterMobileEdit(btn.dataset.masterEdit));
-  });
-  els.inboxQuickAddBtn?.addEventListener("click", () => handleQuickAddInput(els.inboxQuickAddInput));
-  els.inboxQuickAddInput?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      handleQuickAddInput(els.inboxQuickAddInput);
-    }
   });
   els.taskViewCardBtn?.addEventListener("click", () => setTaskViewMode("card"));
   els.taskViewListBtn?.addEventListener("click", () => setTaskViewMode("list"));
@@ -4732,7 +4752,7 @@ function renderMobileTaskActionList() {
 
   if (!hierarchicalRows.length) {
     els.mobileTaskActionList.innerHTML =
-      '<p class="task-card-list__empty">표시할 업무가 없습니다. Quick Add 또는 + 버튼으로 추가하세요.</p>';
+      '<p class="task-card-list__empty">표시할 업무가 없습니다. Dashboard Quick Add 또는 + 버튼으로 추가하세요.</p>';
     return;
   }
 
@@ -5250,7 +5270,8 @@ function handleQuickAddInput(inputEl) {
   TaskStore.add(newTask);
   inputEl.value = "";
   renderAll();
-  showToast(`Inbox · ${text}`);
+  showToast(`Inbox에 캡처 · ${text}`);
+  if (currentViewName === "inbox") renderInboxList();
 }
 
 function setTaskViewMode(mode, options = {}) {
@@ -5334,6 +5355,189 @@ function bindPreviewTaskClicks(container) {
   });
 }
 
+function bindCalendarTaskClicks(container) {
+  container?.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openTaskReadView(btn.dataset.edit);
+    });
+  });
+}
+
+let taskReadViewId = null;
+
+function openTaskReadView(taskId) {
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task || !els.taskReadModal) return;
+
+  taskReadViewId = taskId;
+  els.taskReadModal.dataset.taskId = taskId;
+  if (els.taskReadTitle) els.taskReadTitle.textContent = task.task;
+  if (els.taskReadPriority) {
+    els.taskReadPriority.textContent = task.priority;
+    els.taskReadPriority.className = `task-read-modal__priority task-read-modal__priority--${priorityClass(task.priority)}`;
+  }
+  if (els.taskReadBody) els.taskReadBody.innerHTML = renderTaskReadContent(task);
+  els.taskReadModal.hidden = false;
+}
+
+function closeTaskReadView() {
+  taskReadViewId = null;
+  if (els.taskReadModal) {
+    els.taskReadModal.hidden = true;
+    delete els.taskReadModal.dataset.taskId;
+  }
+}
+
+function renderTaskReadContent(task) {
+  const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "—";
+  const dueClass = task.dueDate ? getDueDateDisplayClass(task.dueDate, task.status) : "due-date--none";
+  const dueText = task.dueDate ? formatDueDisplay(task) : "Due 미정";
+  const workflowLabel = getDashboardWorkflowLabel(task);
+  const routineInfo = resolveTaskRoutineDisplay(task);
+  const memo = task.memo?.trim() || "";
+
+  const rows = [
+    ["Due", `<span class="task-read-field__value task-read-field__value--due ${dueClass}">${escapeHtml(dueText)}</span>`],
+    ["Status", escapeHtml(task.status)],
+    ["Study", escapeHtml(task.study?.trim() || "—")],
+    ["Site", escapeHtml(siteLabel)],
+    ["Priority", escapeHtml(task.priority)],
+  ];
+
+  if (workflowLabel) {
+    rows.push(["Workflow", escapeHtml(workflowLabel)]);
+  }
+  if (routineInfo?.name) {
+    rows.push(["Routine", escapeHtml(routineInfo.name)]);
+  }
+  if (task.calendarSync?.eventId) {
+    rows.push(["Calendar", "Google Calendar 연동됨 📅"]);
+  }
+
+  return `
+    <dl class="task-read-grid">
+      ${rows
+        .map(
+          ([label, value]) => `
+        <div class="task-read-field">
+          <dt class="task-read-field__label">${escapeHtml(label)}</dt>
+          <dd class="task-read-field__value">${value}</dd>
+        </div>
+      `
+        )
+        .join("")}
+    </dl>
+    ${memo ? `<section class="task-read-memo"><h4 class="task-read-memo__title">Memo</h4><p class="task-read-memo__body">${escapeHtml(memo)}</p></section>` : ""}
+  `;
+}
+
+function buildInboxStudySelectOptions(selected = "") {
+  const studies = StudyMasterStore.getAll().sort((a, b) => a.protocolNumber.localeCompare(b.protocolNumber, "ko"));
+  if (!studies.length) return '<option value="">Study 없음</option>';
+  return (
+    '<option value="">Study 선택</option>' +
+    studies
+      .map((study) => {
+        const value = study.protocolNumber;
+        const label =
+          study.studyName && study.studyName !== study.protocolNumber
+            ? `${study.protocolNumber} · ${study.studyName}`
+            : study.protocolNumber;
+        return `<option value="${escapeAttr(value)}"${value === selected ? " selected" : ""}>${escapeHtml(label)}</option>`;
+      })
+      .join("")
+  );
+}
+
+function buildInboxSiteSelectOptions(protocolNumber, selected = "") {
+  if (!protocolNumber) return '<option value="">Study 먼저 선택</option>';
+  const sites = getLinkedSitesForProtocol(protocolNumber, selected);
+  if (!sites.length) return '<option value="">연결된 Site 없음</option>';
+  return (
+    '<option value="">Site 선택 (선택)</option>' +
+    sites
+      .map((site) => {
+        const value = getSiteOptionValue(site);
+        return `<option value="${escapeAttr(value)}"${value === selected || site.standardName === selected ? " selected" : ""}>${escapeHtml(formatSiteOptionLabel(site))}</option>`;
+      })
+      .join("")
+  );
+}
+
+function renderInboxConfigureCard(task) {
+  const studyValue = task.study?.trim() || "";
+  const siteValue = task.site?.trim() || "";
+  return `
+    <article class="inbox-config-card" data-inbox-task="${escapeAttr(task.id)}">
+      <p class="inbox-config-card__task">${escapeHtml(task.task)}</p>
+      <div class="inbox-config-card__fields">
+        <label class="inbox-config-card__field">
+          <span class="inbox-config-card__label">Study</span>
+          <select class="inbox-config-card__select" data-inbox-study="${escapeAttr(task.id)}">${buildInboxStudySelectOptions(studyValue)}</select>
+        </label>
+        <label class="inbox-config-card__field">
+          <span class="inbox-config-card__label">Site</span>
+          <select class="inbox-config-card__select" data-inbox-site="${escapeAttr(task.id)}">${buildInboxSiteSelectOptions(studyValue, siteValue)}</select>
+        </label>
+        <label class="inbox-config-card__field">
+          <span class="inbox-config-card__label">Due</span>
+          <input type="date" class="inbox-config-card__input" data-inbox-due="${escapeAttr(task.id)}" value="${escapeAttr(task.dueDate || "")}" />
+        </label>
+      </div>
+      <div class="inbox-config-card__actions">
+        <button type="button" class="btn btn--primary btn--sm" data-inbox-save="${escapeAttr(task.id)}">저장</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-inbox-delete="${escapeAttr(task.id)}">삭제</button>
+      </div>
+    </article>
+  `;
+}
+
+function shouldRemainInInbox(task) {
+  return !(task.study?.trim() && task.dueDate?.trim());
+}
+
+function saveInboxTaskConfiguration(taskId) {
+  const card = document.querySelector(`[data-inbox-task="${taskId}"]`);
+  if (!card) return;
+
+  const study = card.querySelector(`[data-inbox-study="${taskId}"]`)?.value.trim() || "";
+  const siteRaw = card.querySelector(`[data-inbox-site="${taskId}"]`)?.value.trim() || "";
+  const dueDate = card.querySelector(`[data-inbox-due="${taskId}"]`)?.value.trim() || "";
+  const site = siteRaw ? getStandardSiteName(siteRaw) : "";
+
+  const payload = {
+    study,
+    site,
+    dueDate,
+    inbox: shouldRemainInInbox({ study, site, dueDate }),
+  };
+
+  if (!TaskStore.update(taskId, payload)) return;
+  renderAll();
+  showToast(payload.inbox ? "Inbox · Study와 Due를 입력해 주세요" : "My Tasks로 이동되었습니다");
+}
+
+function bindInboxConfigureList(container) {
+  container?.querySelectorAll("[data-inbox-study]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const taskId = select.dataset.inboxStudy;
+      const siteSelect = container.querySelector(`[data-inbox-site="${taskId}"]`);
+      if (siteSelect) {
+        siteSelect.innerHTML = buildInboxSiteSelectOptions(select.value.trim());
+      }
+    });
+  });
+  container?.querySelectorAll("[data-inbox-save]").forEach((btn) => {
+    btn.addEventListener("click", () => saveInboxTaskConfiguration(btn.dataset.inboxSave));
+  });
+  container?.querySelectorAll("[data-inbox-delete]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (confirm("이 Inbox 항목을 삭제하시겠습니까?")) deleteTask(btn.dataset.inboxDelete);
+    });
+  });
+}
+
 function getInboxTasks() {
   return tasks.filter(isInboxTask).sort((a, b) => {
     const aTime = new Date(a.createdAt).getTime();
@@ -5349,26 +5553,12 @@ function renderInboxList() {
 
   if (!inboxTasks.length) {
     els.inboxTaskList.innerHTML =
-      '<p class="task-card-list__empty">Inbox가 비어 있습니다. Quick Add로 업무를 캡처하세요.</p>';
+      '<p class="task-card-list__empty">Inbox가 비어 있습니다. Dashboard에서 Quick Add로 업무를 캡처하세요.</p>';
     return;
   }
 
-  els.inboxTaskList.innerHTML = inboxTasks
-    .map((task) =>
-      isDailyMode()
-        ? renderMobileTaskCard(task)
-        : renderTaskCard({
-            task,
-            isSubtask: false,
-          })
-    )
-    .join("");
-
-  if (isDailyMode()) {
-    bindMobileTaskFeedClicks(els.inboxTaskList);
-  } else {
-    bindTaskListActions(els.inboxTaskList);
-  }
+  els.inboxTaskList.innerHTML = inboxTasks.map((task) => renderInboxConfigureCard(task)).join("");
+  bindInboxConfigureList(els.inboxTaskList);
 }
 
 function getWeekRangeWithOffset(offset = 0) {
@@ -5457,7 +5647,7 @@ function renderCalendarMonthView() {
   }
 
   els.calendarMonthGrid.innerHTML = cells.join("");
-  bindPreviewTaskClicks(els.calendarMonthGrid);
+  bindCalendarTaskClicks(els.calendarMonthGrid);
 }
 
 function renderCalendarView() {
@@ -6136,9 +6326,97 @@ function persistPendingTaskDraft(draft, options = {}) {
   pendingWorkflowMatches = [];
 }
 
+function getStudiesUsingWorkflow(workflowId) {
+  if (!workflowId) return [];
+  return StudyMasterStore.getAll().filter((study) =>
+    StudyMasterStore.getAppliedWorkflowIds(study.id).includes(workflowId)
+  );
+}
+
+function resolveWorkflowEditScope(workflowId, hintStudyId = null) {
+  const appliedStudies = getStudiesUsingWorkflow(workflowId);
+  if (!appliedStudies.length) {
+    return { scopeMode: "general", studyId: null, appliedStudies: [] };
+  }
+  const studyId =
+    (hintStudyId && appliedStudies.some((s) => s.id === hintStudyId) ? hintStudyId : null) ||
+    appliedStudies[0].id;
+  return { scopeMode: "study", studyId, appliedStudies };
+}
+
+function buildWorkflowCardRef(workflow, options = {}) {
+  const ref = getGeneralWorkflowRef(workflow.id);
+  if (!ref) return null;
+  if (options.contextStudyId) ref.studyId = options.contextStudyId;
+  return ref;
+}
+
+function applyWorkflowScopeFromDraft(workflowId, scopeMode, studyId) {
+  const appliedStudies = getStudiesUsingWorkflow(workflowId);
+
+  if (scopeMode === "general") {
+    appliedStudies.forEach((study) => StudyMasterStore.unapplyWorkflow(study.id, workflowId));
+    return true;
+  }
+
+  if (!studyId) {
+    showToast("Study를 선택해 주세요.");
+    return false;
+  }
+
+  appliedStudies.forEach((study) => {
+    if (study.id !== studyId) StudyMasterStore.unapplyWorkflow(study.id, workflowId);
+  });
+  StudyMasterStore.applyWorkflow(studyId, workflowId);
+  return true;
+}
+
+function renderWorkflowDetailScopeField(draft) {
+  const studies = StudyMasterStore.getAll();
+  const scopeMode = draft.scopeMode || "general";
+  const studyId = draft.studyId || "";
+  const appliedCount = (draft.appliedStudies || []).length;
+  const multiHint =
+    appliedCount > 1
+      ? `<p class="form-hint workflow-detail-scope__hint">현재 ${appliedCount}개 Study에 적용 중입니다. Study를 선택하면 나머지 Study에서는 해제됩니다.</p>`
+      : "";
+
+  const studyOptions =
+    studies.length === 0
+      ? '<option value="">Study 없음</option>'
+      : studies
+          .map(
+            (s) =>
+              `<option value="${escapeAttr(s.id)}"${s.id === studyId ? " selected" : ""}>${escapeHtml(s.protocolNumber)} — ${escapeHtml(s.studyName || s.protocolNumber)}</option>`
+          )
+          .join("");
+
+  return `
+    <fieldset class="workflow-detail-scope">
+      <legend class="workflow-detail-scope__legend">적용 범위</legend>
+      <div class="workflow-detail-scope__options">
+        <label class="workflow-detail-scope__radio">
+          <input type="radio" name="workflowDetailScope" value="general"${scopeMode === "general" ? " checked" : ""} />
+          General (Study 미적용)
+        </label>
+        <label class="workflow-detail-scope__radio">
+          <input type="radio" name="workflowDetailScope" value="study"${scopeMode === "study" ? " checked" : ""}${studies.length ? "" : " disabled"} />
+          Study에 적용
+        </label>
+      </div>
+      <div class="workflow-detail-scope__study${scopeMode === "study" ? "" : " workflow-detail-scope__study--hidden"}" id="workflowDetailStudyWrap">
+        <label for="workflowDetailStudySelect">Study</label>
+        <select id="workflowDetailStudySelect" class="workflow-detail-form__input"${scopeMode === "study" ? "" : " disabled"}>${studyOptions}</select>
+      </div>
+      ${multiHint}
+      <p class="form-hint">General·Study 적용을 잘못 설정한 경우 여기서 변경할 수 있습니다.</p>
+    </fieldset>
+  `;
+}
+
 function renderWorkflowLibraryCard(workflow, options = {}) {
   const meta = formatWorkflowMeta(workflow);
-  const ref = getWorkflowRef(workflow);
+  const ref = buildWorkflowCardRef(workflow, options) || getWorkflowRef(workflow);
   const refJson = escapeAttr(JSON.stringify(ref));
   const isGlobal = workflow.scope === "global";
   const isLegacy = workflow.source === "legacy-taskRules";
@@ -6161,12 +6439,13 @@ function renderWorkflowLibraryCard(workflow, options = {}) {
     options.studyLabel && !libraryMode
       ? `<span class="workflow-library-card__study">${escapeHtml(options.studyLabel)}</span>`
       : "";
+  const scopeLabel = options.contextStudyId ? "Study 적용" : meta.scopeLabel;
 
   return `
     <article class="workflow-library-card">
       <header class="workflow-library-card__head">
         <h4 class="workflow-library-card__title">${escapeHtml(workflow.name)}</h4>
-        <span class="workflow-library-card__scope">${escapeHtml(meta.scopeLabel)}</span>
+        <span class="workflow-library-card__scope">${escapeHtml(scopeLabel)}</span>
       </header>
       ${studyBadge}
       ${renderWorkflowFlowPreview(workflow, { compact: true, rootLabel: getWorkflowRootLabel(workflow) })}
@@ -6188,7 +6467,7 @@ function renderStudyAppliedWorkflows(study) {
   }
 
   container.innerHTML = `
-    <p class="form-hint workflow-library-hint">Applied Workflow는 조회 전용입니다. 수정은 Workflow → General에서 진행하세요.</p>
+    <p class="form-hint workflow-library-hint">Applied Workflow는 조회 전용입니다. 수정·삭제는 Workflow → Study 또는 General에서 진행하세요.</p>
     <div class="applied-workflow-list">
       ${applied
         .map((workflow) => {
@@ -6242,7 +6521,7 @@ function openWorkflowDetailModalReadOnly(ref) {
   els.workflowDetailBody.innerHTML = `
     <div class="workflow-detail-readonly">
       <h4 class="workflow-detail-readonly__title">${escapeHtml(workflow.name)}</h4>
-      <p class="form-hint">이 화면은 조회 전용입니다. Workflow 수정은 <strong>Workflow → General</strong>에서 진행하세요.</p>
+      <p class="form-hint">이 화면은 조회 전용입니다. Workflow 수정·삭제는 <strong>Workflow → Study</strong> 또는 <strong>General</strong>에서 진행하세요.</p>
       ${preview}
       <div class="form-actions">
         <button type="button" class="btn btn--primary" id="workflowReadonlyGoGeneralBtn">Workflow → General 이동</button>
@@ -6314,27 +6593,19 @@ function bindWorkflowLibraryCardActions(container, study = null) {
 }
 
 function handleDeleteWorkflowRef(ref) {
-  if (!ref || !confirm("이 Workflow를 삭제할까요?")) return;
+  if (!ref?.id || !confirm("이 Workflow를 삭제할까요? 모든 Study 적용이 해제됩니다.")) return;
 
-  if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace") {
-    GlobalWorkflowStore.delete(ref.id);
-    StudyMasterStore.getAll().forEach((study) => {
-      if (StudyMasterStore.getAppliedWorkflowIds(study.id).includes(ref.id)) {
-        StudyMasterStore.unapplyWorkflow(study.id, ref.id);
-      }
-    });
-    renderWorkflowMaster();
-    showToast("General Workflow가 삭제되었습니다.");
-    return;
-  }
-
-  if (ref.scope === "study" && ref.studyId) {
-    StudyMasterStore.unapplyWorkflow(ref.studyId, ref.id);
-    renderWorkflowMaster();
-    const study = StudyMasterStore.getById(ref.studyId);
-    if (study && selectedStudyMasterId === ref.studyId) renderStudyAppliedWorkflows(study);
-    showToast("Study Workflow 적용을 해제했습니다.");
-  }
+  GlobalWorkflowStore.delete(ref.id);
+  StudyMasterStore.getAll().forEach((study) => {
+    if (StudyMasterStore.getAppliedWorkflowIds(study.id).includes(ref.id)) {
+      StudyMasterStore.unapplyWorkflow(study.id, ref.id);
+    }
+  });
+  renderWorkflowMaster();
+  StudyMasterStore.getAll().forEach((study) => {
+    if (selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
+  });
+  showToast("Workflow가 삭제되었습니다.");
 }
 
 function switchWorkflowMasterTab(tab) {
@@ -6381,21 +6652,12 @@ function renderWorkflowMasterStudyAssignment() {
         <h4 class="workflow-library-section__title">Applied Workflow — ${escapeHtml(study.protocolNumber)}</h4>
         ${
           applied.length
-            ? `<div class="applied-workflow-list">${applied
-                .map((workflow) => {
-                  const stepCount = computeWorkflowStepCount(workflow);
-                  return `
-                    <div class="applied-workflow-item applied-workflow-item--manage">
-                      <label class="applied-workflow-item__label">
-                        <input type="checkbox" checked data-unapply-workflow="${escapeAttr(workflow.id)}" />
-                        <span class="applied-workflow-item__name">${escapeHtml(workflow.name)}</span>
-                        <span class="applied-workflow-item__meta">${stepCount} steps</span>
-                      </label>
-                    </div>
-                  `;
-                })
+            ? `<div class="workflow-library-grid workflow-library-grid--study">${applied
+                .map((workflow) =>
+                  renderWorkflowLibraryCard(workflow, { libraryMode: false, contextStudyId: study.id })
+                )
                 .join("")}</div>`
-            : '<p class="workflow-library-empty">적용된 Workflow가 없습니다.</p>'
+            : '<p class="workflow-library-empty">적용된 Workflow가 없습니다. 아래에서 General Workflow를 적용하세요.</p>'
         }
       </section>
       <div id="workflowApplyPicker" class="workflow-apply-picker" hidden>
@@ -6437,16 +6699,7 @@ function bindWorkflowMasterStudyAssignment() {
     });
   });
 
-  document.querySelectorAll("[data-unapply-workflow]").forEach((input) => {
-    input.addEventListener("change", () => {
-      if (!selectedWorkflowStudyId || input.checked) return;
-      StudyMasterStore.unapplyWorkflow(selectedWorkflowStudyId, input.dataset.unapplyWorkflow);
-      renderWorkflowMaster();
-      const study = StudyMasterStore.getById(selectedWorkflowStudyId);
-      if (study && selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
-      showToast("Workflow 적용을 해제했습니다.");
-    });
-  });
+  bindWorkflowLibraryCardActions(document.querySelector(".workflow-library-grid--study"));
 }
 
 function renderWorkflowMaster() {
@@ -6585,6 +6838,10 @@ function syncWorkflowDetailDraftFromDom() {
   const nameInput = document.getElementById("workflowDetailName");
   workflowDetailDraft.name = nameInput?.value.trim() || workflowDetailDraft.name;
 
+  const scopeRadio = els.workflowDetailBody.querySelector('input[name="workflowDetailScope"]:checked');
+  workflowDetailDraft.scopeMode = scopeRadio?.value === "study" ? "study" : "general";
+  workflowDetailDraft.studyId = document.getElementById("workflowDetailStudySelect")?.value || null;
+
   workflowDetailDraft.flowSteps = [
     ...els.workflowDetailBody.querySelectorAll(".workflow-detail-step[data-step-index]"),
   ].map((row, index) => {
@@ -6613,6 +6870,16 @@ function syncWorkflowDetailDraftFromDom() {
 
 function bindWorkflowDetailEditorEvents() {
   if (!els.workflowDetailBody) return;
+
+  els.workflowDetailBody.querySelectorAll('input[name="workflowDetailScope"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const studyWrap = document.getElementById("workflowDetailStudyWrap");
+      const studySelect = document.getElementById("workflowDetailStudySelect");
+      const isStudy = radio.value === "study";
+      studyWrap?.classList.toggle("workflow-detail-scope__study--hidden", !isStudy);
+      if (studySelect) studySelect.disabled = !isStudy;
+    });
+  });
 
   els.workflowDetailBody.querySelector("[data-add-step]")?.addEventListener("click", () => {
     syncWorkflowDetailDraftFromDom();
@@ -6692,6 +6959,7 @@ function renderWorkflowDetailEditor() {
       <label for="workflowDetailName">Workflow 이름</label>
       <input type="text" id="workflowDetailName" class="workflow-detail-form__input" value="${escapeAttr(draft.name)}" />
     </div>
+    ${renderWorkflowDetailScopeField(draft)}
     <div class="workflow-detail-flow">
       <div class="workflow-detail-flow__toolbar">
         <span class="workflow-detail-flow__label">전체 Flow</span>
@@ -6717,9 +6985,13 @@ function openWorkflowDetailModal(ref) {
   }
 
   workflowDetailEditRef = ref;
+  const scopeInfo = resolveWorkflowEditScope(workflow.id, ref.studyId || selectedWorkflowStudyId);
   workflowDetailDraft = {
     name: workflow.name,
     flowSteps: workflowRecordToFlowSteps(workflow),
+    scopeMode: scopeInfo.scopeMode,
+    studyId: scopeInfo.studyId,
+    appliedStudies: scopeInfo.appliedStudies,
   };
   if (els.workflowDetailSaveBtn) els.workflowDetailSaveBtn.hidden = false;
   renderWorkflowDetailEditor();
@@ -6761,20 +7033,21 @@ function handleWorkflowDetailSave() {
 
   const ref = workflowDetailEditRef;
   let saved = null;
-  if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace") {
+  if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace" || ref.scope === "study") {
     saved = GlobalWorkflowStore.update(ref.id, payload);
-    renderWorkflowMaster();
-  } else if (ref.scope === "study" && ref.studyId) {
-    saved = GlobalWorkflowStore.update(ref.id, payload);
-    renderWorkflowMaster();
-    const study = StudyMasterStore.getById(ref.studyId);
-    if (study && selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
   }
 
   if (!saved) {
     showToast("Workflow를 저장할 수 없습니다.");
     return;
   }
+
+  if (!applyWorkflowScopeFromDraft(ref.id, draft.scopeMode, draft.studyId)) return;
+
+  renderWorkflowMaster();
+  StudyMasterStore.getAll().forEach((study) => {
+    if (selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
+  });
 
   showToast("Workflow가 저장되었습니다.");
   closeWorkflowDetailModal();
@@ -8656,11 +8929,6 @@ function handleLinkSiteSubmit(e) {
   const siteNumber = document.getElementById("linkSiteNumber")?.value.trim() || "";
   if (!studyId || !siteMasterId) return;
 
-  if (!siteNumber) {
-    alert("Site Number를 입력해 주세요.");
-    return;
-  }
-
   StudyMasterStore.linkSite(studyId, siteMasterId, siteNumber);
   closeLinkSiteModal();
   renderStudyMaster();
@@ -8670,15 +8938,7 @@ function handleLinkSiteSubmit(e) {
 
 function handleUpdateLinkSiteNumber(siteMasterId, siteNumber) {
   if (!selectedStudyMasterId) return;
-
-  const trimmed = siteNumber.trim();
-  if (!trimmed) {
-    alert("Site Number를 입력해 주세요.");
-    renderStudyMaster();
-    return;
-  }
-
-  StudyMasterStore.updateSiteLinkNumber(selectedStudyMasterId, siteMasterId, trimmed);
+  StudyMasterStore.updateSiteLinkNumber(selectedStudyMasterId, siteMasterId, siteNumber.trim());
   refreshTaskStudySiteSelects();
 }
 
@@ -9639,6 +9899,7 @@ function isValidTask(item) {
 
 function isInboxTask(task) {
   if (!task) return false;
+  if (task.inbox === true) return true;
   return !task.study?.trim() && !task.site?.trim() && !task.dueDate?.trim();
 }
 
@@ -9926,7 +10187,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "90";
+const APP_BUILD = "91";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12579,7 +12840,7 @@ function renderTaskList() {
 
   if (hierarchicalRows.length === 0) {
     const emptyHtml =
-      '<p class="task-card-list__empty">표시할 업무가 없습니다. Quick Add 또는 + 버튼으로 추가하세요.</p>';
+      '<p class="task-card-list__empty">표시할 업무가 없습니다. Dashboard Quick Add 또는 + 버튼으로 추가하세요.</p>';
     els.taskCardList.innerHTML = emptyHtml;
     if (els.taskTableBody) els.taskTableBody.innerHTML = "";
     return;
@@ -12599,6 +12860,40 @@ function renderTaskList() {
   bindTaskListActions(els.taskCardList);
 }
 
+function renderTaskDueProminent(task) {
+  const badge = getDashboardDueBadge(task);
+  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
+  const urgencyClass =
+    urgency === "overdue"
+      ? " task-card__due-col--overdue"
+      : urgency === "urgent"
+        ? " task-card__due-col--urgent"
+        : badge.className.includes("today")
+          ? " task-card__due-col--today"
+          : "";
+  const dateHint = task.dueDate ? task.dueDate.slice(5).replace("-", "/") : "";
+
+  return `
+    <div class="task-card__due-col${urgencyClass}">
+      <span class="task-card__due-col-label">${escapeHtml(badge.label)}</span>
+      ${dateHint ? `<span class="task-card__due-col-date">${escapeHtml(dateHint)}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderTaskQuickActions(task) {
+  const calendarSynced = task.calendarSync?.eventId;
+  const isDone = task.status === "Completed";
+
+  return `
+    <div class="task-card__quick-actions">
+      <div class="task-card__quick-action">${renderInlineStatusDropdown(task, { compact: true })}</div>
+      <button type="button" class="task-card__icon-btn${calendarSynced ? " task-card__icon-btn--synced" : ""}" data-google-calendar="${escapeAttr(task.id)}" title="Google Calendar" aria-label="Google Calendar">📅</button>
+      <button type="button" class="task-card__icon-btn task-card__icon-btn--complete${isDone ? " task-card__icon-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>✓</button>
+    </div>
+  `;
+}
+
 function renderTaskCard({ task, isSubtask, mobile = false }) {
   const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
   const urgencyClass =
@@ -12611,17 +12906,19 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
   const workflowBlock = renderTaskWorkflowProgressBlock(task);
   const routineBlock = renderTaskRoutineLabel(task);
   const isDone = task.status === "Completed";
+  const priorityClassName = priorityClass(task.priority);
   const criticalBadge =
     task.priority === "Critical"
       ? '<span class="critical-badge task-card__critical">Critical</span>'
       : "";
   const priorityBadge =
     task.priority !== "Critical"
-      ? `<span class="task-card__priority task-card__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span>`
+      ? `<span class="task-card__priority task-card__priority--${priorityClassName}">${escapeHtml(task.priority)}</span>`
       : "";
 
-  return `
-    <article class="task-card task-card--action${mobile ? " task-card--mobile" : ""} ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
+  if (mobile) {
+    return `
+    <article class="task-card task-card--action task-card--mobile ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       <button type="button" class="task-card__check${isDone ? " task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
         <span aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
@@ -12647,6 +12944,25 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
       </div>
     </article>
   `;
+  }
+
+  return `
+    <article class="task-card task-card--action task-card--row ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
+      ${renderTaskDueProminent(task)}
+      <div class="task-card__content">
+        <button type="button" class="task-card__detail" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
+          <span class="task-card__title-line">
+            <span class="task-card__priority task-card__priority--${priorityClassName}">${escapeHtml(task.priority)}</span>
+            <span class="task-card__title">${escapeHtml(task.task)}</span>
+          </span>
+          <span class="task-card__study-site">${escapeHtml(studySite)}</span>
+          ${workflowBlock}
+          ${routineBlock}
+        </button>
+      </div>
+      ${renderTaskQuickActions(task)}
+    </article>
+  `;
 }
 
 function renderTable() {
@@ -12666,27 +12982,18 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   const studyLabel = task.study?.trim() || "—";
   const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "—";
   const workflowLabel = getDashboardWorkflowLabel(task);
-  const isDone = task.status === "Completed";
 
   return `
     <tr class="${rowClass}${selectedTaskId === task.id ? " is-selected" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <td class="task-list-check">
-        <button type="button" class="task-card__check task-card__check--table${isDone ? " task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-          <span aria-hidden="true">${isDone ? "✓" : ""}</span>
-        </button>
-      </td>
       <td>
-        <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
+        <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}"><span class="task-card__priority task-card__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span> ${escapeHtml(task.task)}</button>
         ${workflowLabel ? `<span class="task-list-wf">${escapeHtml(workflowLabel)}</span>` : ""}
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
       <td><span class="task-list-due dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span></td>
-      <td><span class="task-card__priority task-card__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span></td>
-      <td class="status-cell">${renderInlineStatusDropdown(task, { compact: true })}</td>
-      <td class="actions-cell">
-        <button type="button" class="task-card__action task-card__action--detail task-card__action--sm" data-edit="${escapeAttr(task.id)}" title="상세" aria-label="상세">›</button>
-        ${renderTaskMoreMenu(task)}
+      <td class="actions-cell actions-cell--quick">
+        ${renderTaskQuickActions(task)}
       </td>
     </tr>
   `;

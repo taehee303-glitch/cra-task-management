@@ -17,6 +17,18 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 91 — 2026-07-21 — Site link, calendar read view, inbox flow, My Tasks layout
+
+### Changed
+
+- **Study Master Site 연결** — Site Number 선택 입력 (비워두고 연결 가능)
+- **Calendar** — Task 클릭 시 read-only 모달 (한눈에 Due·Study·Site·Memo 확인, My Tasks에서 수정 가능)
+- **Dashboard / Inbox** — Quick Add를 Dashboard로 이동; Inbox는 캡처된 항목의 Study·Site·Due 설정만
+- **My Tasks** — Due 왼쪽 강조, Task 앞 Priority, Status·Calendar·Complete 버튼 가로 배치 (리스트 뷰 동일)
+- **Workflow** — 편집 시 General ↔ Study 적용 범위 변경; Study 탭에서 Study별 적용 Workflow 카드(편집·삭제) 표시
+
+---
+
 ## [1.3.0] — build 90 — 2026-07-21 — Study list, calendar month, My Tasks UX
 
 ### Changed

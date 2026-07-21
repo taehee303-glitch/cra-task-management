@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=90" />
+  <link rel="stylesheet" href="styles.css?v=91" />
   <script>
     (function () {
       var BUILD = "86";
@@ -295,14 +295,11 @@
             <table class="task-table task-table--list">
               <thead>
                 <tr>
-                  <th></th>
                   <th>Task</th>
                   <th>Study</th>
                   <th>Site</th>
                   <th>Due</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="taskTableBody"></tbody>
@@ -322,17 +319,11 @@
           <header class="inbox-view__header">
             <div>
               <h2 class="inbox-view__title">Inbox</h2>
-              <p class="inbox-view__subtitle">Study·Site·Due 미지정 — 퇴근 전 정리</p>
+              <p class="inbox-view__subtitle">Dashboard Quick Add로 캡처한 업무 — Study·Site·Due 설정</p>
             </div>
             <p class="inbox-view__count" id="inboxCount">0건</p>
           </header>
-          <div class="quick-add quick-add--inbox">
-            <div class="quick-add__row">
-              <input type="text" id="inboxQuickAddInput" class="quick-add__input" placeholder="빠르게 추가..." autocomplete="off" aria-label="Inbox 빠른 추가" />
-              <button type="button" class="quick-add__btn" id="inboxQuickAddBtn" aria-label="추가">+</button>
-            </div>
-          </div>
-          <div id="inboxTaskList" class="task-card-list" aria-live="polite"></div>
+          <div id="inboxTaskList" class="inbox-config-list" aria-live="polite"></div>
         </section>
       </div>
 
@@ -412,6 +403,11 @@
               <span class="attention-panel__reminder-badge dashboard-v2__reminder" id="reminderStatusBadge">Reminder ON</span>
             </div>
           </header>
+
+          <div class="dashboard-quick-capture">
+            <input type="text" id="dashboardQuickAddInput" class="dashboard-quick-capture__input" placeholder="빠르게 캡처 → Inbox (Study·Site·Due는 나중에)" autocomplete="off" aria-label="Inbox 빠른 캡처" />
+            <button type="button" class="btn btn--primary btn--sm dashboard-quick-capture__btn" id="dashboardQuickAddBtn" aria-label="Inbox에 추가">+</button>
+          </div>
 
           <section class="dashboard-hero dashboard-hero--compact" aria-label="오늘 업무 Hero">
             <div class="dashboard-hero__metrics">
@@ -1511,6 +1507,24 @@
     </div>
   </div>
 
+  <!-- Task Read Modal (Calendar) -->
+  <div class="modal-overlay task-read-modal-overlay" id="taskReadModal" hidden>
+    <div class="modal modal--task-read" role="dialog" aria-modal="true" aria-labelledby="taskReadTitle">
+      <header class="task-read-modal__header">
+        <div class="task-read-modal__head-main">
+          <span class="task-read-modal__priority" id="taskReadPriority"></span>
+          <h3 class="task-read-modal__title" id="taskReadTitle">Task</h3>
+        </div>
+        <button type="button" class="modal-close" id="closeTaskReadModalBtn" aria-label="닫기">&times;</button>
+      </header>
+      <div class="task-read-modal__body" id="taskReadBody"></div>
+      <footer class="task-read-modal__footer">
+        <button type="button" class="btn btn--ghost" id="taskReadCloseBtn">닫기</button>
+        <button type="button" class="btn btn--primary" id="taskReadEditBtn">My Tasks에서 수정</button>
+      </footer>
+    </div>
+  </div>
+
   <!-- Link Site Modal -->
   <div class="modal-overlay" id="linkSiteModal" hidden>
     <div class="modal">
@@ -1528,8 +1542,8 @@
           </div>
           <div class="form-group">
             <label for="linkSiteNumber">Site Number</label>
-            <input type="text" id="linkSiteNumber" required placeholder="예: Site 101" />
-            <p class="form-hint">이 Study에서 사용할 Site Number를 입력하세요.</p>
+            <input type="text" id="linkSiteNumber" placeholder="예: Site 101 (선택)" />
+            <p class="form-hint">Study별 Site Number가 있으면 입력하세요. 없으면 비워두셔도 됩니다.</p>
           </div>
         </div>
         <div class="form-actions">
@@ -1738,11 +1752,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=90"></script>
-  <script src="firebase-sync.js?v=90"></script>
-  <script src="calendar-config.js?v=90"></script>
-  <script src="calendar-sync.js?v=90"></script>
-  <script src="app.js?v=90"></script>
-  <script src="pwa.js?v=90"></script>
+  <script src="firebase-config.js?v=91"></script>
+  <script src="firebase-sync.js?v=91"></script>
+  <script src="calendar-config.js?v=91"></script>
+  <script src="calendar-sync.js?v=91"></script>
+  <script src="app.js?v=91"></script>
+  <script src="pwa.js?v=91"></script>
 </body>
 </html>
