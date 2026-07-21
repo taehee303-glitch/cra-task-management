@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=95" />
+  <link rel="stylesheet" href="styles.css?v=96" />
   <script>
     (function () {
       var BUILD = "86";
@@ -397,20 +397,26 @@
             <button type="button" class="btn btn--primary btn--sm dashboard-quick-capture__btn" id="dashboardQuickAddBtn" aria-label="Inbox에 추가">+</button>
           </div>
 
-          <section class="dashboard-hero dashboard-hero--compact dashboard-hero--greeting" aria-label="오늘 업무 Hero">
-            <div class="dashboard-hero__head">
+          <section class="dashboard-hero dashboard-hero--compact dashboard-hero--slim" aria-label="오늘 업무 Hero">
+            <div class="dashboard-hero__slim-top">
               <div class="dashboard-hero__greeting-block">
-                <h2 class="dashboard-v2__greeting-title" id="dashboardGreeting">Good morning 👋</h2>
-                <span class="dashboard-v2__date" id="dashboardHeaderDate"></span>
+                <div class="dashboard-hero__greeting-line">
+                  <h2 class="dashboard-v2__greeting-title" id="dashboardGreeting">Good morning 👋</h2>
+                  <span class="dashboard-v2__date" id="dashboardHeaderDate"></span>
+                </div>
+                <div class="dashboard-hero__today-chips">
+                  <button type="button" class="dashboard-hero__chip" id="dashboardTodayTotalChip" data-dashboard-filter="today">
+                    오늘 <strong id="todayProgressTotal">0</strong>
+                  </button>
+                  <button type="button" class="dashboard-hero__chip dashboard-hero__chip--remain" id="dashboardTodayRemainChip" data-dashboard-filter="today">
+                    남음 <strong id="todayProgressRemaining">0</strong>
+                  </button>
+                </div>
               </div>
-              <div class="dashboard-v2__top-actions">
-                <button type="button" class="btn btn--ghost btn--sm dashboard-v2__calendar-btn" id="dashboardCalendarBtn">Calendar</button>
-                <button type="button" class="btn btn--primary btn--sm dashboard-v2__add-btn" id="dashboardAddTaskBtn">+ Task</button>
-                <span class="attention-panel__reminder-badge dashboard-v2__reminder" id="reminderStatusBadge">Reminder ON</span>
-              </div>
+              <span class="attention-panel__reminder-badge dashboard-v2__reminder dashboard-v2__reminder--slim" id="reminderStatusBadge">Reminder ON</span>
             </div>
 
-            <div class="dashboard-hero__progress-card">
+            <div class="dashboard-hero__progress-slim">
               <div class="dashboard-hero__progress-top">
                 <span class="dashboard-hero__progress-label">오늘 진행률</span>
                 <span class="dashboard-hero__progress-percent" id="todayProgressPercent">0%</span>
@@ -420,26 +426,15 @@
                   <div class="progress-bar__fill dashboard-hero__progress-fill" id="todayProgressFill" style="width: 0%"></div>
                 </div>
               </div>
-              <div class="dashboard-hero__progress-stats">
-                <div class="dashboard-hero__stat">
-                  <span class="dashboard-hero__stat-value" id="todayProgressTotal">0</span>
-                  <span class="dashboard-hero__stat-label">전체</span>
-                </div>
-                <div class="dashboard-hero__stat dashboard-hero__stat--done">
-                  <span class="dashboard-hero__stat-value" id="todayProgressCompleted">0</span>
-                  <span class="dashboard-hero__stat-label">완료</span>
-                </div>
-                <div class="dashboard-hero__stat dashboard-hero__stat--remain">
-                  <span class="dashboard-hero__stat-value" id="todayProgressRemaining">0</span>
-                  <span class="dashboard-hero__stat-label">남음</span>
-                </div>
-              </div>
-              <p class="dashboard-hero__encouragement" id="dashboardEncouragement">오늘도 화이팅입니다.</p>
             </div>
 
-            <button type="button" class="dashboard-hero__start-btn" id="dashboardStartWorkBtn">▶ 시작</button>
-            <button type="button" class="dashboard-hero__link today-progress-hero" id="todayProgressHero" hidden aria-hidden="true" tabindex="-1">
+            <p class="dashboard-hero__encouragement" id="dashboardEncouragement">오늘도 화이팅입니다.</p>
+
+            <span class="dashboard-hero__hidden-metrics" hidden aria-hidden="true">
+              <span id="todayProgressCompleted">0</span>
               <span id="todayProgressCount"></span>
+            </span>
+            <button type="button" class="dashboard-hero__link today-progress-hero" id="todayProgressHero" hidden aria-hidden="true" tabindex="-1">
               <span id="dashboardGreetingSub" hidden></span>
             </button>
             <div class="dashboard-overall-progress dashboard-overall-progress--compact" hidden aria-hidden="true">
@@ -1748,7 +1743,7 @@
   <script src="firebase-sync.js?v=95"></script>
   <script src="calendar-config.js?v=95"></script>
   <script src="calendar-sync.js?v=95"></script>
-  <script src="app.js?v=95"></script>
+  <script src="app.js?v=96"></script>
   <script src="pwa.js?v=95"></script>
 </body>
 </html>

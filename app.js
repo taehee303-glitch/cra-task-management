@@ -1765,8 +1765,8 @@ async function finishAppBootstrap() {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
   els.todayProgressHero?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
-  els.dashboardStartWorkBtn?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
-  document.querySelector(".dashboard-hero__metrics")?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
+  document.getElementById("dashboardTodayTotalChip")?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
+  document.getElementById("dashboardTodayRemainChip")?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   els.dashboardCalendarBtn?.addEventListener("click", () => switchView("calendar"));
   els.dashboardAddTaskBtn?.addEventListener("click", () => openAddTaskModal());
   els.searchInput.addEventListener("input", renderTaskList);
@@ -10204,7 +10204,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "95";
+const APP_BUILD = "96";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12291,24 +12291,41 @@ function getDashboardEncouragementMessage(remaining, total) {
   return `${remaining}건의 Task가 남았습니다. 하나씩 차근차근 진행해 보세요.`;
 }
 
-function renderDashboardTaskWorkflowStep(task) {
+function getDashboardWorkflowDisplay(task) {
   const ctx = resolveWorkflowContext(task);
-  if (!ctx.workflow || !ctx.root || !ctx.instance) return "";
+  if (!ctx.workflow || !ctx.root || !ctx.instance) {
+    return { inlineHtml: "", nextHtml: "" };
+  }
 
   const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
   const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
-  const workflowName = ctx.workflow.name?.trim() || getWorkflowRootLabel(ctx.workflow);
-  const currentLabel = stepLabels.currentStepName || task.task;
-  const stepNo = Math.min(progress.completed + 1, progress.total || 1);
   const total = progress.total || 1;
+  const completed = progress.completed || 0;
+  const pct = Math.min(100, Math.round((completed / total) * 100));
 
-  return `
-    <span class="dash-task-row__wf">
-      <span class="dash-task-row__wf-badge">WF</span>
-      <span class="dash-task-row__wf-name">${escapeHtml(workflowName)}</span>
-      <span class="dash-task-row__wf-step">${stepNo}/${total} · ${escapeHtml(currentLabel)}</span>
+  const inlineHtml = `
+    <span class="dash-wf-inline" title="Workflow 진행률">
+      <span class="dash-wf-inline__bar" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}">
+        <span class="dash-wf-inline__fill" style="width:${pct}%"></span>
+      </span>
+      <span class="dash-wf-inline__count">${completed}/${total}</span>
     </span>
   `;
+
+  let nextHtml = "";
+  if (stepLabels.nextStepName) {
+    nextHtml = `<span class="dash-wf-next">Next · ${escapeHtml(stepLabels.nextStepName)}</span>`;
+  } else if (stepLabels.currentStepName) {
+    nextHtml = `<span class="dash-wf-next">Current · ${escapeHtml(stepLabels.currentStepName)}</span>`;
+  }
+
+  return { inlineHtml, nextHtml };
+}
+
+function renderDashboardTaskWorkflowStep(task) {
+  const { nextHtml } = getDashboardWorkflowDisplay(task);
+  if (!nextHtml) return "";
+  return `<span class="dash-task-row__wf-foot">${nextHtml}</span>`;
 }
 
 function renderDashboardGreeting() {
@@ -12543,17 +12560,14 @@ function renderDashboardTimelineTasks(taskList) {
       const label = group.date === "__none__" ? "일정 미정" : formatDashboardTimelineDayLabel(group.date);
       const items = group.tasks
         .map((task) => {
-          const ctx = resolveWorkflowContext(task);
-          let wfHint = "";
-          if (ctx.workflow && ctx.root && ctx.instance) {
-            const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
-            const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
-            const stepNo = Math.min(progress.completed + 1, progress.total || 1);
-            const total = progress.total || 1;
-            const currentLabel = stepLabels.currentStepName || task.task;
-            wfHint = `<span class="dash-timeline__wf">${stepNo}/${total} · ${escapeHtml(currentLabel)}</span>`;
-          }
-          return `<button type="button" class="dash-timeline__item" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}"><span class="dash-timeline__task">${escapeHtml(task.task)}</span>${wfHint}</button>`;
+          const wfDisplay = getDashboardWorkflowDisplay(task);
+          return `<button type="button" class="dash-timeline__item" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
+            <span class="dash-timeline__head">
+              <span class="dash-timeline__task">${escapeHtml(task.task)}</span>
+              ${wfDisplay.inlineHtml}
+            </span>
+            ${wfDisplay.nextHtml ? `<span class="dash-timeline__foot">${wfDisplay.nextHtml}</span>` : ""}
+          </button>`;
         })
         .join("");
       return `<div class="dash-timeline__day"><span class="dash-timeline__day-label">${escapeHtml(label)}</span><div class="dash-timeline__day-items">${items}</div></div>`;
@@ -12807,7 +12821,8 @@ function renderDashItem(task, type, options = {}) {
   if (layoutV2) {
     const badge = getDashboardDueBadge(task);
     const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
-    const wfStepBlock = renderDashboardTaskWorkflowStep(task);
+    const wfDisplay = getDashboardWorkflowDisplay(task);
+    const wfFootBlock = renderDashboardTaskWorkflowStep(task);
 
     return `
     <article class="dash-task-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
@@ -12815,14 +12830,15 @@ function renderDashItem(task, type, options = {}) {
         <span class="dash-task-row__title-line">
           ${criticalBadge}
           <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
+          ${wfDisplay.inlineHtml}
         </span>
         <span class="dash-task-row__meta">${escapeHtml(studyLabel + sitePart)}</span>
-        ${wfStepBlock}
+        ${wfFootBlock}
       </button>
       <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
       <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
-      <button type="button" class="dash-task-row__complete${isDone ? " dash-task-row__complete--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-        <span aria-hidden="true">${isDone ? "✓" : ""}</span>
+      <button type="button" class="dash-task-row__check-btn${isDone ? " dash-task-row__check-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <span class="dash-task-row__check-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
     </article>
   `;

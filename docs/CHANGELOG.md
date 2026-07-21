@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 96 — 2026-07-21 — Dashboard slim hero, WF inline, checkbox complete
+
+### Changed
+
+- **Dashboard Hero** — Calendar·+Task 제거, 인사말 옆 오늘/남음 필터 칩, 진행률·응원 메시지 컴팩트 배치
+- **Dashboard Task** — Workflow 진행률을 Task 제목 옆에 표시, 하단에 Next task 안내
+- **Dashboard Complete** — 원형 버튼 대신 체크박스 스타일 완료 표시
+
+---
+
 ## [1.3.0] — build 95 — 2026-07-21 — Dashboard week preview & layout
 
 ### Fixed
