@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 86 — 2026-07-21 — Site No duplicates, optional task site, tomorrow dashboard
+
+### Changed
+
+- **Site Master** — Site Number 중복 등록 허용
+- **Task 추가/수정** — Study만 선택해도 저장 가능 (Site 선택 optional)
+- **Dashboard** — 「내일 Task」 섹션 추가 (오늘 Task 바로 아래)
+
+---
+
 ## [1.3.0] — build 85 — 2026-07-18 — Remove pre-login cloud loading message
 
 ### Fixed

@@ -1117,6 +1117,12 @@ select:disabled {
   font-weight: 700;
 }
 
+.badge--tomorrow {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
 .badge--week {
   background: #ffedd5;
   color: #c2410c;
@@ -1138,6 +1144,11 @@ select:disabled {
 .dash-item--time-today {
   border-left: 4px solid #7c3aed;
   background: #faf5ff;
+}
+
+.dash-item--time-tomorrow {
+  border-left: 4px solid #2563eb;
+  background: #eff6ff;
 }
 
 .dash-item--time-week {
@@ -2185,6 +2196,11 @@ body.body--settings-open {
 .dash-item--time-today .dash-item-title {
   font-weight: 700;
   color: #5b21b6;
+}
+
+.dash-item--time-tomorrow .dash-item-title {
+  font-weight: 700;
+  color: #1d4ed8;
 }
 
 .dash-item-due {

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <meta name="description" content="Clinical Research Associate Task Manager" />
-  <meta name="app-build" content="85" />
+  <meta name="app-build" content="86" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -17,10 +17,10 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=85" />
+  <link rel="stylesheet" href="styles.css?v=86" />
   <script>
     (function () {
-      var BUILD = "85";
+      var BUILD = "86";
       try {
         var params = new URLSearchParams(location.search);
         if (params.get("b") !== BUILD) {
@@ -121,7 +121,7 @@
       <button type="button" class="auth-gate__sign-in btn btn--primary" id="authGateSignInBtn">Google로 로그인</button>
       <p class="auth-gate__hint" id="authGateHint"></p>
       <p class="auth-gate__error" id="authGateError" hidden role="alert"></p>
-      <p class="auth-gate__debug" id="authGateDebug">Build 85 · 준비 중…</p>
+      <p class="auth-gate__debug" id="authGateDebug">Build 86 · 준비 중…</p>
       <p class="auth-gate__alt-host" id="authGateAltHost" hidden></p>
       <p class="auth-gate__meta" id="authGateMeta"></p>
     </div>
@@ -492,6 +492,16 @@
                 </div>
                 <div class="dash-list dash-list--execute dash-list--time dash-list--v2" id="attentionTodayList">
                   <p class="empty-msg empty-msg--compact">✓ 오늘 마감 업무가 없습니다.</p>
+                </div>
+              </section>
+
+              <section class="dash-card dash-card--v2 dash-card--primary dash-card--time-tomorrow dash-card--execute" aria-labelledby="attentionTomorrowHeading">
+                <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
+                  <h3 id="attentionTomorrowHeading">내일 Task</h3>
+                  <span class="badge badge--tomorrow" id="attentionTomorrowCount">0</span>
+                </div>
+                <div class="dash-list dash-list--execute dash-list--time dash-list--v2" id="attentionTomorrowList">
+                  <p class="empty-msg empty-msg--compact">✓ 내일 마감 업무가 없습니다.</p>
                 </div>
               </section>
 
@@ -1762,11 +1772,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=85"></script>
-  <script src="firebase-sync.js?v=85"></script>
-  <script src="calendar-config.js?v=85"></script>
-  <script src="calendar-sync.js?v=85"></script>
-  <script src="app.js?v=85"></script>
-  <script src="pwa.js?v=85"></script>
+  <script src="firebase-config.js?v=86"></script>
+  <script src="firebase-sync.js?v=86"></script>
+  <script src="calendar-config.js?v=86"></script>
+  <script src="calendar-sync.js?v=86"></script>
+  <script src="app.js?v=86"></script>
+  <script src="pwa.js?v=86"></script>
 </body>
 </html>

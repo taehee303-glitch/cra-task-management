@@ -184,7 +184,7 @@ const TASK_QUICK_FILTER_LABELS = {
   week: "This Week",
   workflow: "Workflow",
   routine: "Routine",
-  d1: "D-1",
+  d1: "내일",
   open: "Open",
   "in-progress": "In Progress",
   completed: "Completed",
@@ -401,6 +401,8 @@ const els = {
   attentionTodayCount: document.getElementById("attentionTodayCount"),
   attentionOverdueCount: document.getElementById("attentionOverdueCount"),
   attentionTodayList: document.getElementById("attentionTodayList"),
+  attentionTomorrowCount: document.getElementById("attentionTomorrowCount"),
+  attentionTomorrowList: document.getElementById("attentionTomorrowList"),
   attentionOverdueList: document.getElementById("attentionOverdueList"),
   reminderStatusBadge: document.getElementById("reminderStatusBadge"),
   openSettingsBtn: document.getElementById("openSettingsBtn"),
@@ -2462,23 +2464,23 @@ function updateSiteSelectHint(protocolNumber, hintEl) {
 }
 
 function validateStudySiteSelection(study, site, existingTask = null) {
-  if (!study) {
-    alert("Study Master에 등록된 Study를 선택해 주세요.");
-    return false;
+  if (study) {
+    if (!StudyMasterStore.getByProtocol(study)) {
+      alert("Study Master에 등록된 Study를 선택해 주세요.");
+      return false;
+    }
   }
-  if (!StudyMasterStore.getByProtocol(study)) {
-    alert("Study Master에 등록된 Study를 선택해 주세요.");
-    return false;
-  }
-  if (!site) {
-    alert("Site를 선택해 주세요.");
-    return false;
-  }
+
+  if (!site) return true;
+
   const siteEntry = resolveSiteMasterEntry(site);
   if (!siteEntry) {
     alert("Site Master에 등록된 Site를 선택해 주세요.");
     return false;
   }
+
+  if (!study) return true;
+
   const linkedSites = StudyMasterStore.getSitesForProtocol(study);
   if (!linkedSites.some((linkedSite) => linkedSite.id === siteEntry.id)) {
     const sameAsExisting =
@@ -5419,7 +5421,7 @@ function populateSiteSelect(selectEl, protocolNumber, selectedValue = "") {
   const sites = getLinkedSitesForProtocol(protocolNumber, selectedValue);
   selectEl.disabled = sites.length === 0;
   selectEl.innerHTML =
-    `<option value="">${sites.length ? "Site 선택" : "연결된 Site 없음"}</option>` +
+    `<option value="">${sites.length ? "Site 선택 (선택)" : "연결된 Site 없음"}</option>` +
     sites
       .map((site) => {
         const value = getSiteOptionValue(site);
@@ -8970,14 +8972,6 @@ async function handleSiteMasterSubmit(e) {
     return;
   }
 
-  const duplicateNumber = SiteMasterStore.sites.find(
-    (site) => site.siteNumber === siteNumber && site.id !== entryId
-  );
-  if (duplicateNumber) {
-    alert("동일한 Site Number가 이미 등록되어 있습니다.");
-    return;
-  }
-
   const duplicateStandard = SiteMasterStore.sites.find(
     (site) => site.standardName === standardName && site.id !== entryId
   );
@@ -9737,7 +9731,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "85";
+const APP_BUILD = "86";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12129,12 +12123,16 @@ function renderDashboard() {
     .filter((t) => t.dueDate === todayStr)
     .sort((a, b) => compareAttentionTasks(a, b));
 
-  renderDashboardTaskSections(todayTasks, overdueTasks);
+  const tomorrowTasks = activeTasks
+    .filter((t) => daysUntilDue(t.dueDate) === 1)
+    .sort((a, b) => compareAttentionTasks(a, b));
+
+  renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks);
   updateReminderStatusBadge();
   updateDashboardCardFilterUi();
 }
 
-function renderDashboardTaskSections(todayTasks, overdueTasks) {
+function renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks) {
   const weekPrepTasks = getDashboardWeekPrepTasks();
   const nextWeekTasks = getDashboardNextWeekTasks();
   const recentCompleted = getRecentlyCompletedTasks();
@@ -12150,6 +12148,19 @@ function renderDashboardTaskSections(todayTasks, overdueTasks) {
         })
       : renderDashboardEmptyMsg("오늘 마감 업무가 없습니다.");
     setDashCardEmptyState(els.attentionTodayList, todayTasks.length === 0);
+  }
+
+  if (els.attentionTomorrowCount) {
+    els.attentionTomorrowCount.textContent = String(tomorrowTasks.length);
+    els.attentionTomorrowCount.hidden = tomorrowTasks.length === 0;
+  }
+  if (els.attentionTomorrowList) {
+    els.attentionTomorrowList.innerHTML = tomorrowTasks.length
+      ? renderDashboardSectionTasks(tomorrowTasks, "time-tomorrow", "d1", DASHBOARD_TODAY_PREVIEW_LIMIT, {
+          layout: "v2",
+        })
+      : renderDashboardEmptyMsg("내일 마감 업무가 없습니다.");
+    setDashCardEmptyState(els.attentionTomorrowList, tomorrowTasks.length === 0);
   }
 
   if (els.dashboardWeekPrepCount) {
