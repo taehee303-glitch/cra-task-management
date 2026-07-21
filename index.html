@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=86" />
+  <link rel="stylesheet" href="styles.css?v=88" />
   <script>
     (function () {
       var BUILD = "86";
@@ -210,11 +210,8 @@
               <button type="button" class="task-filter__btn" data-mobile-filter="week" role="tab">
                 📆 This Week <span class="task-filter__count" data-count-filter="week">0</span>
               </button>
-              <button type="button" class="task-filter__btn" data-mobile-filter="workflow" role="tab">
-                🟣 Workflow <span class="task-filter__count" data-count-filter="workflow">0</span>
-              </button>
-              <button type="button" class="task-filter__btn" data-mobile-filter="routine" role="tab">
-                🔁 Routine <span class="task-filter__count" data-count-filter="routine">0</span>
+              <button type="button" class="task-filter__btn" data-mobile-filter="d1" role="tab">
+                📅 Tomorrow <span class="task-filter__count" data-count-filter="d1">0</span>
               </button>
               <button type="button" class="task-filter__btn" data-mobile-filter="overdue" role="tab">
                 🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
@@ -244,11 +241,8 @@
             <button type="button" class="task-filter__btn" data-quick-filter="week" role="tab">
               📆 This Week <span class="task-filter__count" data-count-filter="week">0</span>
             </button>
-            <button type="button" class="task-filter__btn" data-quick-filter="workflow" role="tab">
-              🟣 Workflow <span class="task-filter__count" data-count-filter="workflow">0</span>
-            </button>
-            <button type="button" class="task-filter__btn" data-quick-filter="routine" role="tab">
-              🔁 Routine <span class="task-filter__count" data-count-filter="routine">0</span>
+            <button type="button" class="task-filter__btn" data-quick-filter="d1" role="tab">
+              📅 Tomorrow <span class="task-filter__count" data-count-filter="d1">0</span>
             </button>
             <button type="button" class="task-filter__btn" data-quick-filter="overdue" role="tab">
               🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
@@ -686,6 +680,7 @@
                     <button type="button" class="btn btn--primary btn--sm" id="linkSiteBtn">+ Site 연결</button>
                   </div>
                 </div>
+                <p class="form-hint">Site Number는 Study별로 부여됩니다. Site 연결 시 입력하고, 아래 표에서 수정할 수 있습니다.</p>
                 <div class="table-wrap">
                   <table class="task-table sites-table">
                     <thead>
@@ -718,6 +713,7 @@
                   </div>
                 </div>
                 <p id="studySystemsNewStudyHint" class="form-hint" hidden>Study 저장 후 System을 등록할 수 있습니다.</p>
+                <p class="form-hint">Study별 로그인 정보 (CTMS, EDC 등). 동일 System이라도 Study마다 계정이 다를 수 있습니다.</p>
                 <div class="table-wrap">
                   <table class="task-table systems-table">
                     <thead>
@@ -908,10 +904,6 @@
 
                 <div class="site-master-tab-panel" data-site-tab-panel="basic">
                   <div class="form-grid">
-                    <div class="form-group">
-                      <label for="smSiteNumber">Site Number</label>
-                      <input type="text" id="smSiteNumber" required placeholder="예: Site 101" />
-                    </div>
                     <div class="form-group form-group--wide">
                       <label for="standardSiteName">Standard Site Name (공식 병원명)</label>
                       <input type="text" id="standardSiteName" required placeholder="예: 한림성심대학교병원" />
@@ -967,6 +959,7 @@
                       <button type="button" class="btn btn--primary btn--sm" id="newSiteSystemBtn">+ System</button>
                     </div>
                     <p id="siteSystemsNewSiteHint" class="form-hint" hidden>Site 저장 후 System을 등록할 수 있습니다.</p>
+                    <p class="form-hint">기관 공통 System (IRB, EMR 등). Study마다 계정이 다른 경우 Study Systems에 등록하세요.</p>
                     <div class="table-wrap">
                       <table class="task-table systems-table">
                         <thead>
@@ -1565,6 +1558,11 @@
               <option value="">Site 선택</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="linkSiteNumber">Site Number</label>
+            <input type="text" id="linkSiteNumber" required placeholder="예: Site 101" />
+            <p class="form-hint">이 Study에서 사용할 Site Number를 입력하세요.</p>
+          </div>
         </div>
         <div class="form-actions">
           <button type="submit" class="btn btn--primary">연결</button>
@@ -1772,11 +1770,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=86"></script>
-  <script src="firebase-sync.js?v=86"></script>
-  <script src="calendar-config.js?v=86"></script>
-  <script src="calendar-sync.js?v=86"></script>
-  <script src="app.js?v=86"></script>
-  <script src="pwa.js?v=86"></script>
+  <script src="firebase-config.js?v=88"></script>
+  <script src="firebase-sync.js?v=88"></script>
+  <script src="calendar-config.js?v=88"></script>
+  <script src="calendar-sync.js?v=88"></script>
+  <script src="app.js?v=88"></script>
+  <script src="pwa.js?v=88"></script>
 </body>
 </html>

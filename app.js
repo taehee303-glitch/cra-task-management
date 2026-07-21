@@ -184,7 +184,7 @@ const TASK_QUICK_FILTER_LABELS = {
   week: "This Week",
   workflow: "Workflow",
   routine: "Routine",
-  d1: "내일",
+  d1: "Tomorrow",
   open: "Open",
   "in-progress": "In Progress",
   completed: "Completed",
@@ -1452,6 +1452,8 @@ async function initDeferredBootstrapServices() {
           await CalendarSyncManager.init();
           CalendarSyncManager.registerHelpers({
             getStandardSiteName,
+            getTaskSiteLabel: getTaskSiteLabelForCalendar,
+            getTaskStudySiteNumber,
             getTaskById: (id) => tasks.find((t) => t.id === id),
             updateTaskCalendarSync: (taskId, calendarSync) => TaskStore.update(taskId, { calendarSync }),
             clearTaskCalendarSync: (taskId) => {
@@ -2062,7 +2064,20 @@ const SiteMasterStore = {
   getBySiteNumber(siteNumber) {
     const key = String(siteNumber || "").trim();
     if (!key) return null;
-    return this.sites.find((site) => site.siteNumber === key) || null;
+
+    const legacy = this.sites.find((site) => site.siteNumber === key);
+    if (legacy) return legacy;
+
+    for (const study of StudyMasterStore.studies) {
+      for (const link of study.siteLinks || []) {
+        if (link.siteNumber === key) {
+          const site = this.getById(link.siteMasterId);
+          if (site) return site;
+        }
+      }
+    }
+
+    return null;
   },
 
   findByValue(value) {
@@ -2255,7 +2270,7 @@ const SiteMasterStore = {
       }
     }
 
-    this.create({ standardName: trimmed, aliases: [], siteNumber: "" });
+    this.create({ standardName: trimmed, aliases: [] });
     return trimmed;
   },
 
@@ -2327,7 +2342,6 @@ function normalizeSiteMasterRecord(site) {
 
   return {
     id: site.id || generateId(),
-    siteNumber: site.siteNumber?.trim() || "",
     standardName,
     aliases,
     piName: site.piName?.trim() || "",
@@ -2413,6 +2427,7 @@ function resolveSiteSelectValue(siteValue, protocolNumber = "") {
       (site) =>
         site.id === siteValue ||
         site.standardName === siteValue ||
+        site.studySiteNumber === siteValue ||
         site.siteNumber === siteValue ||
         SiteMasterStore.resolve(siteValue) === site.standardName
     );
@@ -2437,7 +2452,52 @@ function resolveFollowUpTaskSite(task) {
 }
 
 function formatSiteOptionLabel(site) {
-  return site.standardName || site.siteNumber || "Site";
+  const number = site.studySiteNumber?.trim();
+  const name = site.standardName || "Site";
+  return number ? `${number} · ${name}` : name;
+}
+
+function getStudySiteLinkSiteNumber(study, siteMasterId) {
+  if (!study || !siteMasterId) return "";
+  const link = (study.siteLinks || []).find((item) => item.siteMasterId === siteMasterId);
+  return link?.siteNumber?.trim() || "";
+}
+
+function getStudyLinkedSiteCount(study) {
+  if (!study) return 0;
+  return (study.siteLinks || study.siteIds || []).length;
+}
+
+function getTaskStudySiteNumber(task) {
+  if (!task?.site?.trim() || !task?.study?.trim()) return "";
+  const siteEntry = SiteMasterStore.findByValue(task.site);
+  if (!siteEntry) return "";
+  const study = StudyMasterStore.getByProtocol(task.study);
+  return getStudySiteLinkSiteNumber(study, siteEntry.id);
+}
+
+function formatTaskSiteLabel(task) {
+  if (!task?.site?.trim()) return "";
+  const siteNumber = getTaskStudySiteNumber(task);
+  const standardName = getStandardSiteName(task.site);
+  if (siteNumber) return `${siteNumber} · ${standardName}`;
+  return standardName;
+}
+
+function formatCalendarTaskMeta(task) {
+  const parts = [];
+  if (task.study?.trim()) parts.push(task.study.trim());
+  const siteNumber = getTaskStudySiteNumber(task);
+  if (siteNumber) {
+    parts.push(siteNumber);
+  } else if (task.site?.trim()) {
+    parts.push(getStandardSiteName(task.site));
+  }
+  return parts.join(" · ") || "—";
+}
+
+function getTaskSiteLabelForCalendar(task) {
+  return formatTaskSiteLabel(task) || getStandardSiteName(task.site) || "";
 }
 
 function resolveSiteMasterEntry(value) {
@@ -2450,7 +2510,11 @@ function getLinkedSitesForProtocol(protocolNumber, includeSiteValue = "") {
   if (selectedEntry && !sites.some((site) => site.id === selectedEntry.id)) {
     sites = [selectedEntry, ...sites];
   }
-  return sites.sort((a, b) => a.standardName.localeCompare(b.standardName, "ko"));
+  return sites.sort((a, b) => {
+    const left = a.studySiteNumber || a.standardName;
+    const right = b.studySiteNumber || b.standardName;
+    return left.localeCompare(right, "ko");
+  });
 }
 
 function updateSiteSelectHint(protocolNumber, hintEl) {
@@ -2622,32 +2686,79 @@ const StudyMasterStore = {
       .sort((a, b) => a.localeCompare(b, "ko"));
   },
 
+  getLinkedSiteEntries(studyId) {
+    const study = this.getById(studyId);
+    if (!study) return [];
+
+    const links = Array.isArray(study.siteLinks) && study.siteLinks.length
+      ? study.siteLinks
+      : (study.siteIds || []).map((siteMasterId) => ({ siteMasterId, siteNumber: "" }));
+
+    return links
+      .map((link) => {
+        const site = SiteMasterStore.getById(link.siteMasterId);
+        if (!site) return null;
+        return { ...site, studySiteNumber: link.siteNumber?.trim() || "" };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        const left = a.studySiteNumber || a.standardName;
+        const right = b.studySiteNumber || b.standardName;
+        return left.localeCompare(right, "ko");
+      });
+  },
+
   getSitesForProtocol(protocolNumber) {
     const study = this.getByProtocol(protocolNumber);
     if (!study) return [];
-    return (study.siteIds || [])
-      .map((id) => SiteMasterStore.getById(id))
-      .filter(Boolean)
-      .sort((a, b) => a.siteNumber.localeCompare(b.siteNumber, "ko"));
+    return this.getLinkedSiteEntries(study.id);
   },
 
   getLinkedSites(studyId) {
-    const study = this.getById(studyId);
-    if (!study) return [];
-    return (study.siteIds || [])
-      .map((id) => SiteMasterStore.getById(id))
-      .filter(Boolean)
-      .sort((a, b) => a.siteNumber.localeCompare(b.siteNumber, "ko"));
+    return this.getLinkedSiteEntries(studyId);
   },
 
-  linkSite(studyId, siteMasterId) {
+  isSiteLinked(studyOrId, siteMasterId) {
+    const study = typeof studyOrId === "string" ? this.getById(studyOrId) : studyOrId;
+    if (!study || !siteMasterId) return false;
+    if (Array.isArray(study.siteLinks) && study.siteLinks.length) {
+      return study.siteLinks.some((link) => link.siteMasterId === siteMasterId);
+    }
+    return (study.siteIds || []).includes(siteMasterId);
+  },
+
+  linkSite(studyId, siteMasterId, siteNumber = "") {
     const study = this.getById(studyId);
     if (!study) return false;
 
-    if (!study.siteIds) study.siteIds = [];
-    if (study.siteIds.includes(siteMasterId)) return true;
+    if (!study.siteLinks) study.siteLinks = [];
 
-    study.siteIds.push(siteMasterId);
+    const existing = study.siteLinks.find((link) => link.siteMasterId === siteMasterId);
+    if (existing) {
+      if (siteNumber.trim()) existing.siteNumber = siteNumber.trim();
+      study.updatedAt = new Date().toISOString();
+      this.persist();
+      return true;
+    }
+
+    study.siteLinks.push({
+      siteMasterId,
+      siteNumber: siteNumber.trim(),
+    });
+    study.siteIds = [...new Set([...(study.siteIds || []), siteMasterId])];
+    study.updatedAt = new Date().toISOString();
+    this.persist();
+    return true;
+  },
+
+  updateSiteLinkNumber(studyId, siteMasterId, siteNumber) {
+    const study = this.getById(studyId);
+    if (!study) return false;
+
+    const link = (study.siteLinks || []).find((item) => item.siteMasterId === siteMasterId);
+    if (!link) return false;
+
+    link.siteNumber = siteNumber.trim();
     study.updatedAt = new Date().toISOString();
     this.persist();
     return true;
@@ -2657,7 +2768,8 @@ const StudyMasterStore = {
     const study = this.getById(studyId);
     if (!study) return false;
 
-    study.siteIds = (study.siteIds || []).filter((id) => id !== siteMasterId);
+    study.siteLinks = (study.siteLinks || []).filter((link) => link.siteMasterId !== siteMasterId);
+    study.siteIds = study.siteLinks.map((link) => link.siteMasterId);
     study.updatedAt = new Date().toISOString();
     this.persist();
     return true;
@@ -2973,6 +3085,7 @@ const StudyMasterStore = {
           studyName: protocolNumber,
           protocolNumber,
           siteIds: [],
+          siteLinks: [],
           systems: [],
         });
         changed = true;
@@ -2985,9 +3098,13 @@ const StudyMasterStore = {
         SiteMasterStore.getBySiteNumber(siteValue);
 
       if (siteEntry) {
-        if (!(study.siteIds || []).includes(siteEntry.id)) {
-          if (!study.siteIds) study.siteIds = [];
-          study.siteIds.push(siteEntry.id);
+        if (!this.isSiteLinked(study, siteEntry.id)) {
+          const siteNumber =
+            siteValue !== siteEntry.standardName &&
+            !siteEntry.aliases.includes(siteValue)
+              ? siteValue
+              : "";
+          this.linkSite(study.id, siteEntry.id, siteNumber);
           changed = true;
         }
         return;
@@ -2995,12 +3112,10 @@ const StudyMasterStore = {
 
       const standardSiteName = SiteMasterStore.resolve(siteValue);
       const created = SiteMasterStore.create({
-        siteNumber: siteValue,
         standardName: standardSiteName,
         aliases: [],
       });
-      if (!study.siteIds) study.siteIds = [];
-      study.siteIds.push(created.id);
+      this.linkSite(study.id, created.id, siteValue);
       changed = true;
     });
 
@@ -3413,10 +3528,27 @@ function resolveStudyTaskRuleNameFromForm() {
   return select.value.trim();
 }
 
+function normalizeStudySiteLinkRecord(link) {
+  return {
+    siteMasterId: String(link?.siteMasterId || link?.id || "").trim(),
+    siteNumber: String(link?.siteNumber || "").trim(),
+  };
+}
+
 function normalizeStudyRecord(study) {
-  const siteIds = Array.isArray(study.siteIds)
+  let siteLinks = Array.isArray(study.siteLinks)
+    ? study.siteLinks.map(normalizeStudySiteLinkRecord).filter((link) => link.siteMasterId)
+    : [];
+
+  const legacySiteIds = Array.isArray(study.siteIds)
     ? [...new Set(study.siteIds.filter(Boolean))]
     : [];
+
+  if (!siteLinks.length && legacySiteIds.length) {
+    siteLinks = legacySiteIds.map((siteMasterId) => ({ siteMasterId, siteNumber: "" }));
+  }
+
+  const siteIds = [...new Set(siteLinks.map((link) => link.siteMasterId))];
 
   const systems = Array.isArray(study.systems)
     ? study.systems.map(normalizeStudySystemLinkRecord)
@@ -3452,6 +3584,7 @@ function normalizeStudyRecord(study) {
     ctaName: study.ctaName?.trim() || "",
     notes: study.notes?.trim() || "",
     siteIds,
+    siteLinks,
     systems,
     taskRules,
     workflows,
@@ -4345,7 +4478,6 @@ function upsertSiteMasterFromLegacy(nested) {
     SiteMasterStore.findExact(stdName);
 
   const payload = {
-    siteNumber: nested.siteNumber?.trim() || entry?.siteNumber || "",
     standardName: stdName || entry?.standardName || nested.siteNumber?.trim() || "",
     aliases: entry?.aliases || [],
     piName: nested.piName?.trim() || entry?.piName || "",
@@ -4377,13 +4509,38 @@ function migrateMasterStructureV2() {
     const legacySites = Array.isArray(study.sites) ? study.sites : [];
 
     if (legacySites.length > 0 && typeof legacySites[0] === "object") {
-      const siteIds = [...(study.siteIds || [])];
+      if (!study.siteLinks) study.siteLinks = [];
       legacySites.forEach((nested) => {
-        const id = upsertSiteMasterFromLegacy(nested);
-        if (!siteIds.includes(id)) siteIds.push(id);
+        const siteMasterId = upsertSiteMasterFromLegacy(nested);
+        const siteNumber = nested.siteNumber?.trim() || "";
+        if (!study.siteLinks.some((link) => link.siteMasterId === siteMasterId)) {
+          study.siteLinks.push({ siteMasterId, siteNumber });
+        }
       });
-      study.siteIds = siteIds;
+      study.siteIds = study.siteLinks.map((link) => link.siteMasterId);
       delete study.sites;
+      studyChanged = true;
+    }
+
+    if (!Array.isArray(study.siteLinks)) {
+      study.siteLinks = [];
+      studyChanged = true;
+    }
+
+    if (study.siteLinks.length === 0 && (study.siteIds || []).length > 0) {
+      study.siteLinks = (study.siteIds || []).map((siteMasterId) => {
+        const site = SiteMasterStore.getById(siteMasterId);
+        return {
+          siteMasterId,
+          siteNumber: site?.siteNumber?.trim() || "",
+        };
+      });
+      studyChanged = true;
+    }
+
+    const syncedSiteIds = [...new Set(study.siteLinks.map((link) => link.siteMasterId).filter(Boolean))];
+    if (JSON.stringify(syncedSiteIds) !== JSON.stringify(study.siteIds || [])) {
+      study.siteIds = syncedSiteIds;
       studyChanged = true;
     }
 
@@ -4725,7 +4882,6 @@ function searchReferenceItems(query) {
   SiteMasterStore.getAll().forEach((site) => {
     const haystack = [
       site.standardName,
-      site.siteNumber,
       ...(site.aliases || []),
       site.piName,
       site.crcName,
@@ -4737,8 +4893,8 @@ function searchReferenceItems(query) {
       results.push({
         type: "site",
         id: site.id,
-        title: site.standardName || site.siteNumber || "Site",
-        meta: site.siteNumber || "",
+        title: site.standardName || "Site",
+        meta: site.piName ? `PI ${site.piName}` : "",
         emoji: "🏥",
       });
     }
@@ -4815,7 +4971,7 @@ function renderReferenceLists() {
               "study",
               study.id,
               study.studyName || study.protocolNumber,
-              `${study.protocolNumber || ""} · Site ${(study.siteIds || []).length}곳`,
+              `${study.protocolNumber || ""} · Site ${getStudyLinkedSiteCount(study)}곳`,
               "📚"
             )
           )
@@ -4831,8 +4987,8 @@ function renderReferenceLists() {
             renderReferenceCard(
               "site",
               site.id,
-              site.standardName || site.siteNumber || "Site",
-              site.siteNumber || "",
+              site.standardName || "Site",
+              site.piName ? `PI ${site.piName}` : "",
               "🏥"
             )
           )
@@ -5238,10 +5394,11 @@ function getTasksForDate(dateStr) {
 
 function renderCalendarTaskButton(task) {
   const synced = task.calendarSync?.eventId ? " calendar-task--synced" : "";
+  const meta = formatCalendarTaskMeta(task);
   return `
-    <button type="button" class="calendar-task${synced}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(task.task)}">
+    <button type="button" class="calendar-task${synced}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(`${task.task} · ${meta}`)}">
       <span class="calendar-task__name">${escapeHtml(task.task)}</span>
-      <span class="calendar-task__meta">${escapeHtml(task.study || "—")}</span>
+      <span class="calendar-task__meta">${escapeHtml(meta)}</span>
       ${task.calendarSync?.eventId ? '<span class="calendar-task__sync" title="Google Calendar 연동">📅</span>' : ""}
     </button>
   `;
@@ -5252,10 +5409,12 @@ function renderCalendarMonthTaskChip(task) {
   const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "normal";
   const urgencyClass =
     urgency === "overdue" ? " calendar-month-task--overdue" : urgency === "urgent" ? " calendar-month-task--urgent" : "";
+  const meta = formatCalendarTaskMeta(task);
   return `
-    <button type="button" class="calendar-month-task${synced}${urgencyClass}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(task.task)}">
+    <button type="button" class="calendar-month-task${synced}${urgencyClass}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(`${task.task} · ${meta}`)}">
       ${task.calendarSync?.eventId ? '<span class="calendar-month-task__sync" aria-hidden="true">📅</span>' : ""}
       <span class="calendar-month-task__name">${escapeHtml(task.task)}</span>
+      ${getTaskStudySiteNumber(task) ? `<span class="calendar-month-task__site">${escapeHtml(getTaskStudySiteNumber(task))}</span>` : ""}
     </button>
   `;
 }
@@ -5430,6 +5589,7 @@ function populateSiteSelect(selectEl, protocolNumber, selectedValue = "") {
           value === selectedValue ||
           (selectedEntry && selectedEntry.id === site.id) ||
           SiteMasterStore.resolve(selectedValue) === site.standardName ||
+          site.studySiteNumber === selectedValue ||
           site.siteNumber === selectedValue ||
           site.standardName === selectedValue;
         return `<option value="${escapeAttr(value)}"${isSelected ? " selected" : ""}>${escapeHtml(formatSiteOptionLabel(site))}</option>`;
@@ -5540,15 +5700,18 @@ function renderSiteInfoSystems(site) {
   ]);
 }
 
-function renderSiteInfoContent(container, site) {
+function renderSiteInfoContent(container, site, { studySiteNumber = "" } = {}) {
   if (!container) return;
   if (!site) {
     container.innerHTML = "";
     return;
   }
 
-  container.innerHTML = [
-    renderSiteInfoField("Site Number", "text", site.siteNumber),
+  const fields = [];
+  if (studySiteNumber) {
+    fields.push(renderSiteInfoField("Site Number", "text", studySiteNumber));
+  }
+  fields.push(
     renderSiteInfoField("Standard Site Name", "text", site.standardName),
     renderSiteInfoField("PI Name", "text", site.piName),
     renderSiteInfoField("PI Phone Number", "text", site.piPhoneNumber),
@@ -5560,17 +5723,22 @@ function renderSiteInfoContent(container, site) {
     renderSiteInfoField("Lab Contact Name", "text", site.labContactName),
     renderSiteInfoField("Lab Phone Number", "text", site.labPhoneNumber),
     ...renderSiteInfoSystems(site),
-    renderSiteInfoField("Site Notes", "text", site.notes),
-  ].join("");
+    renderSiteInfoField("Site Notes", "text", site.notes)
+  );
+
+  container.innerHTML = fields.join("");
 
   bindSiteInfoPasswordToggles(container);
 }
 
 function updateSiteInfoDisplays() {
   const siteEntry = resolveSiteMasterEntry(els.site.value);
+  const study = StudyMasterStore.getByProtocol(els.study.value);
+  const studySiteNumber = siteEntry && study ? getStudySiteLinkSiteNumber(study, siteEntry.id) : "";
+
   if (siteEntry) {
     els.siteInfoToggleBtn.hidden = false;
-    renderSiteInfoContent(els.siteInfoContent, siteEntry);
+    renderSiteInfoContent(els.siteInfoContent, siteEntry, { studySiteNumber });
     setTaskSiteInfoExpanded(UiSettingsStore.getTaskSiteInfoExpanded(), { persist: false });
   } else {
     els.siteInfoToggleBtn.hidden = true;
@@ -8138,7 +8306,7 @@ function renderStudyMaster() {
         <li>
           <button type="button" class="study-master-list__item${study.id === selectedStudyMasterId ? " study-master-list__item--active" : ""}" data-study-id="${study.id}">
             <span class="study-master-list__name">${escapeHtml(study.studyName || study.protocolNumber)}</span>
-            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${(study.siteIds || []).length} · <span class="study-master-list__wf">WF ${StudyMasterStore.getAppliedWorkflowIds(study.id).length}</span></span>
+            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${getStudyLinkedSiteCount(study)} · <span class="study-master-list__wf">WF ${StudyMasterStore.getAppliedWorkflowIds(study.id).length}</span></span>
           </button>
         </li>
       `
@@ -8227,7 +8395,16 @@ function renderLinkedSitesTable(study) {
     .map(
       (site) => `
       <tr>
-        <td>${escapeHtml(site.siteNumber)}</td>
+        <td>
+          <input
+            type="text"
+            class="inline-edit-input"
+            data-edit-link-site-number="${site.id}"
+            value="${escapeAttr(site.studySiteNumber || "")}"
+            placeholder="예: Site 101"
+            aria-label="Site Number"
+          />
+        </td>
         <td>${escapeHtml(site.standardName)}</td>
         <td>${escapeHtml(site.piName)}</td>
         <td>${escapeHtml(site.crcName)}</td>
@@ -8239,6 +8416,18 @@ function renderLinkedSitesTable(study) {
     `
     )
     .join("");
+
+  els.linkedSitesTableBody.querySelectorAll("[data-edit-link-site-number]").forEach((input) => {
+    input.addEventListener("change", () => {
+      handleUpdateLinkSiteNumber(input.dataset.editLinkSiteNumber, input.value);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+  });
 
   els.linkedSitesTableBody.querySelectorAll("[data-unlink-site]").forEach((btn) => {
     btn.addEventListener("click", () => handleUnlinkSite(btn.dataset.unlinkSite));
@@ -8443,7 +8632,7 @@ function handleStudyMasterSubmit(e) {
     StudyMasterStore.updateStudy(studyId, payload);
     selectedStudyMasterId = studyId;
   } else {
-    const created = StudyMasterStore.createStudy({ ...payload, siteIds: [], systems: [], taskRules: [], workflows: [], routines: [], customTaskNames: [] });
+    const created = StudyMasterStore.createStudy({ ...payload, siteIds: [], siteLinks: [], systems: [], taskRules: [], workflows: [], routines: [], customTaskNames: [] });
     selectedStudyMasterId = created.id;
   }
 
@@ -8478,7 +8667,7 @@ function openLinkSiteModal() {
   const study = StudyMasterStore.getById(selectedStudyMasterId);
   if (!study) return;
 
-  const available = SiteMasterStore.getAll().filter((site) => !(study.siteIds || []).includes(site.id));
+  const available = SiteMasterStore.getAll().filter((site) => !StudyMasterStore.isSiteLinked(study, site.id));
   if (available.length === 0) {
     alert("연결 가능한 Site가 없습니다. Site Master에서 Site를 먼저 등록하세요.");
     return;
@@ -8506,13 +8695,33 @@ function handleLinkSiteSubmit(e) {
 
   const studyId = selectedStudyMasterId;
   const siteMasterId = els.linkSiteSelect.value;
+  const siteNumber = document.getElementById("linkSiteNumber")?.value.trim() || "";
   if (!studyId || !siteMasterId) return;
 
-  StudyMasterStore.linkSite(studyId, siteMasterId);
+  if (!siteNumber) {
+    alert("Site Number를 입력해 주세요.");
+    return;
+  }
+
+  StudyMasterStore.linkSite(studyId, siteMasterId, siteNumber);
   closeLinkSiteModal();
   renderStudyMaster();
   refreshTaskStudySiteSelects();
   alert("Site가 Study에 연결되었습니다.");
+}
+
+function handleUpdateLinkSiteNumber(siteMasterId, siteNumber) {
+  if (!selectedStudyMasterId) return;
+
+  const trimmed = siteNumber.trim();
+  if (!trimmed) {
+    alert("Site Number를 입력해 주세요.");
+    renderStudyMaster();
+    return;
+  }
+
+  StudyMasterStore.updateSiteLinkNumber(selectedStudyMasterId, siteMasterId, trimmed);
+  refreshTaskStudySiteSelects();
 }
 
 function handleUnlinkSite(siteMasterId) {
@@ -8837,8 +9046,8 @@ function renderSiteMaster() {
         (site) => `
         <li>
           <button type="button" class="study-master-list__item${site.id === selectedSiteMasterId ? " study-master-list__item--active" : ""}" data-site-master-id="${site.id}">
-            <span class="study-master-list__name">${escapeHtml(site.standardName || site.siteNumber || "Site")}</span>
-            <span class="study-master-list__meta">${escapeHtml(site.siteNumber || "Site Number 미등록")}${site.piName ? ` · PI ${site.piName}` : ""}${site.crcName ? ` · CRC ${site.crcName}` : ""}</span>
+            <span class="study-master-list__name">${escapeHtml(site.standardName || "Site")}</span>
+            <span class="study-master-list__meta">${site.piName ? `PI ${escapeHtml(site.piName)}` : ""}${site.piName && site.crcName ? " · " : ""}${site.crcName ? `CRC ${escapeHtml(site.crcName)}` : ""}</span>
           </button>
         </li>
       `
@@ -8874,7 +9083,6 @@ function renderSiteMaster() {
   els.siteMasterEmpty.hidden = true;
   els.siteMasterForm.hidden = false;
   document.getElementById("siteMasterEntryId").value = site.id;
-  document.getElementById("smSiteNumber").value = site.siteNumber;
   document.getElementById("standardSiteName").value = site.standardName;
   document.getElementById("aliasNames").value = formatAliasNames(site.aliases);
   document.getElementById("smPiName").value = site.piName;
@@ -8928,7 +9136,6 @@ async function buildSiteMasterPayload(entryId) {
   const existing = entryId ? SiteMasterStore.getById(entryId) : null;
 
   return {
-    siteNumber: document.getElementById("smSiteNumber").value.trim(),
     standardName: document.getElementById("standardSiteName").value.trim(),
     aliases: parseAliasNames(document.getElementById("aliasNames").value),
     piName: document.getElementById("smPiName").value.trim(),
@@ -8951,7 +9158,7 @@ function selectSiteMasterEntry(siteId) {
   if (isDailyMode() && siteId) {
     const site = SiteMasterStore.getById(siteId);
     const titleEl = document.getElementById("siteMasterMobileTitle");
-    if (titleEl && site) titleEl.textContent = site.standardName || site.siteNumber;
+    if (titleEl && site) titleEl.textContent = site.standardName;
     setMasterMobileDetail("site-master", true, false);
   }
 }
@@ -8961,12 +9168,8 @@ async function handleSiteMasterSubmit(e) {
 
   const entryId = document.getElementById("siteMasterEntryId").value;
   const payload = await buildSiteMasterPayload(entryId);
-  const { siteNumber, standardName, aliases } = payload;
+  const { standardName, aliases } = payload;
 
-  if (!siteNumber) {
-    alert("Site Number를 입력해 주세요.");
-    return;
-  }
   if (!standardName) {
     alert("Standard Site Name을 입력해 주세요.");
     return;
@@ -8988,7 +9191,6 @@ async function handleSiteMasterSubmit(e) {
         SiteMasterStore.addAlias(similar[0].id, standardName);
         aliases.forEach((alias) => SiteMasterStore.addAlias(similar[0].id, alias));
         SiteMasterStore.update(similar[0].id, {
-          siteNumber: similar[0].siteNumber || payload.siteNumber,
           piName: payload.piName || similar[0].piName,
           piPhoneNumber: payload.piPhoneNumber || similar[0].piPhoneNumber,
           crcName: payload.crcName || similar[0].crcName,
@@ -9150,7 +9352,6 @@ async function seedSiteMasterIfEmpty() {
   const demoPassword = await encryptIrbPassword("DemoPass123!");
 
   const site101 = SiteMasterStore.create({
-    siteNumber: "Site 101",
     standardName: "한림성심대학교병원",
     aliases: ["한림성심", "한림 성심", "한림성심대병원", "한림대학교성심병원", "한림 성심대병원"],
     piName: "Dr. Hong",
@@ -9195,24 +9396,49 @@ async function seedSiteMasterIfEmpty() {
     notes: "",
   });
 
-  [
-    { siteNumber: "Site 102", piName: "Dr. Choi", piPhoneNumber: "02-2345-6789", crcName: "Jung CRC" },
-    { siteNumber: "Site 103", piName: "Dr. Yoon", piPhoneNumber: "02-3456-7890", crcName: "Han CRC" },
-    { siteNumber: "Site 201", piName: "Dr. Shin", crcName: "Kang CRC" },
-    { siteNumber: "Site 202", piName: "Dr. Lim", crcName: "Oh CRC" },
-    { siteNumber: "Site 301", piName: "Dr. Baek", crcName: "Song CRC" },
-  ].forEach((site) => SiteMasterStore.create({ ...site, standardName: site.siteNumber, aliases: [] }));
+  SiteMasterStore.create({
+    standardName: "서울대학교병원",
+    aliases: [],
+    piName: "Dr. Choi",
+    piPhoneNumber: "02-2345-6789",
+    crcName: "Jung CRC",
+  });
+  SiteMasterStore.create({
+    standardName: "연세대학교세브란스병원",
+    aliases: [],
+    piName: "Dr. Yoon",
+    piPhoneNumber: "02-3456-7890",
+    crcName: "Han CRC",
+  });
+  SiteMasterStore.create({
+    standardName: "아주대학교병원",
+    aliases: [],
+    piName: "Dr. Shin",
+    crcName: "Kang CRC",
+  });
+  SiteMasterStore.create({
+    standardName: "분당서울대학교병원",
+    aliases: [],
+    piName: "Dr. Lim",
+    crcName: "Oh CRC",
+  });
+  SiteMasterStore.create({
+    standardName: "고려대학교안암병원",
+    aliases: [],
+    piName: "Dr. Baek",
+    crcName: "Song CRC",
+  });
 }
 
 async function seedStudyMasterIfEmpty() {
   if (StudyMasterStore.getAll().length > 0) return;
 
-  const site101 = SiteMasterStore.getBySiteNumber("Site 101");
-  const site102 = SiteMasterStore.getBySiteNumber("Site 102");
-  const site103 = SiteMasterStore.getBySiteNumber("Site 103");
-  const site201 = SiteMasterStore.getBySiteNumber("Site 201");
-  const site202 = SiteMasterStore.getBySiteNumber("Site 202");
-  const site301 = SiteMasterStore.getBySiteNumber("Site 301");
+  const site101 = SiteMasterStore.findExact("한림성심대학교병원");
+  const site102 = SiteMasterStore.findExact("서울대학교병원");
+  const site103 = SiteMasterStore.findExact("연세대학교세브란스병원");
+  const site201 = SiteMasterStore.findExact("아주대학교병원");
+  const site202 = SiteMasterStore.findExact("분당서울대학교병원");
+  const site301 = SiteMasterStore.findExact("고려대학교안암병원");
 
   const demoPassword = await encryptIrbPassword("DemoPass123!");
 
@@ -9236,7 +9462,11 @@ async function seedStudyMasterIfEmpty() {
     pmName: "Kim PM",
     ctaName: "Lee CTA",
     notes: "Phase III study",
-    siteIds: [site101, site102, site103].filter(Boolean).map((s) => s.id),
+    siteLinks: [
+      { siteMasterId: site101?.id, siteNumber: "Site 101" },
+      { siteMasterId: site102?.id, siteNumber: "Site 102" },
+      { siteMasterId: site103?.id, siteNumber: "Site 103" },
+    ].filter((link) => link.siteMasterId),
     systems: [],
   });
 
@@ -9291,7 +9521,10 @@ async function seedStudyMasterIfEmpty() {
     therapeuticArea: "Cardiology",
     pmName: "Park PM",
     ctaName: "Choi CTA",
-    siteIds: [site201, site202].filter(Boolean).map((s) => s.id),
+    siteLinks: [
+      { siteMasterId: site201?.id, siteNumber: "Site 201" },
+      { siteMasterId: site202?.id, siteNumber: "Site 202" },
+    ].filter((link) => link.siteMasterId),
     systems: [],
   });
 
@@ -9308,7 +9541,7 @@ async function seedStudyMasterIfEmpty() {
     protocolNumber: "DEF-205",
     sponsor: "MediCore",
     therapeuticArea: "Immunology",
-    siteIds: [site301].filter(Boolean).map((s) => s.id),
+    siteLinks: [{ siteMasterId: site301?.id, siteNumber: "Site 301" }].filter((link) => link.siteMasterId),
     systems: [],
   });
 }
@@ -9627,17 +9860,23 @@ function linkGoogleCalendarEvent(taskId, eventId, options = {}) {
 }
 
 function buildGoogleCalendarEventTitle(task) {
-  return `[${task.study}] ${task.task} - ${getStandardSiteName(task.site)}`;
+  const siteLabel = getTaskSiteLabelForCalendar(task);
+  return siteLabel ? `[${task.study}] ${task.task} - ${siteLabel}` : `[${task.study}] ${task.task}`;
 }
 
 function buildGoogleCalendarEventDescription(task) {
+  const siteLabel = getTaskSiteLabelForCalendar(task);
+  const siteNumber = getTaskStudySiteNumber(task);
   return [
     `Study: ${task.study}`,
-    `Site: ${getStandardSiteName(task.site)}`,
+    siteNumber ? `Site No: ${siteNumber}` : null,
+    siteLabel ? `Site: ${siteLabel}` : null,
     `Task: ${task.task}`,
     `Priority: ${task.priority}`,
     `Task ID: ${task.id}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildGoogleCalendarAllDayDates(dueDateStr) {
@@ -9731,7 +9970,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "86";
+const APP_BUILD = "88";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -11755,7 +11994,7 @@ function getFilteredTasks() {
       const siteTerms = siteEntry
         ? `${siteEntry.pharmacyContactName} ${siteEntry.pharmacyPhoneNumber} ${siteEntry.labContactName} ${siteEntry.labPhoneNumber} ${siteEntry.ipStorageLocation}`
         : "";
-      const haystack = `${t.study} ${getStandardSiteName(t.site)} ${SiteMasterStore.getSearchTermsForSite(t.site).join(" ")} ${siteTerms} ${t.task} ${sourceText}`.toLowerCase();
+      const haystack = `${t.study} ${getTaskStudySiteNumber(t)} ${getStandardSiteName(t.site)} ${SiteMasterStore.getSearchTermsForSite(t.site).join(" ")} ${siteTerms} ${t.task} ${sourceText}`.toLowerCase();
       return haystack.includes(search);
     });
   }
@@ -12267,7 +12506,7 @@ function renderDashItem(task, type, options = {}) {
   const isDone = task.status === "Completed";
   const selectedClass = selectedTaskId === task.id ? " dash-item--selected" : "";
   const studyLabel = task.study || "Study 미정";
-  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "Site 미정";
+  const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "Site 미정";
   const contextMeta = renderTaskContextMeta(task, { inline: compact });
   const criticalBadge =
     task.priority === "Critical" ? '<span class="critical-badge dash-item__critical">Critical</span>' : "";
@@ -12409,7 +12648,7 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
   const urgencyClass =
     urgency === "overdue" ? "task-card--overdue" : urgency === "urgent" ? "task-card--urgent" : "";
   const studyLabel = task.study?.trim() || "Study 미정";
-  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "";
+  const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "";
   const studySite =
     siteLabel && siteLabel !== "Site 미정" ? `${studyLabel} · ${siteLabel}` : studyLabel;
   const badge = getDashboardDueBadge(task);
@@ -12469,7 +12708,7 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
     .join(" ");
   const badge = getDashboardDueBadge(task);
   const studyLabel = task.study?.trim() || "—";
-  const siteLabel = task.site?.trim() ? getStandardSiteName(task.site) : "—";
+  const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "—";
   const workflowLabel = getDashboardWorkflowLabel(task);
   const isDone = task.status === "Completed";
 

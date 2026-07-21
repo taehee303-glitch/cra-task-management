@@ -17,6 +17,27 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 88 — 2026-07-21 — Calendar site no, My Tasks Tomorrow
+
+### Changed
+
+- **Calendar** — Task에 Study Site Number가 있으면 주/월 뷰 및 Google Calendar 연동 이벤트에 표시
+- **My Tasks** — **Tomorrow** 필터 추가 (Workflow / Routine 별도 필터 제거)
+- **Task 카드·리스트** — Site Number 포함 표시 (`Site 101 · 병원명`)
+
+---
+
+## [1.3.0] — build 87 — 2026-07-21 — Study-scoped Site Number
+
+### Changed
+
+- **Site Number** — Study별 Site 연결 시 입력·수정 (Site Master에서는 제거)
+- **Study `siteLinks`** — `{ siteMasterId, siteNumber }` 구조로 Study-Site 연결 정보 저장
+- **마이그레이션** — 기존 Site Master의 Site Number를 Study 연결 정보로 자동 이전
+- **System 안내** — Study Systems / Site Systems 용도 구분 힌트 추가
+
+---
+
 ## [1.3.0] — build 86 — 2026-07-21 — Site No duplicates, optional task site, tomorrow dashboard
 
 ### Changed

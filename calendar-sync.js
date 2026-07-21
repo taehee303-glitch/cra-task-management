@@ -241,23 +241,33 @@ class GoogleCalendarProvider {
     };
   }
 
-  buildEventPayload(task, settings, getStandardSiteName) {
-    const siteName = typeof getStandardSiteName === "function" ? getStandardSiteName(task.site) : task.site;
+  buildEventPayload(task, settings, helpers = {}) {
+    const siteLabel =
+      typeof helpers.getTaskSiteLabel === "function"
+        ? helpers.getTaskSiteLabel(task)
+        : typeof helpers.getStandardSiteName === "function"
+          ? helpers.getStandardSiteName(task.site)
+          : task.site;
+    const siteNumber =
+      typeof helpers.getTaskStudySiteNumber === "function" ? helpers.getTaskStudySiteNumber(task) : "";
     const [year, month, day] = task.dueDate.split("-").map(Number);
     const end = new Date(year, month - 1, day);
     end.setDate(end.getDate() + 1);
     const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 
     return {
-      summary: `[${task.study}] ${task.task} - ${siteName}`,
+      summary: siteLabel ? `[${task.study}] ${task.task} - ${siteLabel}` : `[${task.study}] ${task.task}`,
       description: [
         `Study: ${task.study}`,
-        `Site: ${siteName}`,
+        siteNumber ? `Site No: ${siteNumber}` : null,
+        siteLabel ? `Site: ${siteLabel}` : null,
         `Task: ${task.task}`,
         `Priority: ${task.priority}`,
         `Status: ${task.status}`,
         `Task ID: ${task.id}`,
-      ].join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n"),
       start: { date: task.dueDate },
       end: { date: endDate },
       extendedProperties: {
@@ -272,7 +282,7 @@ class GoogleCalendarProvider {
 
   async createEvent(task, settings, helpers) {
     const calendarId = encodeURIComponent(this.config.defaultCalendarId || "primary");
-    const payload = this.buildEventPayload(task, settings, helpers.getStandardSiteName);
+    const payload = this.buildEventPayload(task, settings, helpers);
     const data = await this.apiRequest("POST", `/calendars/${calendarId}/events`, payload);
     return {
       provider: "google",
@@ -293,7 +303,7 @@ class GoogleCalendarProvider {
 
     const calendarId = encodeURIComponent(sync.calendarId || this.config.defaultCalendarId || "primary");
     const eventId = encodeURIComponent(sync.eventId);
-    const payload = this.buildEventPayload(task, settings, helpers.getStandardSiteName);
+    const payload = this.buildEventPayload(task, settings, helpers);
     const data = await this.apiRequest("PATCH", `/calendars/${calendarId}/events/${eventId}`, payload);
 
     return {
