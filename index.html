@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=93" />
+  <link rel="stylesheet" href="styles.css?v=95" />
   <script>
     (function () {
       var BUILD = "86";
@@ -410,31 +410,31 @@
               </div>
             </div>
 
-            <div class="dashboard-hero__progress-wrap">
-              <div class="dashboard-hero__metrics">
-                <div class="dashboard-hero__metric dashboard-hero__metric--primary">
-                  <span class="dashboard-hero__metric-label">오늘</span>
-                  <span class="dashboard-hero__metric-value" id="todayProgressTotal">0</span>
-                </div>
-                <div class="dashboard-hero__metric">
-                  <span class="dashboard-hero__metric-label">완료</span>
-                  <span class="dashboard-hero__metric-value dashboard-hero__metric-value--done" id="todayProgressCompleted">0</span>
-                </div>
-                <div class="dashboard-hero__metric">
-                  <span class="dashboard-hero__metric-label">남음</span>
-                  <span class="dashboard-hero__metric-value" id="todayProgressRemaining">0</span>
+            <div class="dashboard-hero__progress-card">
+              <div class="dashboard-hero__progress-top">
+                <span class="dashboard-hero__progress-label">오늘 진행률</span>
+                <span class="dashboard-hero__progress-percent" id="todayProgressPercent">0%</span>
+              </div>
+              <div class="dashboard-hero__progress-bar-wrap">
+                <div class="progress-bar dashboard-hero__progress-bar">
+                  <div class="progress-bar__fill dashboard-hero__progress-fill" id="todayProgressFill" style="width: 0%"></div>
                 </div>
               </div>
-              <div class="dashboard-hero__progress-main">
-                <div class="dashboard-hero__progress-head">
-                  <span class="dashboard-hero__progress-label">오늘 진행률</span>
-                  <span class="dashboard-hero__progress-percent" id="todayProgressPercent">0%</span>
+              <div class="dashboard-hero__progress-stats">
+                <div class="dashboard-hero__stat">
+                  <span class="dashboard-hero__stat-value" id="todayProgressTotal">0</span>
+                  <span class="dashboard-hero__stat-label">전체</span>
                 </div>
-                <div class="progress-bar progress-bar--compact dashboard-hero__progress-bar">
-                  <div class="progress-bar__fill" id="todayProgressFill" style="width: 0%"></div>
+                <div class="dashboard-hero__stat dashboard-hero__stat--done">
+                  <span class="dashboard-hero__stat-value" id="todayProgressCompleted">0</span>
+                  <span class="dashboard-hero__stat-label">완료</span>
                 </div>
-                <p class="dashboard-hero__encouragement" id="dashboardEncouragement">오늘도 화이팅입니다.</p>
+                <div class="dashboard-hero__stat dashboard-hero__stat--remain">
+                  <span class="dashboard-hero__stat-value" id="todayProgressRemaining">0</span>
+                  <span class="dashboard-hero__stat-label">남음</span>
+                </div>
               </div>
+              <p class="dashboard-hero__encouragement" id="dashboardEncouragement">오늘도 화이팅입니다.</p>
             </div>
 
             <button type="button" class="dashboard-hero__start-btn" id="dashboardStartWorkBtn">▶ 시작</button>
@@ -505,6 +505,16 @@
             </div>
           </div>
 
+          <section class="dash-card dash-card--v2 dash-card--inline dash-card--time-next-week" aria-labelledby="dashboardNextWeekHeading" id="dashboardNextWeekSection">
+            <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
+              <h3 id="dashboardNextWeekHeading">다음 주</h3>
+              <span class="badge badge--neutral" id="dashboardNextWeekCount">0</span>
+            </div>
+            <div class="dash-list dash-list--compact dash-list--time dash-list--v2" id="dashboardNextWeekList">
+              <p class="empty-msg empty-msg--compact">✓ 없음</p>
+            </div>
+          </section>
+
           <details class="dashboard-stats-collapse">
             <summary class="dashboard-stats-collapse__summary">더 보기 · 통계</summary>
             <div class="stats-grid stats-grid--dashboard-footer stats-grid--dashboard-compact">
@@ -552,16 +562,6 @@
             </button>
           </div>
           </details>
-
-          <section class="dash-card dash-card--v2 dash-card--inline dash-card--time-next-week dash-card--next-week-bottom" aria-labelledby="dashboardNextWeekHeading" id="dashboardNextWeekSection">
-            <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-              <h3 id="dashboardNextWeekHeading">다음 주</h3>
-              <span class="badge badge--neutral" id="dashboardNextWeekCount">0</span>
-            </div>
-            <div class="dash-list dash-list--compact dash-list--time dash-list--v2" id="dashboardNextWeekList">
-              <p class="empty-msg empty-msg--compact">✓ 없음</p>
-            </div>
-          </section>
 
         </section>
       </div>
@@ -1744,11 +1744,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=93"></script>
-  <script src="firebase-sync.js?v=93"></script>
-  <script src="calendar-config.js?v=93"></script>
-  <script src="calendar-sync.js?v=93"></script>
-  <script src="app.js?v=93"></script>
-  <script src="pwa.js?v=93"></script>
+  <script src="firebase-config.js?v=95"></script>
+  <script src="firebase-sync.js?v=95"></script>
+  <script src="calendar-config.js?v=95"></script>
+  <script src="calendar-sync.js?v=95"></script>
+  <script src="app.js?v=95"></script>
+  <script src="pwa.js?v=95"></script>
 </body>
 </html>

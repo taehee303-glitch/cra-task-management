@@ -4738,7 +4738,9 @@ function updateMobileFilterUi() {
     btn.setAttribute("aria-selected", String(isActive));
   });
   if (els.mobileFilteredTitle) {
-    els.mobileFilteredTitle.textContent = TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "Task List";
+    const label = TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "Task List";
+    const dateHint = formatTaskFilterDateHint(taskQuickFilter);
+    els.mobileFilteredTitle.textContent = dateHint ? `${dateHint} · ${label}` : label;
   }
 }
 
@@ -5245,10 +5247,10 @@ function handleQuickFilterClick(filter) {
 }
 
 function scrollFilteredTasksIntoView() {
-  const target = els.taskCardList?.hidden ? els.taskTableWrap : els.taskCardList;
-  if (!target) return;
+  const anchor = document.querySelector(".tasks-workspace__bar");
+  if (!anchor) return;
   requestAnimationFrame(() => {
-    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    anchor.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
 
@@ -7622,6 +7624,7 @@ function renderTaskContextMeta(task, options = {}) {
 const DASHBOARD_SECTION_PREVIEW_LIMIT = 3;
 const DASHBOARD_TODAY_PREVIEW_LIMIT = 5;
 const DASHBOARD_COMPACT_PREVIEW_LIMIT = 2;
+const DASHBOARD_WEEK_PREVIEW_LIMIT = 4;
 
 function buildWorkflowTimelineStepDefs(workflow, rootTask) {
   const steps = [];
@@ -10201,7 +10204,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "93";
+const APP_BUILD = "95";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12190,16 +12193,17 @@ function updateQuickFilterUi() {
   });
 
   if (els.tasksHomeSubtitle) {
-    els.tasksHomeSubtitle.textContent = taskQuickFilter
+    const label = taskQuickFilter
       ? TASK_QUICK_FILTER_LABELS[taskQuickFilter] || "Task List"
       : "진행 중인 업무";
+    const dateHint = formatTaskFilterDateHint(taskQuickFilter);
+    els.tasksHomeSubtitle.textContent = dateHint ? `${dateHint} · ${label}` : label;
   }
 }
 
 function updateTasksHomeHeader(count) {
   if (!els.tasksHomeCount) return;
-  const dateHint = formatTaskFilterDateHint(taskQuickFilter);
-  els.tasksHomeCount.textContent = dateHint ? `${count}건 · ${dateHint}` : `${count}건`;
+  els.tasksHomeCount.textContent = `${count}건`;
 }
 
 function updateDashboardCardFilterUi() {
@@ -12520,15 +12524,12 @@ function formatDashboardTimelineDayLabel(dateStr) {
   return `${dayNames[d.getDay()]} ${d.getDate()}`;
 }
 
-function renderDashboardTimelineTasks(taskList, filter, limit) {
-  const isExpanded = dashboardExpandedSections.has(filter);
-  const visibleCount = isExpanded ? taskList.length : Math.min(taskList.length, limit);
-  const visible = taskList.slice(0, visibleCount);
-  if (!visible.length) return "";
+function renderDashboardTimelineTasks(taskList) {
+  if (!taskList.length) return "";
 
   const groups = [];
   let currentGroup = null;
-  visible.forEach((task) => {
+  taskList.forEach((task) => {
     const key = task.dueDate || "__none__";
     if (!currentGroup || currentGroup.date !== key) {
       currentGroup = { date: key, tasks: [] };
@@ -12559,7 +12560,7 @@ function renderDashboardTimelineTasks(taskList, filter, limit) {
     })
     .join("");
 
-  return `${html}${renderDashboardMoreButton(filter, taskList, limit)}`;
+  return html;
 }
 
 function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}) {
@@ -12572,7 +12573,7 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
   if (layout === "updates") {
     itemsHtml = visible.map((task) => renderDashboardUpdateItem(task)).join("");
   } else if (layout === "schedule") {
-    itemsHtml = renderDashboardTimelineTasks(visible, filter, limit);
+    itemsHtml = renderDashboardTimelineTasks(visible);
   } else {
     itemsHtml = visible.map((task) => renderDashItem(task, type, { compact: true, layout: "v2" })).join("");
   }
@@ -12700,7 +12701,7 @@ function renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks) {
   }
   if (els.dashboardWeekPrepList) {
     els.dashboardWeekPrepList.innerHTML = weekPrepTasks.length
-      ? renderDashboardSectionTasks(weekPrepTasks, "time-week", "week", DASHBOARD_COMPACT_PREVIEW_LIMIT, {
+      ? renderDashboardSectionTasks(weekPrepTasks, "time-week", "week", DASHBOARD_WEEK_PREVIEW_LIMIT, {
           layout: "schedule",
         })
       : renderDashboardEmptyMsg("이번 주 일정 없음");
@@ -12810,9 +12811,6 @@ function renderDashItem(task, type, options = {}) {
 
     return `
     <article class="dash-task-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-task-row__check dash-item__complete${isDone ? " dash-task-row__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-        <span class="dash-item__complete-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
-      </button>
       <button type="button" class="dash-task-row__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
         <span class="dash-task-row__title-line">
           ${criticalBadge}
@@ -12823,6 +12821,9 @@ function renderDashItem(task, type, options = {}) {
       </button>
       <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
       <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
+      <button type="button" class="dash-task-row__complete${isDone ? " dash-task-row__complete--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <span aria-hidden="true">${isDone ? "✓" : ""}</span>
+      </button>
     </article>
   `;
   }
@@ -12934,6 +12935,26 @@ function renderTaskList() {
   bindTaskListActions(els.taskCardList);
 }
 
+function renderTaskStudySiteMeta(task) {
+  const studyNo = task.study?.trim() || "";
+  const siteNumber = getTaskStudySiteNumber(task);
+  const siteName = task.site?.trim() ? getStandardSiteName(task.site) : "";
+  const parts = [];
+  if (studyNo) parts.push(studyNo);
+  if (siteNumber) parts.push(siteNumber);
+  if (siteName) parts.push(siteName);
+  const label = parts.length ? parts.join(" · ") : "Study · Site 미정";
+  return `<span class="task-card__study-site task-card__study-site--muted">${escapeHtml(label)}</span>`;
+}
+
+function renderTaskPriorityProminent(task) {
+  const priorityClassName = priorityClass(task.priority);
+  if (task.priority === "Critical") {
+    return `<span class="task-card__priority-text task-card__priority-text--critical">Critical</span>`;
+  }
+  return `<span class="task-card__priority-text task-card__priority-text--${priorityClassName}">${escapeHtml(task.priority)}</span>`;
+}
+
 function renderTaskDueProminent(task) {
   if (task.status === "Completed") {
     return `<span class="task-card__due-text task-card__due-text--done">Done</span>`;
@@ -13024,13 +13045,14 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
   return `
     <article class="task-card task-card--action task-card--row ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       ${renderTaskDueProminent(task)}
+      ${renderTaskPriorityProminent(task)}
       <div class="task-card__content">
         <button type="button" class="task-card__detail" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
           <span class="task-card__title-line">
-            <span class="task-card__priority task-card__priority--${priorityClassName}">${escapeHtml(task.priority)}</span>
+            ${criticalBadge}
             <span class="task-card__title">${escapeHtml(task.task)}</span>
           </span>
-          <span class="task-card__study-site">${escapeHtml(studySite)}</span>
+          ${renderTaskStudySiteMeta(task)}
           ${workflowBlock}
           ${routineBlock}
         </button>
@@ -13061,7 +13083,8 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   return `
     <tr class="${rowClass}${selectedTaskId === task.id ? " is-selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       <td>
-        <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}"><span class="task-card__priority task-card__priority--${priorityClass(task.priority)}">${escapeHtml(task.priority)}</span> ${escapeHtml(task.task)}</button>
+        <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
+        <span class="task-card__study-site task-card__study-site--muted">${escapeHtml([studyLabel !== "—" ? studyLabel : "", siteLabel !== "—" ? siteLabel : ""].filter(Boolean).join(" · ") || "Study · Site 미정")}</span>
         ${workflowLabel ? `<span class="task-list-wf">${escapeHtml(workflowLabel)}</span>` : ""}
       </td>
       <td>${escapeHtml(studyLabel)}</td>

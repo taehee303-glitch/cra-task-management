@@ -17,6 +17,25 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 95 — 2026-07-21 — Dashboard week preview & layout
+
+### Fixed
+
+- **Dashboard 이번 주** — 4개 Task 미리보기
+- **더 보기** — 접기 버튼 중복 표시 수정
+- **다음 주** — 더 보기·통계 위로 이동
+
+---
+
+## [1.3.0] — build 94 — 2026-07-21 — My Tasks layout, Dashboard progress, complete btn
+
+### Changed
+
+- **My Tasks** — Priority Due 옆 분리, Study/Site 회색 메타, 액션 버튼 확대, 필터 날짜·겹침 수정
+- **Dashboard** — 진행률 카드 디자인 개선, Complete 버튼 오른쪽 배치
+
+---
+
 ## [1.3.0] — build 93 — 2026-07-21 — Dashboard layout & workflow on tasks
 
 ### Changed
