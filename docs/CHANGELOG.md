@@ -17,6 +17,26 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 93 — 2026-07-21 — Dashboard layout & workflow on tasks
+
+### Changed
+
+- **Dashboard** — Quick Add 최상단, 인사말·오늘 진행률·응원 문구 한 블록, WF % 제거
+- **Dashboard Task** — Workflow 단계를 Task 행에 인라인 표시 (별도 Workflow 섹션 제거)
+- **Dashboard 사이드** — 이번 주 + 최근 완료 / 다음 주는 맨 하단 / 더 보기 · 통계
+
+---
+
+## [1.3.0] — build 92 — 2026-07-21 — Workflow scope, Study Master tabs, My Tasks due UX
+
+### Changed
+
+- **Workflow 편집** — Study 복수 적용 가능; Study에 적용 시 General 목록에서 제외
+- **Study Master 탭** — 활성 탭 색상을 Workflow 필터(보라)와 통일
+- **My Tasks** — Due를 D-1 형식으로 크게·빨간색 표시, 필터 건수 옆 날짜 표시, Status는 Open·In Progress만
+
+---
+
 ## [1.3.0] — build 91 — 2026-07-21 — Site link, calendar read view, inbox flow, My Tasks layout
 
 ### Changed

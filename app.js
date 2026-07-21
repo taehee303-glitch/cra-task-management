@@ -15,6 +15,7 @@ const PRIORITIES = ["Critical", "High", "Medium", "Low"];
 const STATUSES = ["Open", "In Progress", "On Hold", "Completed", "Cancelled"];
 const DEFAULT_STATUS = "Open";
 const INLINE_STATUS_OPTIONS = ["Open", "In Progress", "On Hold", "Completed"];
+const TASK_CARD_STATUS_OPTIONS = ["Open", "In Progress"];
 const TASK_RULE_DEFAULT_STATUSES = ["Open", "In Progress"];
 
 const TASK_RULE_PRESET_TASK_NAMES = [
@@ -462,6 +463,7 @@ const els = {
   dashboardRecentCompletedList: document.getElementById("dashboardRecentCompletedList"),
   dashboardRecentCompletedCount: document.getElementById("dashboardRecentCompletedCount"),
   dashboardGreeting: document.getElementById("dashboardGreeting"),
+  dashboardEncouragement: document.getElementById("dashboardEncouragement"),
   dashboardGreetingSub: document.getElementById("dashboardGreetingSub"),
   dashboardHeaderDate: document.getElementById("dashboardHeaderDate"),
   dashboardCalendarBtn: document.getElementById("dashboardCalendarBtn"),
@@ -6336,12 +6338,20 @@ function getStudiesUsingWorkflow(workflowId) {
 function resolveWorkflowEditScope(workflowId, hintStudyId = null) {
   const appliedStudies = getStudiesUsingWorkflow(workflowId);
   if (!appliedStudies.length) {
-    return { scopeMode: "general", studyId: null, appliedStudies: [] };
+    return { scopeMode: "general", studyIds: [], appliedStudies: [] };
   }
-  const studyId =
-    (hintStudyId && appliedStudies.some((s) => s.id === hintStudyId) ? hintStudyId : null) ||
-    appliedStudies[0].id;
-  return { scopeMode: "study", studyId, appliedStudies };
+  let studyIds = appliedStudies.map((s) => s.id);
+  if (hintStudyId && studyIds.includes(hintStudyId)) {
+    studyIds = [hintStudyId, ...studyIds.filter((id) => id !== hintStudyId)];
+  }
+  return { scopeMode: "study", studyIds, appliedStudies };
+}
+
+function isGeneralLibraryWorkflow(workflow) {
+  if (!workflow) return false;
+  if (String(workflow.id).startsWith("global-preset-")) return true;
+  if (workflow.source === "template") return true;
+  return getStudiesUsingWorkflow(workflow.id).length === 0;
 }
 
 function buildWorkflowCardRef(workflow, options = {}) {
@@ -6351,44 +6361,44 @@ function buildWorkflowCardRef(workflow, options = {}) {
   return ref;
 }
 
-function applyWorkflowScopeFromDraft(workflowId, scopeMode, studyId) {
+function applyWorkflowScopeFromDraft(workflowId, scopeMode, studyIds) {
   const appliedStudies = getStudiesUsingWorkflow(workflowId);
+  const targetIds = scopeMode === "study" ? new Set((studyIds || []).filter(Boolean)) : new Set();
 
-  if (scopeMode === "general") {
-    appliedStudies.forEach((study) => StudyMasterStore.unapplyWorkflow(study.id, workflowId));
-    return true;
-  }
-
-  if (!studyId) {
-    showToast("Study를 선택해 주세요.");
+  if (scopeMode === "study" && targetIds.size === 0) {
+    showToast("Study를 하나 이상 선택해 주세요.");
     return false;
   }
 
   appliedStudies.forEach((study) => {
-    if (study.id !== studyId) StudyMasterStore.unapplyWorkflow(study.id, workflowId);
+    if (!targetIds.has(study.id)) StudyMasterStore.unapplyWorkflow(study.id, workflowId);
   });
-  StudyMasterStore.applyWorkflow(studyId, workflowId);
+
+  if (scopeMode === "study") {
+    studyIds.forEach((studyId) => StudyMasterStore.applyWorkflow(studyId, workflowId));
+  }
+
   return true;
 }
 
 function renderWorkflowDetailScopeField(draft) {
   const studies = StudyMasterStore.getAll();
   const scopeMode = draft.scopeMode || "general";
-  const studyId = draft.studyId || "";
-  const appliedCount = (draft.appliedStudies || []).length;
-  const multiHint =
-    appliedCount > 1
-      ? `<p class="form-hint workflow-detail-scope__hint">현재 ${appliedCount}개 Study에 적용 중입니다. Study를 선택하면 나머지 Study에서는 해제됩니다.</p>`
-      : "";
+  const selectedStudyIds = new Set(draft.studyIds || []);
 
-  const studyOptions =
+  const studyChecks =
     studies.length === 0
-      ? '<option value="">Study 없음</option>'
+      ? '<p class="form-hint">등록된 Study가 없습니다.</p>'
       : studies
-          .map(
-            (s) =>
-              `<option value="${escapeAttr(s.id)}"${s.id === studyId ? " selected" : ""}>${escapeHtml(s.protocolNumber)} — ${escapeHtml(s.studyName || s.protocolNumber)}</option>`
-          )
+          .map((s) => {
+            const checked = selectedStudyIds.has(s.id) ? " checked" : "";
+            return `
+              <label class="workflow-detail-scope__check">
+                <input type="checkbox" name="workflowDetailStudy" value="${escapeAttr(s.id)}"${checked} />
+                <span>${escapeHtml(s.protocolNumber)} — ${escapeHtml(s.studyName || s.protocolNumber)}</span>
+              </label>
+            `;
+          })
           .join("");
 
   return `
@@ -6404,12 +6414,11 @@ function renderWorkflowDetailScopeField(draft) {
           Study에 적용
         </label>
       </div>
-      <div class="workflow-detail-scope__study${scopeMode === "study" ? "" : " workflow-detail-scope__study--hidden"}" id="workflowDetailStudyWrap">
-        <label for="workflowDetailStudySelect">Study</label>
-        <select id="workflowDetailStudySelect" class="workflow-detail-form__input"${scopeMode === "study" ? "" : " disabled"}>${studyOptions}</select>
+      <div class="workflow-detail-scope__studies${scopeMode === "study" ? "" : " workflow-detail-scope__studies--hidden"}" id="workflowDetailStudyWrap">
+        <span class="workflow-detail-scope__studies-label">적용할 Study (복수 선택 가능)</span>
+        <div class="workflow-detail-scope__checks">${studyChecks}</div>
       </div>
-      ${multiHint}
-      <p class="form-hint">General·Study 적용을 잘못 설정한 경우 여기서 변경할 수 있습니다.</p>
+      <p class="form-hint">Study에 적용하면 General 목록에서 사라지고 Workflow → Study에서 관리됩니다.</p>
     </fieldset>
   `;
 }
@@ -6711,7 +6720,9 @@ function renderWorkflowMaster() {
     return;
   }
 
-  const items = sortWorkflowsForDisplay(GlobalWorkflowStore.getAll()).map((workflow) => ({
+  const items = sortWorkflowsForDisplay(GlobalWorkflowStore.getAll())
+    .filter(isGeneralLibraryWorkflow)
+    .map((workflow) => ({
     workflow,
     studyLabel: null,
   }));
@@ -6840,7 +6851,9 @@ function syncWorkflowDetailDraftFromDom() {
 
   const scopeRadio = els.workflowDetailBody.querySelector('input[name="workflowDetailScope"]:checked');
   workflowDetailDraft.scopeMode = scopeRadio?.value === "study" ? "study" : "general";
-  workflowDetailDraft.studyId = document.getElementById("workflowDetailStudySelect")?.value || null;
+  workflowDetailDraft.studyIds = [
+    ...els.workflowDetailBody.querySelectorAll('input[name="workflowDetailStudy"]:checked'),
+  ].map((input) => input.value);
 
   workflowDetailDraft.flowSteps = [
     ...els.workflowDetailBody.querySelectorAll(".workflow-detail-step[data-step-index]"),
@@ -6874,10 +6887,11 @@ function bindWorkflowDetailEditorEvents() {
   els.workflowDetailBody.querySelectorAll('input[name="workflowDetailScope"]').forEach((radio) => {
     radio.addEventListener("change", () => {
       const studyWrap = document.getElementById("workflowDetailStudyWrap");
-      const studySelect = document.getElementById("workflowDetailStudySelect");
       const isStudy = radio.value === "study";
-      studyWrap?.classList.toggle("workflow-detail-scope__study--hidden", !isStudy);
-      if (studySelect) studySelect.disabled = !isStudy;
+      studyWrap?.classList.toggle("workflow-detail-scope__studies--hidden", !isStudy);
+      studyWrap?.querySelectorAll('input[name="workflowDetailStudy"]').forEach((input) => {
+        input.disabled = !isStudy;
+      });
     });
   });
 
@@ -6990,7 +7004,7 @@ function openWorkflowDetailModal(ref) {
     name: workflow.name,
     flowSteps: workflowRecordToFlowSteps(workflow),
     scopeMode: scopeInfo.scopeMode,
-    studyId: scopeInfo.studyId,
+    studyIds: scopeInfo.studyIds,
     appliedStudies: scopeInfo.appliedStudies,
   };
   if (els.workflowDetailSaveBtn) els.workflowDetailSaveBtn.hidden = false;
@@ -7042,7 +7056,7 @@ function handleWorkflowDetailSave() {
     return;
   }
 
-  if (!applyWorkflowScopeFromDraft(ref.id, draft.scopeMode, draft.studyId)) return;
+  if (!applyWorkflowScopeFromDraft(ref.id, draft.scopeMode, draft.studyIds)) return;
 
   renderWorkflowMaster();
   StudyMasterStore.getAll().forEach((study) => {
@@ -10187,7 +10201,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "91";
+const APP_BUILD = "93";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -11819,10 +11833,45 @@ function applyTaskPriorityChange(taskId, newPriority) {
   renderAll();
 }
 
+function formatTaskFilterDateHint(filter) {
+  const today = getToday();
+  if (filter === "today") return formatShortDisplayDate(today);
+  if (filter === "d1") {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return formatShortDisplayDate(tomorrow);
+  }
+  if (filter === "week") {
+    const { start, end } = getWeekRange();
+    return `${formatShortDisplayDate(start)}–${formatShortDisplayDate(end)}`;
+  }
+  return "";
+}
+
+function formatShortDisplayDate(date) {
+  const d = date instanceof Date ? date : parseDate(date);
+  if (!d || Number.isNaN(d.getTime())) return "";
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}/${day}`;
+}
+
+function getStatusOptionsFromElement(dropdownEl) {
+  const raw = dropdownEl?.dataset.statusOptions;
+  if (!raw) return INLINE_STATUS_OPTIONS;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : INLINE_STATUS_OPTIONS;
+  } catch {
+    return INLINE_STATUS_OPTIONS;
+  }
+}
+
 function renderInlineStatusDropdown(task, options = {}) {
   const compact = Boolean(options.compact);
+  const statusOptions = options.statuses || INLINE_STATUS_OPTIONS;
   const currentClass = statusClass(task.status);
-  const optionsHtml = INLINE_STATUS_OPTIONS.map(
+  const optionsHtml = statusOptions.map(
     (status) => `
       <button type="button" class="status-dropdown__option${status === task.status ? " status-dropdown__option--active" : ""}" data-status-option data-task-id="${escapeAttr(task.id)}" data-status="${escapeAttr(status)}" role="option" aria-selected="${status === task.status}">
         ${escapeHtml(status)}
@@ -11838,7 +11887,7 @@ function renderInlineStatusDropdown(task, options = {}) {
     : '<span class="status-dropdown__caret" aria-hidden="true">▼</span>';
 
   return `
-    <div class="status-dropdown${compact ? " status-dropdown--compact" : ""}" data-status-dropdown="${escapeAttr(task.id)}">
+    <div class="status-dropdown${compact ? " status-dropdown--compact" : ""}" data-status-dropdown="${escapeAttr(task.id)}" data-status-options="${escapeAttr(JSON.stringify(statusOptions))}">
       <button type="button" class="${triggerClass}" data-status-trigger="${escapeAttr(task.id)}" aria-haspopup="listbox" aria-expanded="false">
         ${escapeHtml(task.status)} ${caret}
       </button>
@@ -11925,7 +11974,7 @@ function openStatusPickerPortal(taskId, triggerBtn) {
     document.body.appendChild(portal);
   }
 
-  portal.innerHTML = INLINE_STATUS_OPTIONS.map(
+  portal.innerHTML = getStatusOptionsFromElement(triggerBtn.closest(".status-dropdown")).map(
     (status) => `
       <button type="button" class="status-picker-portal__option${status === task.status ? " status-picker-portal__option--active" : ""}" data-status-option data-task-id="${escapeAttr(taskId)}" data-status="${escapeAttr(status)}" role="option">
         ${escapeHtml(status)}
@@ -12149,7 +12198,8 @@ function updateQuickFilterUi() {
 
 function updateTasksHomeHeader(count) {
   if (!els.tasksHomeCount) return;
-  els.tasksHomeCount.textContent = `${count}건`;
+  const dateHint = formatTaskFilterDateHint(taskQuickFilter);
+  els.tasksHomeCount.textContent = dateHint ? `${count}건 · ${dateHint}` : `${count}건`;
 }
 
 function updateDashboardCardFilterUi() {
@@ -12227,6 +12277,34 @@ function getFilteredTasks() {
 
 function scrollToTaskList() {
   scrollFilteredTasksIntoView();
+}
+
+function getDashboardEncouragementMessage(remaining, total) {
+  if (total === 0) return "오늘 마감 Task가 없습니다. 여유로운 하루 되세요.";
+  if (remaining === 0) return "오늘 마감 Task를 모두 완료했습니다! 수고하셨습니다.";
+  if (remaining === 1) return "1건의 Task만이 남았습니다. 조금만 힘내십시오.";
+  if (remaining <= 3) return `${remaining}건의 Task가 남았습니다. 거의 다 왔습니다!`;
+  return `${remaining}건의 Task가 남았습니다. 하나씩 차근차근 진행해 보세요.`;
+}
+
+function renderDashboardTaskWorkflowStep(task) {
+  const ctx = resolveWorkflowContext(task);
+  if (!ctx.workflow || !ctx.root || !ctx.instance) return "";
+
+  const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
+  const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
+  const workflowName = ctx.workflow.name?.trim() || getWorkflowRootLabel(ctx.workflow);
+  const currentLabel = stepLabels.currentStepName || task.task;
+  const stepNo = Math.min(progress.completed + 1, progress.total || 1);
+  const total = progress.total || 1;
+
+  return `
+    <span class="dash-task-row__wf">
+      <span class="dash-task-row__wf-badge">WF</span>
+      <span class="dash-task-row__wf-name">${escapeHtml(workflowName)}</span>
+      <span class="dash-task-row__wf-step">${stepNo}/${total} · ${escapeHtml(currentLabel)}</span>
+    </span>
+  `;
 }
 
 function renderDashboardGreeting() {
@@ -12463,10 +12541,19 @@ function renderDashboardTimelineTasks(taskList, filter, limit) {
     .map((group) => {
       const label = group.date === "__none__" ? "일정 미정" : formatDashboardTimelineDayLabel(group.date);
       const items = group.tasks
-        .map(
-          (task) =>
-            `<button type="button" class="dash-timeline__item" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">${escapeHtml(task.task)}</button>`
-        )
+        .map((task) => {
+          const ctx = resolveWorkflowContext(task);
+          let wfHint = "";
+          if (ctx.workflow && ctx.root && ctx.instance) {
+            const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
+            const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
+            const stepNo = Math.min(progress.completed + 1, progress.total || 1);
+            const total = progress.total || 1;
+            const currentLabel = stepLabels.currentStepName || task.task;
+            wfHint = `<span class="dash-timeline__wf">${stepNo}/${total} · ${escapeHtml(currentLabel)}</span>`;
+          }
+          return `<button type="button" class="dash-timeline__item" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}"><span class="dash-timeline__task">${escapeHtml(task.task)}</span>${wfHint}</button>`;
+        })
         .join("");
       return `<div class="dash-timeline__day"><span class="dash-timeline__day-label">${escapeHtml(label)}</span><div class="dash-timeline__day-items">${items}</div></div>`;
     })
@@ -12495,7 +12582,6 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
 
 function renderDashboardHero() {
   const progress = getTodayProgressStats();
-  const wfProgress = getDashboardAggregateWorkflowProgress();
 
   if (els.todayProgressTotal) els.todayProgressTotal.textContent = String(progress.total);
   if (els.todayProgressCompleted) els.todayProgressCompleted.textContent = String(progress.completed);
@@ -12508,18 +12594,8 @@ function renderDashboardHero() {
   }
   if (els.todayProgressPercent) els.todayProgressPercent.textContent = `${progress.rate}%`;
   if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
-
-  if (els.dashboardWorkflowProgressPercent) {
-    els.dashboardWorkflowProgressPercent.textContent = `${wfProgress.rate}%`;
-  }
-  if (els.dashboardWorkflowProgressFill) {
-    els.dashboardWorkflowProgressFill.style.width = `${wfProgress.rate}%`;
-  }
-  if (els.dashboardWorkflowProgressSubtitle) {
-    els.dashboardWorkflowProgressSubtitle.textContent =
-      wfProgress.count > 0
-        ? `${wfProgress.completed}/${wfProgress.total} Step`
-        : "—";
+  if (els.dashboardEncouragement) {
+    els.dashboardEncouragement.textContent = getDashboardEncouragementMessage(progress.remaining, progress.total);
   }
 
   if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${progress.rate}%`;
@@ -12569,7 +12645,6 @@ function renderDashboard() {
   if (els.statTodayDue) els.statTodayDue.textContent = stats.todayDue;
   if (els.statNextWeekDue) els.statNextWeekDue.textContent = stats.nextWeekDue;
   renderDashboardHero();
-  renderDashboardActiveWorkflows();
 
   const overdueTasks = activeTasks
     .filter((t) => daysUntilDue(t.dueDate) < 0)
@@ -12645,7 +12720,7 @@ function renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks) {
     setDashCardEmptyState(els.dashboardNextWeekList, nextWeekTasks.length === 0);
   }
   if (els.dashboardNextWeekSection) {
-    els.dashboardNextWeekSection.hidden = nextWeekTasks.length === 0;
+    els.dashboardNextWeekSection.hidden = false;
   }
 
   if (els.dashboardRecentCompletedCount) {
@@ -12686,10 +12761,10 @@ function renderDashboardEmptyMsg(text) {
 
 function bindDashboardTaskActions() {
   if (!els.viewDashboard) return;
-  els.viewDashboard.querySelectorAll("[data-dashboard-workflow]").forEach((btn) => {
+  els.viewDashboard.querySelectorAll(".dash-task-row__main[data-edit], .dash-timeline__item[data-edit]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
-      openDashboardWorkflowDetail(btn.dataset.dashboardWorkflow);
+      openTaskDetail(btn.dataset.edit);
     });
   });
   els.viewDashboard.querySelectorAll("[data-complete]").forEach((btn) => {
@@ -12730,25 +12805,24 @@ function renderDashItem(task, type, options = {}) {
 
   if (layoutV2) {
     const badge = getDashboardDueBadge(task);
-    const workflowLabel = getDashboardWorkflowLabel(task);
     const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
-    const metaParts = [studyLabel + sitePart];
-    if (workflowLabel) metaParts.push(workflowLabel);
+    const wfStepBlock = renderDashboardTaskWorkflowStep(task);
 
     return `
     <article class="dash-task-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
       <button type="button" class="dash-task-row__check dash-item__complete${isDone ? " dash-task-row__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
         <span class="dash-item__complete-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
-      <button type="button" class="dash-task-row__main" data-dashboard-workflow="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
+      <button type="button" class="dash-task-row__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
         <span class="dash-task-row__title-line">
           ${criticalBadge}
           <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
         </span>
-        <span class="dash-task-row__meta">${escapeHtml(metaParts.join(" · "))}</span>
+        <span class="dash-task-row__meta">${escapeHtml(studyLabel + sitePart)}</span>
+        ${wfStepBlock}
       </button>
       <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
-      <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true })}</span>
+      <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
     </article>
   `;
   }
@@ -12861,24 +12935,25 @@ function renderTaskList() {
 }
 
 function renderTaskDueProminent(task) {
+  if (task.status === "Completed") {
+    return `<span class="task-card__due-text task-card__due-text--done">Done</span>`;
+  }
+  if (!task.dueDate) {
+    return `<span class="task-card__due-text task-card__due-text--none">—</span>`;
+  }
+
   const badge = getDashboardDueBadge(task);
-  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
+  const urgency = getDueUrgency(task.dueDate, task.status);
   const urgencyClass =
     urgency === "overdue"
-      ? " task-card__due-col--overdue"
+      ? "overdue"
       : urgency === "urgent"
-        ? " task-card__due-col--urgent"
+        ? "urgent"
         : badge.className.includes("today")
-          ? " task-card__due-col--today"
-          : "";
-  const dateHint = task.dueDate ? task.dueDate.slice(5).replace("-", "/") : "";
+          ? "today"
+          : "upcoming";
 
-  return `
-    <div class="task-card__due-col${urgencyClass}">
-      <span class="task-card__due-col-label">${escapeHtml(badge.label)}</span>
-      ${dateHint ? `<span class="task-card__due-col-date">${escapeHtml(dateHint)}</span>` : ""}
-    </div>
-  `;
+  return `<span class="task-card__due-text task-card__due-text--${urgencyClass}">${escapeHtml(badge.label)}</span>`;
 }
 
 function renderTaskQuickActions(task) {
@@ -12887,7 +12962,7 @@ function renderTaskQuickActions(task) {
 
   return `
     <div class="task-card__quick-actions">
-      <div class="task-card__quick-action">${renderInlineStatusDropdown(task, { compact: true })}</div>
+      <div class="task-card__quick-action">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</div>
       <button type="button" class="task-card__icon-btn${calendarSynced ? " task-card__icon-btn--synced" : ""}" data-google-calendar="${escapeAttr(task.id)}" title="Google Calendar" aria-label="Google Calendar">📅</button>
       <button type="button" class="task-card__icon-btn task-card__icon-btn--complete${isDone ? " task-card__icon-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>✓</button>
     </div>
@@ -12938,7 +13013,7 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
         </div>
       </div>
       <div class="task-card__actions task-card__actions--action">
-        <span class="task-card__status">${renderInlineStatusDropdown(task, { compact: true })}</span>
+        <span class="task-card__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
         <button type="button" class="task-card__action task-card__action--detail" data-edit="${escapeAttr(task.id)}" title="상세 보기" aria-label="상세 보기">›</button>
         ${renderTaskMoreMenu(task)}
       </div>
