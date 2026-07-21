@@ -3003,7 +3003,7 @@ const StudyMasterStore = {
 
   updateWorkflow(studyId, workflowId, data) {
     if (!this.getAppliedWorkflowIds(studyId).includes(workflowId)) return null;
-    return GlobalWorkflowStore.update(workflowId, data);
+    return updateWorkflowRecordEverywhere(workflowId, data);
   },
 
   deleteWorkflow(studyId, workflowId) {
@@ -4488,7 +4488,16 @@ function getGeneralWorkflowRef(workflowId) {
 
 function resolveGeneralWorkflow(workflowId) {
   if (!workflowId) return null;
-  return GlobalWorkflowStore.getById(workflowId) || null;
+  return GlobalWorkflowStore.getById(workflowId) || WorkspaceWorkflowStore.getById(workflowId) || null;
+}
+
+function updateWorkflowRecordEverywhere(id, payload) {
+  let saved = GlobalWorkflowStore.update(id, payload);
+  if (WorkspaceWorkflowStore.getById(id)) {
+    const workspaceSaved = WorkspaceWorkflowStore.update(id, payload);
+    if (!saved) saved = workspaceSaved;
+  }
+  return saved;
 }
 
 function upsertSiteMasterFromLegacy(nested) {
@@ -6875,21 +6884,32 @@ function syncWorkflowDetailDraftFromDom() {
     ...els.workflowDetailBody.querySelectorAll('input[name="workflowDetailStudy"]:checked'),
   ].map((input) => input.value);
 
-  workflowDetailDraft.flowSteps = [
-    ...els.workflowDetailBody.querySelectorAll(".workflow-detail-step[data-step-index]"),
-  ].map((row, index) => {
-    const existing = workflowDetailDraft.flowSteps[index] || { kind: "post" };
-    const kind = existing.kind || "post";
+  const rows = [...els.workflowDetailBody.querySelectorAll(".workflow-detail-step[data-step-index]")];
+
+  workflowDetailDraft.flowSteps = rows.map((row, index) => {
+    const existingByIndex = workflowDetailDraft.flowSteps[index];
+    const rootIndex = rows.findIndex((item) => item.classList.contains("workflow-detail-step--root"));
+    let kind = "post";
+    if (rootIndex >= 0) {
+      if (index === rootIndex) kind = "root";
+      else if (index < rootIndex) kind = "pre";
+    } else if (index === 0) {
+      kind = "root";
+    }
+
     if (kind === "root") {
       return {
+        id: existingByIndex?.id,
         kind: "root",
-        taskName: row.querySelector('[data-field="taskName"]')?.value.trim() || existing.taskName,
+        taskName: row.querySelector('[data-field="taskName"]')?.value.trim() || existingByIndex?.taskName || "",
         dueOffset: 0,
         dueUnit: "calendar",
         priority: "Medium",
       };
     }
+
     return normalizeWorkflowStep({
+      id: existingByIndex?.id,
       kind,
       taskName: row.querySelector('[data-field="taskName"]')?.value || "",
       dueOffset: row.querySelector('[data-field="dueOffset"]')?.value,
@@ -6897,6 +6917,8 @@ function syncWorkflowDetailDraftFromDom() {
       priority: row.querySelector('[data-field="priority"]')?.value,
     });
   });
+
+  workflowDetailDraft.flowSteps = normalizeFlowStepKinds(workflowDetailDraft.flowSteps);
 
   return workflowDetailDraft;
 }
@@ -7068,7 +7090,7 @@ function handleWorkflowDetailSave() {
   const ref = workflowDetailEditRef;
   let saved = null;
   if (ref.scope === "global" || ref.scope === "general" || ref.scope === "workspace" || ref.scope === "study") {
-    saved = GlobalWorkflowStore.update(ref.id, payload);
+    saved = updateWorkflowRecordEverywhere(ref.id, payload);
   }
 
   if (!saved) {
@@ -7293,9 +7315,9 @@ function getWorkflowProgressDisplay(task) {
 
   let nextHtml = "";
   if (stepLabels.nextStepName) {
-    nextHtml = `<span class="dash-wf-next">Next · ${escapeHtml(stepLabels.nextStepName)}</span>`;
+    nextHtml = `<span class="dash-wf-next">Next: ${escapeHtml(stepLabels.nextStepName)}</span>`;
   } else if (stepLabels.currentStepName) {
-    nextHtml = `<span class="dash-wf-next">Current · ${escapeHtml(stepLabels.currentStepName)}</span>`;
+    nextHtml = `<span class="dash-wf-next">Current: ${escapeHtml(stepLabels.currentStepName)}</span>`;
   }
 
   return { sectionHtml, inlineHtml, nextHtml };
@@ -10246,7 +10268,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "98";
+const APP_BUILD = "99";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12378,6 +12400,18 @@ function getDashboardWorkflowDisplay(task, options = {}) {
   return display;
 }
 
+function renderDashboardTaskMeta(task) {
+  const studyNo = task.study?.trim() || "";
+  const siteNumber = getTaskStudySiteNumber(task);
+  const siteName = task.site?.trim() ? getStandardSiteName(task.site) : "";
+  const parts = [];
+  if (studyNo) parts.push(studyNo);
+  if (siteNumber) parts.push(siteNumber);
+  if (siteName) parts.push(siteName);
+  const label = parts.length ? parts.join(" · ") : "Study · Site 미정";
+  return escapeHtml(label);
+}
+
 function renderDashboardTaskWorkflowStep(task) {
   const { nextHtml } = getDashboardWorkflowDisplay(task);
   if (!nextHtml) return "";
@@ -12870,9 +12904,38 @@ function renderDashItem(task, type, options = {}) {
 
   if (layoutV2) {
     const badge = getDashboardDueBadge(task);
-    const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
     const wfDisplay = getDashboardWorkflowDisplay(task);
     const wfFootBlock = renderDashboardTaskWorkflowStep(task);
+    const isWfTask = isWorkflowConnectedTask(task);
+
+    if (isWfTask) {
+      return `
+    <article class="dash-task-row dash-task-row--wf dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-task-row__main dash-task-row__main--wf" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
+        <div class="dash-task-row__wf-grid">
+          <div class="dash-task-row__wf-col dash-task-row__wf-col--progress">
+            ${wfDisplay.sectionHtml}
+            ${wfFootBlock}
+          </div>
+          <div class="dash-task-row__wf-col dash-task-row__wf-col--task">
+            <span class="dash-task-row__title-line">
+              ${criticalBadge}
+              <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
+            </span>
+            <span class="dash-task-row__meta">${renderDashboardTaskMeta(task)}</span>
+          </div>
+        </div>
+      </button>
+      <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+      <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
+      <button type="button" class="dash-task-row__check-btn${isDone ? " dash-task-row__check-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <span class="dash-task-row__check-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
+      </button>
+    </article>
+  `;
+    }
+
+    const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
 
     return `
     <article class="dash-task-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">

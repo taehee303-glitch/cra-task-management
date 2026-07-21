@@ -17,6 +17,19 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 99 — 2026-07-22 — Dashboard WF grid layout, workflow order save fix
+
+### Changed
+
+- **Dashboard WF Task** — 왼쪽: 진행률 + Next task / 오른쪽: Task + Study·Site meta 2열 그리드
+- **Workflow 저장** — Flow 편집 순서 그대로 저장·적용, Workspace/Global 양쪽 store 동기화
+
+### Fixed
+
+- Workflow 편집 시 offset 기준 순서 뒤섞임 및 저장 미반영 문제
+
+---
+
 ## [1.3.0] — build 98 — 2026-07-22 — Work Due field & D-day colors
 
 ### Added
