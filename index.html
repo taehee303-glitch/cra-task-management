@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=88" />
+  <link rel="stylesheet" href="styles.css?v=89" />
   <script>
     (function () {
       var BUILD = "86";
@@ -635,7 +635,6 @@
                   <button type="button" class="site-master-tabs__btn" data-study-tab="sites" role="tab">Sites</button>
                   <button type="button" class="site-master-tabs__btn" data-study-tab="systems" role="tab">Systems</button>
                   <button type="button" class="site-master-tabs__btn" data-study-tab="applied-workflows" role="tab">Applied Workflow</button>
-                  <button type="button" class="site-master-tabs__btn" data-study-tab="notes" role="tab">Notes</button>
                 </div>
 
                 <div class="site-master-tab-panel" data-study-tab-panel="general">
@@ -650,19 +649,20 @@
                   </div>
                   <div class="form-group">
                     <label for="sponsor">Sponsor</label>
-                    <input type="text" id="sponsor" placeholder="예: Example Pharma" />
+                    <input type="text" id="sponsor" list="sponsorOptions" placeholder="예: Example Pharma" autocomplete="off" />
+                    <datalist id="sponsorOptions"></datalist>
                   </div>
                   <div class="form-group">
-                    <label for="therapeuticArea">Therapeutic Area</label>
-                    <input type="text" id="therapeuticArea" placeholder="예: Oncology" />
+                    <label for="indication">Indication</label>
+                    <input type="text" id="indication" placeholder="예: Oncology" />
                   </div>
                   <div class="form-group">
-                    <label for="pmName">PM</label>
-                    <input type="text" id="pmName" />
+                    <label for="ctmName">CTM</label>
+                    <input type="text" id="ctmName" placeholder="예: Kim CTM" />
                   </div>
-                  <div class="form-group">
-                    <label for="ctaName">CTA</label>
-                    <input type="text" id="ctaName" />
+                  <div class="form-group form-group--wide">
+                    <label for="studyNotes">Notes</label>
+                    <textarea id="studyNotes" rows="4" placeholder="Study 관련 메모"></textarea>
                   </div>
                 </div>
                 <div class="form-actions">
@@ -746,13 +746,6 @@
                 <p id="studyAppliedWorkflowNewStudyHint" class="form-hint" hidden>Study 저장 후 Applied Workflow를 확인할 수 있습니다.</p>
                 <div id="studyAppliedWorkflows" class="workflow-library"></div>
               </div>
-                </div>
-
-                <div class="site-master-tab-panel" data-study-tab-panel="notes" hidden>
-                  <div class="form-group form-group--wide">
-                    <label for="studyNotes">Notes</label>
-                    <textarea id="studyNotes" rows="8" placeholder="Study 관련 메모"></textarea>
-                  </div>
                 </div>
               </form>
             </div>
@@ -1770,11 +1763,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=88"></script>
-  <script src="firebase-sync.js?v=88"></script>
-  <script src="calendar-config.js?v=88"></script>
-  <script src="calendar-sync.js?v=88"></script>
-  <script src="app.js?v=88"></script>
-  <script src="pwa.js?v=88"></script>
+  <script src="firebase-config.js?v=89"></script>
+  <script src="firebase-sync.js?v=89"></script>
+  <script src="calendar-config.js?v=89"></script>
+  <script src="calendar-sync.js?v=89"></script>
+  <script src="app.js?v=89"></script>
+  <script src="pwa.js?v=89"></script>
 </body>
 </html>

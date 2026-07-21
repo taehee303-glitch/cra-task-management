@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 89 — 2026-07-21 — Study Master General form refresh
+
+### Changed
+
+- **Sponsor** — 기존에 입력한 Sponsor를 datalist 드롭다운으로 선택 가능 (직접 입력도 가능)
+- **Indication** — Therapeutic Area → Indication 명칭 변경
+- **CTM** — PM → CTM 명칭 변경, CTA 필드 제거
+- **Notes** — 별도 탭 제거, General 탭에서 바로 입력
+
+---
+
 ## [1.3.0] — build 88 — 2026-07-21 — Calendar site no, My Tasks Tomorrow
 
 ### Changed

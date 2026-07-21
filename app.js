@@ -2686,6 +2686,12 @@ const StudyMasterStore = {
       .sort((a, b) => a.localeCompare(b, "ko"));
   },
 
+  getKnownSponsors() {
+    return [...new Set(this.studies.map((study) => study.sponsor?.trim()).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "ko")
+    );
+  },
+
   getLinkedSiteEntries(studyId) {
     const study = this.getById(studyId);
     if (!study) return [];
@@ -3579,9 +3585,8 @@ function normalizeStudyRecord(study) {
     studyName: study.studyName?.trim() || study.protocolNumber?.trim() || "",
     protocolNumber: study.protocolNumber?.trim() || "",
     sponsor: study.sponsor?.trim() || "",
-    therapeuticArea: study.therapeuticArea?.trim() || "",
-    pmName: study.pmName?.trim() || "",
-    ctaName: study.ctaName?.trim() || "",
+    indication: study.indication?.trim() || study.therapeuticArea?.trim() || "",
+    ctmName: study.ctmName?.trim() || study.pmName?.trim() || "",
     notes: study.notes?.trim() || "",
     siteIds,
     siteLinks,
@@ -4618,6 +4623,12 @@ function migrateMasterStructureV2() {
   if (studyChanged) {
     StudyMasterStore.studies = StudyMasterStore.studies.map(normalizeStudyRecord);
     StudyMasterStore.persist();
+  } else {
+    const normalizedStudies = StudyMasterStore.studies.map(normalizeStudyRecord);
+    if (JSON.stringify(normalizedStudies) !== JSON.stringify(StudyMasterStore.studies)) {
+      StudyMasterStore.studies = normalizedStudies;
+      StudyMasterStore.persist();
+    }
   }
   if (siteChanged) SiteMasterStore.persist();
 }
@@ -8265,6 +8276,14 @@ function runRoutineScheduler() {
   return created;
 }
 
+function populateSponsorDatalist() {
+  const datalist = document.getElementById("sponsorOptions");
+  if (!datalist) return;
+  datalist.innerHTML = StudyMasterStore.getKnownSponsors()
+    .map((sponsor) => `<option value="${escapeAttr(sponsor)}"></option>`)
+    .join("");
+}
+
 function applyStudyMasterTabUi() {
   document.querySelectorAll("[data-study-tab]").forEach((btn) => {
     const tab = btn.dataset.studyTab;
@@ -8295,6 +8314,7 @@ function applyStudyMasterTabUi() {
 }
 
 function renderStudyMaster() {
+  populateSponsorDatalist();
   const studies = StudyMasterStore.getAll();
 
   if (studies.length === 0) {
@@ -8348,9 +8368,8 @@ function renderStudyMaster() {
   document.getElementById("studyName").value = study.studyName;
   document.getElementById("protocolNumber").value = study.protocolNumber;
   document.getElementById("sponsor").value = study.sponsor;
-  document.getElementById("therapeuticArea").value = study.therapeuticArea;
-  document.getElementById("pmName").value = study.pmName;
-  document.getElementById("ctaName").value = study.ctaName;
+  document.getElementById("indication").value = study.indication;
+  document.getElementById("ctmName").value = study.ctmName;
   document.getElementById("studyNotes").value = study.notes;
 
   renderLinkedSitesTable(study);
@@ -8613,9 +8632,8 @@ function handleStudyMasterSubmit(e) {
     studyName,
     protocolNumber,
     sponsor: document.getElementById("sponsor").value.trim(),
-    therapeuticArea: document.getElementById("therapeuticArea").value.trim(),
-    pmName: document.getElementById("pmName").value.trim(),
-    ctaName: document.getElementById("ctaName").value.trim(),
+    indication: document.getElementById("indication").value.trim(),
+    ctmName: document.getElementById("ctmName").value.trim(),
     notes: document.getElementById("studyNotes").value.trim(),
   };
 
@@ -9458,9 +9476,8 @@ async function seedStudyMasterIfEmpty() {
     studyName: "ABC-301 Phase III Oncology Study",
     protocolNumber: "ABC-301",
     sponsor: "Example Pharma",
-    therapeuticArea: "Oncology",
-    pmName: "Kim PM",
-    ctaName: "Lee CTA",
+    indication: "Oncology",
+    ctmName: "Kim CTM",
     notes: "Phase III study",
     siteLinks: [
       { siteMasterId: site101?.id, siteNumber: "Site 101" },
@@ -9518,9 +9535,8 @@ async function seedStudyMasterIfEmpty() {
     studyName: "XYZ-102 Cardiology Study",
     protocolNumber: "XYZ-102",
     sponsor: "Global Bio",
-    therapeuticArea: "Cardiology",
-    pmName: "Park PM",
-    ctaName: "Choi CTA",
+    indication: "Cardiology",
+    ctmName: "Park CTM",
     siteLinks: [
       { siteMasterId: site201?.id, siteNumber: "Site 201" },
       { siteMasterId: site202?.id, siteNumber: "Site 202" },
@@ -9540,7 +9556,7 @@ async function seedStudyMasterIfEmpty() {
     studyName: "DEF-205 Immunology Study",
     protocolNumber: "DEF-205",
     sponsor: "MediCore",
-    therapeuticArea: "Immunology",
+    indication: "Immunology",
     siteLinks: [{ siteMasterId: site301?.id, siteNumber: "Site 301" }].filter((link) => link.siteMasterId),
     systems: [],
   });
@@ -9970,7 +9986,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "88";
+const APP_BUILD = "89";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
