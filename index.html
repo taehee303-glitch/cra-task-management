@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=89" />
+  <link rel="stylesheet" href="styles.css?v=90" />
   <script>
     (function () {
       var BUILD = "86";
@@ -207,11 +207,11 @@
               <button type="button" class="task-filter__btn task-filter__btn--active" data-mobile-filter="today" role="tab" aria-selected="true">
                 📅 Today <span class="task-filter__count" data-count-filter="today">0</span>
               </button>
-              <button type="button" class="task-filter__btn" data-mobile-filter="week" role="tab">
-                📆 This Week <span class="task-filter__count" data-count-filter="week">0</span>
-              </button>
               <button type="button" class="task-filter__btn" data-mobile-filter="d1" role="tab">
                 📅 Tomorrow <span class="task-filter__count" data-count-filter="d1">0</span>
+              </button>
+              <button type="button" class="task-filter__btn" data-mobile-filter="week" role="tab">
+                📆 This Week <span class="task-filter__count" data-count-filter="week">0</span>
               </button>
               <button type="button" class="task-filter__btn" data-mobile-filter="overdue" role="tab">
                 🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
@@ -238,11 +238,11 @@
             <button type="button" class="task-filter__btn task-filter__btn--active" data-quick-filter="today" role="tab" aria-selected="true">
               📅 Today <span class="task-filter__count" data-count-filter="today">0</span>
             </button>
-            <button type="button" class="task-filter__btn" data-quick-filter="week" role="tab">
-              📆 This Week <span class="task-filter__count" data-count-filter="week">0</span>
-            </button>
             <button type="button" class="task-filter__btn" data-quick-filter="d1" role="tab">
               📅 Tomorrow <span class="task-filter__count" data-count-filter="d1">0</span>
+            </button>
+            <button type="button" class="task-filter__btn" data-quick-filter="week" role="tab">
+              📆 This Week <span class="task-filter__count" data-count-filter="week">0</span>
             </button>
             <button type="button" class="task-filter__btn" data-quick-filter="overdue" role="tab">
               🔥 Overdue <span class="task-filter__count" data-count-filter="overdue">0</span>
@@ -258,12 +258,20 @@
             </button>
           </div>
 
-          <div class="quick-add quick-add--compact">
-            <div class="quick-add__row">
-              <input type="text" id="quickAddInput" class="quick-add__input" placeholder="예) CRC 전화, SDV 시작, Query 확인..." autocomplete="off" aria-label="빠른 업무 추가" />
-              <button type="button" class="quick-add__btn" id="quickAddBtn" aria-label="Inbox에 추가">+</button>
-            </div>
-            </div>
+          <div class="tasks-filter-bar">
+            <input type="search" id="searchInput" class="tasks-filter-bar__search" placeholder="Task, Study, Site 검색..." aria-label="업무 검색" />
+            <select id="filterStudy" class="tasks-filter-bar__select" aria-label="Study 필터">
+              <option value="all">전체 Study</option>
+            </select>
+            <select id="filterStatus" class="tasks-filter-bar__select" aria-label="Status 필터">
+              <option value="all">Active</option>
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="On Hold">On Hold</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
 
             <header class="tasks-workspace__bar">
               <div class="tasks-workspace__label">
@@ -280,21 +288,6 @@
                 <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden />
               </div>
             </header>
-
-            <div class="tasks-toolbar tasks-toolbar--compact">
-              <input type="search" id="searchInput" class="tasks-toolbar__search tasks-toolbar__search--wide" placeholder="검색..." aria-label="업무 검색" />
-              <select id="filterStudy" class="tasks-toolbar__select" aria-label="Study 필터">
-                <option value="all">전체 Study</option>
-              </select>
-              <select id="filterStatus" class="tasks-toolbar__select" aria-label="Status 필터">
-                <option value="all">Active</option>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="On Hold">On Hold</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
           </div>
 
           <div id="taskCardList" class="task-card-list task-card-list--inline" aria-live="polite"></div>
@@ -347,36 +340,18 @@
       <div id="viewCalendar" class="view-panel" hidden>
         <section class="calendar-view">
           <header class="calendar-view__topbar">
-            <h2 class="calendar-view__page-title">Calendar</h2>
+            <div class="calendar-view__nav calendar-view__nav--month">
+              <button type="button" class="btn btn--ghost btn--sm" id="calendarPrevMonthBtn" aria-label="이전 달">‹</button>
+              <h2 class="calendar-view__page-title" id="calendarMonthLabel">2026년 7월</h2>
+              <button type="button" class="btn btn--ghost btn--sm" id="calendarNextMonthBtn" aria-label="다음 달">›</button>
+            </div>
             <button type="button" class="btn btn--ghost btn--sm" id="calendarTodayBtn">오늘</button>
           </header>
 
-          <section class="calendar-section" aria-labelledby="calendarWeekHeading">
-            <header class="calendar-section__header">
-              <h3 class="calendar-section__title" id="calendarWeekHeading">이번 주</h3>
-              <div class="calendar-view__nav">
-                <button type="button" class="btn btn--ghost btn--sm" id="calendarPrevWeekBtn" aria-label="이전 주">‹</button>
-                <span class="calendar-view__title" id="calendarWeekLabel">이번 주</span>
-                <button type="button" class="btn btn--ghost btn--sm" id="calendarNextWeekBtn" aria-label="다음 주">›</button>
-              </div>
-            </header>
-            <div id="calendarWeekGrid" class="calendar-week" aria-live="polite"></div>
-          </section>
-
-          <section class="calendar-section calendar-section--month" aria-labelledby="calendarMonthHeading">
-            <header class="calendar-section__header">
-              <h3 class="calendar-section__title" id="calendarMonthHeading">한 달</h3>
-              <div class="calendar-view__nav">
-                <button type="button" class="btn btn--ghost btn--sm" id="calendarPrevMonthBtn" aria-label="이전 달">‹</button>
-                <span class="calendar-view__title" id="calendarMonthLabel">2026년 7월</span>
-                <button type="button" class="btn btn--ghost btn--sm" id="calendarNextMonthBtn" aria-label="다음 달">›</button>
-              </div>
-            </header>
-            <div class="calendar-month__weekdays" aria-hidden="true">
-              <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span><span>일</span>
-            </div>
-            <div id="calendarMonthGrid" class="calendar-month" aria-live="polite"></div>
-          </section>
+          <div class="calendar-month__weekdays" aria-hidden="true">
+            <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span><span>일</span>
+          </div>
+          <div id="calendarMonthGrid" class="calendar-month calendar-month--full" aria-live="polite"></div>
         </section>
       </div>
 
@@ -1763,11 +1738,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=89"></script>
-  <script src="firebase-sync.js?v=89"></script>
-  <script src="calendar-config.js?v=89"></script>
-  <script src="calendar-sync.js?v=89"></script>
-  <script src="app.js?v=89"></script>
-  <script src="pwa.js?v=89"></script>
+  <script src="firebase-config.js?v=90"></script>
+  <script src="firebase-sync.js?v=90"></script>
+  <script src="calendar-config.js?v=90"></script>
+  <script src="calendar-sync.js?v=90"></script>
+  <script src="app.js?v=90"></script>
+  <script src="pwa.js?v=90"></script>
 </body>
 </html>

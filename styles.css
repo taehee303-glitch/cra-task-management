@@ -4309,6 +4309,43 @@ body.body--settings-open {
   white-space: nowrap;
 }
 
+.tasks-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--ui-scale));
+  margin: calc(8px * var(--ui-scale)) 0 calc(4px * var(--ui-scale));
+}
+
+.tasks-filter-bar__search,
+.tasks-filter-bar__select {
+  min-height: calc(34px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--ui-scale));
+  background: white;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.tasks-filter-bar__search {
+  flex: 1 1 calc(180px * var(--ui-scale));
+  min-width: 0;
+  padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+}
+
+.tasks-filter-bar__select {
+  flex: 0 0 auto;
+  max-width: calc(132px * var(--ui-scale));
+  padding: calc(6px * var(--ui-scale)) calc(8px * var(--ui-scale));
+}
+
+.tasks-filter-bar__search:focus,
+.tasks-filter-bar__select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
 .tasks-toolbar--compact {
   margin-top: calc(4px * var(--ui-scale));
   gap: calc(6px * var(--ui-scale));
@@ -5547,8 +5584,19 @@ body.body--settings-open {
   gap: calc(4px * var(--ui-scale));
 }
 
+.calendar-view__nav--month .calendar-view__page-title {
+  min-width: calc(140px * var(--ui-scale));
+  margin: 0;
+  text-align: center;
+  font-size: 1.15rem;
+}
+
+.calendar-month--full {
+  margin-top: calc(4px * var(--ui-scale));
+}
+
 .calendar-month-day {
-  min-height: calc(88px * var(--ui-scale));
+  min-height: calc(120px * var(--ui-scale));
   background: white;
   border: 1px solid var(--border);
   border-radius: calc(8px * var(--ui-scale));
@@ -5567,10 +5615,7 @@ body.body--settings-open {
 .calendar-month-day--today {
   border-color: var(--primary);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
-}
-
-.calendar-month-day--in-week {
-  background: #f8fbff;
+  background: #fbfdff;
 }
 
 .calendar-month-day__header {
@@ -5664,10 +5709,46 @@ body.body--settings-open {
 }
 
 .calendar-month-day__more {
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: 0.68rem;
   font-weight: 600;
+  color: var(--primary);
+  padding: calc(2px * var(--ui-scale)) calc(4px * var(--ui-scale));
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-month-day__more:hover {
+  text-decoration: underline;
+}
+
+.calendar-month-task__study {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 600;
   color: var(--text-muted);
-  padding-left: calc(4px * var(--ui-scale));
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 900px) {
+  .calendar-month-day {
+    min-height: calc(132px * var(--ui-scale));
+  }
+
+  .calendar-view {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 120px * var(--ui-scale));
+  }
+
+  .calendar-month--full {
+    flex: 1;
+  }
 }
 
 @media (max-width: 768px) {

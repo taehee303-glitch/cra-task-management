@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 90 — 2026-07-21 — Study list, calendar month, My Tasks UX
+
+### Changed
+
+- **Study Master 목록** — WF 개수 제거, `Study No.: …  Site total: N` 형식으로 표시
+- **Calendar** — 이번 주 뷰 제거, 월간 캘린더만 표시 (일별 Task 더 많이 노출)
+- **My Tasks** — 필터 순서: Today → Tomorrow → This Week → Overdue → Open → In Progress → Completed
+- **My Tasks** — Quick Add 제거, 상단에 컴팩트 검색·Study·Status 필터 배치
+
+---
+
 ## [1.3.0] — build 89 — 2026-07-21 — Study Master General form refresh
 
 ### Changed

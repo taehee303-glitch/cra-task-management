@@ -173,7 +173,6 @@ const ROUTINE_PRESETS = {
 let tasks = [];
 let taskQuickFilter = "today";
 let taskViewMode = "card";
-let calendarWeekOffset = 0;
 let calendarMonthOffset = 0;
 let toastHideTimer = null;
 let toastRemoveTimer = null;
@@ -298,12 +297,8 @@ const els = {
   taskTableWrap: document.getElementById("taskTableWrap"),
   taskViewCardBtn: document.getElementById("taskViewCardBtn"),
   taskViewListBtn: document.getElementById("taskViewListBtn"),
-  calendarWeekGrid: document.getElementById("calendarWeekGrid"),
-  calendarWeekLabel: document.getElementById("calendarWeekLabel"),
   calendarMonthGrid: document.getElementById("calendarMonthGrid"),
   calendarMonthLabel: document.getElementById("calendarMonthLabel"),
-  calendarPrevWeekBtn: document.getElementById("calendarPrevWeekBtn"),
-  calendarNextWeekBtn: document.getElementById("calendarNextWeekBtn"),
   calendarPrevMonthBtn: document.getElementById("calendarPrevMonthBtn"),
   calendarNextMonthBtn: document.getElementById("calendarNextMonthBtn"),
   calendarTodayBtn: document.getElementById("calendarTodayBtn"),
@@ -1585,14 +1580,6 @@ async function finishAppBootstrap() {
   });
   els.taskViewCardBtn?.addEventListener("click", () => setTaskViewMode("card"));
   els.taskViewListBtn?.addEventListener("click", () => setTaskViewMode("list"));
-  els.calendarPrevWeekBtn?.addEventListener("click", () => {
-    calendarWeekOffset -= 1;
-    renderCalendarView();
-  });
-  els.calendarNextWeekBtn?.addEventListener("click", () => {
-    calendarWeekOffset += 1;
-    renderCalendarView();
-  });
   els.calendarPrevMonthBtn?.addEventListener("click", () => {
     calendarMonthOffset -= 1;
     renderCalendarView();
@@ -1602,7 +1589,6 @@ async function finishAppBootstrap() {
     renderCalendarView();
   });
   els.calendarTodayBtn?.addEventListener("click", () => {
-    calendarWeekOffset = 0;
     calendarMonthOffset = 0;
     renderCalendarView();
   });
@@ -5403,16 +5389,13 @@ function getTasksForDate(dateStr) {
   return tasks.filter((t) => !isInboxTask(t) && t.dueDate === dateStr).sort(compareTasks);
 }
 
-function renderCalendarTaskButton(task) {
-  const synced = task.calendarSync?.eventId ? " calendar-task--synced" : "";
-  const meta = formatCalendarTaskMeta(task);
-  return `
-    <button type="button" class="calendar-task${synced}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(`${task.task} · ${meta}`)}">
-      <span class="calendar-task__name">${escapeHtml(task.task)}</span>
-      <span class="calendar-task__meta">${escapeHtml(meta)}</span>
-      ${task.calendarSync?.eventId ? '<span class="calendar-task__sync" title="Google Calendar 연동">📅</span>' : ""}
-    </button>
-  `;
+function formatStudyListMeta(study) {
+  const studyNo = study.protocolNumber?.trim() || "—";
+  return `Study No.: ${studyNo}  Site total: ${getStudyLinkedSiteCount(study)}`;
+}
+
+function getCalendarMonthVisibleTaskLimit() {
+  return window.matchMedia("(min-width: 900px)").matches ? 6 : 4;
 }
 
 function renderCalendarMonthTaskChip(task) {
@@ -5425,51 +5408,10 @@ function renderCalendarMonthTaskChip(task) {
     <button type="button" class="calendar-month-task${synced}${urgencyClass}" data-edit="${escapeAttr(task.id)}" title="${escapeAttr(`${task.task} · ${meta}`)}">
       ${task.calendarSync?.eventId ? '<span class="calendar-month-task__sync" aria-hidden="true">📅</span>' : ""}
       <span class="calendar-month-task__name">${escapeHtml(task.task)}</span>
+      ${task.study ? `<span class="calendar-month-task__study">${escapeHtml(task.study)}</span>` : ""}
       ${getTaskStudySiteNumber(task) ? `<span class="calendar-month-task__site">${escapeHtml(getTaskStudySiteNumber(task))}</span>` : ""}
     </button>
   `;
-}
-
-function renderCalendarWeekView() {
-  if (!els.calendarWeekGrid) return;
-
-  const { start, end } = getWeekRangeWithOffset(calendarWeekOffset);
-  const todayStr = toDateString(getToday());
-  const dayLabels = ["월", "화", "수", "목", "금", "토", "일"];
-
-  if (els.calendarWeekLabel) {
-    const labelStart = `${start.getMonth() + 1}/${start.getDate()}`;
-    const labelEnd = `${end.getMonth() + 1}/${end.getDate()}`;
-    els.calendarWeekLabel.textContent =
-      calendarWeekOffset === 0 ? "이번 주" : `${labelStart} – ${labelEnd}`;
-  }
-
-  const columns = [];
-  for (let i = 0; i < 7; i += 1) {
-    const day = new Date(start);
-    day.setDate(start.getDate() + i);
-    const dateStr = toDateString(day);
-    const dayTasks = getTasksForDate(dateStr);
-
-    columns.push(`
-      <div class="calendar-day${dateStr === todayStr ? " calendar-day--today" : ""}">
-        <header class="calendar-day__header">
-          <span class="calendar-day__name">${dayLabels[i]}</span>
-          <span class="calendar-day__date">${day.getDate()}</span>
-        </header>
-        <div class="calendar-day__tasks">
-          ${
-            dayTasks.length
-              ? dayTasks.map(renderCalendarTaskButton).join("")
-              : '<p class="calendar-day__empty">—</p>'
-          }
-        </div>
-      </div>
-    `);
-  }
-
-  els.calendarWeekGrid.innerHTML = columns.join("");
-  bindPreviewTaskClicks(els.calendarWeekGrid);
 }
 
 function renderCalendarMonthView() {
@@ -5479,7 +5421,7 @@ function renderCalendarMonthView() {
   const year = monthAnchor.getFullYear();
   const month = monthAnchor.getMonth();
   const todayStr = toDateString(getToday());
-  const { start: weekStart, end: weekEnd } = getWeekRangeWithOffset(calendarWeekOffset);
+  const visibleLimit = getCalendarMonthVisibleTaskLimit();
 
   if (els.calendarMonthLabel) {
     els.calendarMonthLabel.textContent = `${year}년 ${month + 1}월`;
@@ -5497,19 +5439,18 @@ function renderCalendarMonthView() {
     const inMonth = day.getMonth() === month;
     const dayTasks = getTasksForDate(dateStr);
     const isToday = dateStr === todayStr;
-    const inSelectedWeek = day >= weekStart && day <= weekEnd;
-    const visibleTasks = dayTasks.slice(0, 3);
+    const visibleTasks = dayTasks.slice(0, visibleLimit);
     const hiddenCount = Math.max(0, dayTasks.length - visibleTasks.length);
 
     cells.push(`
-      <div class="calendar-month-day${inMonth ? "" : " calendar-month-day--outside"}${isToday ? " calendar-month-day--today" : ""}${inSelectedWeek ? " calendar-month-day--in-week" : ""}">
+      <div class="calendar-month-day${inMonth ? "" : " calendar-month-day--outside"}${isToday ? " calendar-month-day--today" : ""}">
         <div class="calendar-month-day__header">
           <span class="calendar-month-day__date">${day.getDate()}</span>
           ${dayTasks.length ? `<span class="calendar-month-day__count">${dayTasks.length}</span>` : ""}
         </div>
         <div class="calendar-month-day__tasks">
           ${visibleTasks.map(renderCalendarMonthTaskChip).join("")}
-          ${hiddenCount ? `<span class="calendar-month-day__more">+${hiddenCount}</span>` : ""}
+          ${hiddenCount ? `<button type="button" class="calendar-month-day__more" data-edit="${escapeAttr(visibleTasks[0]?.id || dayTasks[0]?.id || "")}">+${hiddenCount} more</button>` : ""}
         </div>
       </div>
     `);
@@ -5520,7 +5461,6 @@ function renderCalendarMonthView() {
 }
 
 function renderCalendarView() {
-  renderCalendarWeekView();
   renderCalendarMonthView();
 }
 
@@ -8326,7 +8266,7 @@ function renderStudyMaster() {
         <li>
           <button type="button" class="study-master-list__item${study.id === selectedStudyMasterId ? " study-master-list__item--active" : ""}" data-study-id="${study.id}">
             <span class="study-master-list__name">${escapeHtml(study.studyName || study.protocolNumber)}</span>
-            <span class="study-master-list__meta">${escapeHtml(study.protocolNumber)} · Site ${getStudyLinkedSiteCount(study)} · <span class="study-master-list__wf">WF ${StudyMasterStore.getAppliedWorkflowIds(study.id).length}</span></span>
+            <span class="study-master-list__meta">${escapeHtml(formatStudyListMeta(study))}</span>
           </button>
         </li>
       `
@@ -9986,7 +9926,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "89";
+const APP_BUILD = "90";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
