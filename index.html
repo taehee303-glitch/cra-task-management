@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=96" />
+  <link rel="stylesheet" href="styles.css?v=98" />
   <script>
     (function () {
       var BUILD = "86";
@@ -428,15 +428,13 @@
               </div>
             </div>
 
-            <p class="dashboard-hero__encouragement" id="dashboardEncouragement">오늘도 화이팅입니다.</p>
+            <p class="dashboard-hero__encouragement" id="dashboardEncouragement" role="status">오늘도 화이팅입니다.</p>
 
             <span class="dashboard-hero__hidden-metrics" hidden aria-hidden="true">
               <span id="todayProgressCompleted">0</span>
               <span id="todayProgressCount"></span>
+              <span id="dashboardGreetingSub"></span>
             </span>
-            <button type="button" class="dashboard-hero__link today-progress-hero" id="todayProgressHero" hidden aria-hidden="true" tabindex="-1">
-              <span id="dashboardGreetingSub" hidden></span>
-            </button>
             <div class="dashboard-overall-progress dashboard-overall-progress--compact" hidden aria-hidden="true">
               <span id="overallProgressPercent"></span>
               <span id="overallProgressSubtitle"></span>
@@ -1027,8 +1025,14 @@
                   <p class="form-hint" id="editSiteMasterHint" hidden>연결된 Site가 없습니다. Study Master에서 Site를 연결하세요.</p>
                 </div>
                 <div class="form-group">
-                  <label for="editDueDate">Due Date</label>
+                  <label for="editWorkDueDate">업무 마감일 (Work Due)</label>
+                  <input type="date" id="editWorkDueDate" />
+                  <p class="form-hint">실제 업무·프로토콜·기관 기준 마감일</p>
+                </div>
+                <div class="form-group">
+                  <label for="editDueDate">할 일 Due (To-do Due)</label>
                   <input type="date" id="editDueDate" />
+                  <p class="form-hint">내가 이 업무를 완료하기로 한 날짜</p>
                 </div>
                 <div class="form-group">
                   <label for="editStatus">Status</label>
@@ -1142,8 +1146,14 @@
             <p class="form-hint form-hint--workflow" id="addTaskWorkflowHintDefault">Monitoring Visit · SIV · COV 등 입력 시 Workflow Flow를 제안합니다.</p>
           </div>
           <div class="form-group">
-            <label for="dueDate">Due Date</label>
+            <label for="workDueDate">업무 마감일 (Work Due)</label>
+            <input type="date" id="workDueDate" name="workDueDate" />
+            <p class="form-hint">실제 업무·프로토콜·기관 기준 마감일 (선택)</p>
+          </div>
+          <div class="form-group">
+            <label for="dueDate">할 일 Due (To-do Due)</label>
             <input type="date" id="dueDate" name="dueDate" />
+            <p class="form-hint">내가 이 업무를 완료하기로 한 날짜</p>
           </div>
           <div class="form-group">
             <label for="addTaskPriority">Priority</label>
@@ -1743,7 +1753,7 @@
   <script src="firebase-sync.js?v=95"></script>
   <script src="calendar-config.js?v=95"></script>
   <script src="calendar-sync.js?v=95"></script>
-  <script src="app.js?v=96"></script>
+  <script src="app.js?v=98"></script>
   <script src="pwa.js?v=95"></script>
 </body>
 </html>

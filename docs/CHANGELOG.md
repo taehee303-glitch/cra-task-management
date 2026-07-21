@@ -17,6 +17,31 @@ _(none)_
 
 ---
 
+## [1.3.0] — build 98 — 2026-07-22 — Work Due field & D-day colors
+
+### Added
+
+- **Work Due (업무 마감일)** — 실제 업무 마감일 필드 추가 (Add/Edit Task)
+- 기존 Due Date → **To-do Due (할 일 Due)** 로 라벨 명확화
+
+### Changed
+
+- **D-day 색상** — D-0 빨강, D-1~D-3 주황, D-4+ 파랑, Overdue 진한 빨강
+- Task 카드에 Work Due / To-do Due 동시 표시 (Work Due 우선)
+
+---
+
+## [1.3.0] — build 97 — 2026-07-21 — WF progress layout, My Tasks scroll, workflow step order
+
+### Changed
+
+- **Dashboard Task** — Workflow 진행률을 Study/Site 옆 큰 섹션으로 표시 (이번 주 타임라인은 기존 compact 유지)
+- **Dashboard Hero** — 빈 버튼 제거, 응원 메시지 스타일 개선
+- **My Tasks** — 필터 시 첫 Task 기준 스크롤, 헤더 겹침·액션 버튼 공백 수정, WF 진행률을 Study/Site 오른쪽에 크게 표시
+- **Workflow 설정** — 일 전/후 미입력 시 Flow 편집 순서 그대로 저장
+
+---
+
 ## [1.3.0] — build 96 — 2026-07-21 — Dashboard slim hero, WF inline, checkbox complete
 
 ### Changed

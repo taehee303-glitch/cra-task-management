@@ -4273,16 +4273,9 @@ body.body--settings-open {
   top: 0;
   z-index: 200;
   background: #f8fafc;
-  padding-bottom: calc(8px * var(--ui-scale));
-  margin:
-    calc(-16px * var(--ui-scale))
-    calc(-20px * var(--ui-scale))
-    0;
-  padding:
-    calc(16px * var(--ui-scale))
-    max(calc(20px * var(--ui-scale)), env(safe-area-inset-right))
-    calc(8px * var(--ui-scale))
-    max(calc(20px * var(--ui-scale)), env(safe-area-inset-left));
+  padding-bottom: calc(10px * var(--ui-scale));
+  margin: 0;
+  padding-top: calc(4px * var(--ui-scale));
   border-bottom: 1px solid var(--border);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
@@ -4366,10 +4359,13 @@ body.body--settings-open {
 }
 
 .task-card-list--inline {
-  padding-top: calc(6px * var(--ui-scale));
+  padding-top: calc(10px * var(--ui-scale));
   padding-bottom: calc(16px * var(--ui-scale));
   min-height: calc(120px * var(--ui-scale));
-  scroll-margin-top: calc(12px * var(--ui-scale));
+}
+
+.task-card-list--inline .task-card--action {
+  scroll-margin-top: calc(210px * var(--ui-scale));
 }
 
 .task-table-wrap--inline {
@@ -8633,29 +8629,81 @@ button.dashboard-v2__urgent-bucket:hover {
   white-space: nowrap;
 }
 
-.dash-v2-badge--today {
+.dash-v2-badge--today,
+.due-tier--today {
   background: #fee2e2;
   color: #dc2626;
 }
 
-.dash-v2-badge--d1 {
+.dash-v2-badge--d1,
+.dash-v2-badge--soon,
+.due-tier--soon {
   background: #ffedd5;
   color: #ea580c;
 }
 
-.dash-v2-badge--soon {
-  background: #fef3c7;
-  color: #b45309;
+.dash-v2-badge--upcoming,
+.due-tier--upcoming {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
-.dash-v2-badge--overdue {
+.dash-v2-badge--overdue,
+.due-tier--overdue {
   background: #fecaca;
   color: #b91c1c;
 }
 
-.dash-v2-badge--done {
+.dash-v2-badge--done,
+.due-tier--done {
   background: #dcfce7;
   color: #15803d;
+}
+
+.due-tier--none {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.task-card__due-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(2px * var(--ui-scale));
+  min-width: calc(52px * var(--ui-scale));
+}
+
+.task-card__due-primary {
+  display: block;
+  padding: calc(2px * var(--ui-scale)) calc(6px * var(--ui-scale));
+  border-radius: calc(6px * var(--ui-scale));
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.task-card__due-secondary {
+  display: block;
+  padding: calc(1px * var(--ui-scale)) calc(4px * var(--ui-scale));
+  border-radius: calc(4px * var(--ui-scale));
+  font-size: calc(9px * var(--ui-scale));
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.task-card__due-kind {
+  display: block;
+  font-size: calc(9px * var(--ui-scale));
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .dash-v2-pill {
@@ -9590,10 +9638,23 @@ button.dashboard-v2__urgent-bucket:hover {
 
 .dashboard-hero__encouragement {
   margin: 0;
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1.4;
-  color: #475569;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fff7ed 45%, #fef9c3 100%);
+  border: 1px solid #fde68a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #92400e;
+  text-align: center;
+  box-shadow: 0 1px 6px rgba(245, 158, 11, 0.12);
+}
+
+.dashboard-hero__encouragement[data-remaining="0"][data-total]:not([data-total="0"]) {
+  background: linear-gradient(135deg, #dcfce7 0%, #ecfdf5 50%, #d1fae5 100%);
+  border-color: #86efac;
+  color: #166534;
+  box-shadow: 0 1px 6px rgba(34, 197, 94, 0.12);
 }
 
 .dashboard-v2__reminder--slim {
@@ -9795,6 +9856,16 @@ button.dashboard-v2__urgent-bucket:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dash-task-row__sub-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .dash-task-row__status {
@@ -10692,6 +10763,55 @@ button.dashboard-v2__urgent-bucket:hover {
   white-space: nowrap;
 }
 
+.wf-progress-block {
+  flex: 0 1 min(11rem, 42%);
+  min-width: 6.5rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%);
+  border: 1px solid #ddd6fe;
+}
+
+.wf-progress-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.22rem;
+}
+
+.wf-progress-block__label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #6d28d9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wf-progress-block__count {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #5b21b6;
+}
+
+.wf-progress-block__track {
+  height: 8px;
+  border-radius: 999px;
+  background: #ede9fe;
+  overflow: hidden;
+}
+
+.wf-progress-block__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 100%);
+  transition: width 0.25s ease;
+}
+
 .dash-task-row__wf-foot {
   display: block;
   margin-top: 0.12rem;
@@ -11002,7 +11122,7 @@ button.dashboard-v2__urgent-bucket:hover {
 
 /* ── Build 91: My Tasks row layout ── */
 .task-card--row {
-  grid-template-columns: minmax(48px, 56px) minmax(44px, 52px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(52px, 64px) minmax(44px, 52px) minmax(0, 1fr) max-content;
   align-items: center;
   gap: calc(10px * var(--ui-scale));
 }
@@ -11037,11 +11157,39 @@ button.dashboard-v2__urgent-bucket:hover {
 
 .task-card__study-site--muted {
   display: block;
-  margin-top: calc(2px * var(--ui-scale));
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
   font-size: calc(12px * var(--ui-scale));
   font-weight: 500;
   color: #94a3b8 !important;
   line-height: 1.35;
+}
+
+.task-card__sub-row {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--ui-scale));
+  width: 100%;
+  min-width: 0;
+  margin-top: calc(2px * var(--ui-scale));
+}
+
+.task-card__sub-row .wf-progress-block {
+  flex: 0 1 min(11rem, 46%);
+  min-width: calc(108px * var(--ui-scale));
+}
+
+.task-card__sub-row .wf-progress-block__track {
+  height: calc(10px * var(--ui-scale));
+}
+
+.task-card__sub-row .wf-progress-block__label {
+  font-size: calc(11px * var(--ui-scale));
+}
+
+.task-card__sub-row .wf-progress-block__count {
+  font-size: calc(12px * var(--ui-scale));
 }
 
 .task-card--row .task-card__study-site {
@@ -11049,16 +11197,10 @@ button.dashboard-v2__urgent-bucket:hover {
   font-weight: 500;
 }
 
-.task-card__quick-action .status-dropdown__trigger {
-  min-width: calc(96px * var(--ui-scale));
-  min-height: calc(42px * var(--ui-scale));
-  font-size: calc(13px * var(--ui-scale));
-}
-
 .task-card__icon-btn {
   flex-shrink: 0;
-  width: calc(42px * var(--ui-scale));
-  height: calc(42px * var(--ui-scale));
+  width: calc(38px * var(--ui-scale));
+  height: calc(38px * var(--ui-scale));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -11162,14 +11304,23 @@ button.dashboard-v2__urgent-bucket:hover {
 .task-card__quick-actions {
   display: flex;
   align-items: center;
-  gap: calc(6px * var(--ui-scale));
+  justify-content: center;
+  gap: calc(4px * var(--ui-scale));
+  flex-shrink: 0;
+  width: fit-content;
+  margin-left: auto;
+}
+
+.task-card__quick-action {
   flex-shrink: 0;
 }
 
 .task-card__quick-action .status-dropdown__trigger {
-  min-width: calc(96px * var(--ui-scale));
-  min-height: calc(42px * var(--ui-scale));
-  font-size: calc(13px * var(--ui-scale));
+  min-width: calc(84px * var(--ui-scale));
+  min-height: calc(38px * var(--ui-scale));
+  padding-inline: calc(8px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
+  justify-content: center;
 }
 
 .task-card__icon-btn:hover:not(:disabled) {

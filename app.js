@@ -1747,8 +1747,14 @@ async function finishAppBootstrap() {
   els.siteSystemModal.addEventListener("click", (e) => {
     if (e.target === els.siteSystemModal) closeSiteSystemModal();
   });
-  els.filterStudy.addEventListener("change", renderTaskList);
-  els.filterStatus.addEventListener("change", renderTaskList);
+  els.filterStudy.addEventListener("change", () => {
+    renderTaskList();
+    scrollFilteredTasksIntoView();
+  });
+  els.filterStatus.addEventListener("change", () => {
+    renderTaskList();
+    scrollFilteredTasksIntoView();
+  });
   document.addEventListener("click", (event) => {
     if (
       event.target.closest(
@@ -1764,7 +1770,6 @@ async function finishAppBootstrap() {
   els.dashboardFilterCards.forEach((card) => {
     card.addEventListener("click", () => handleDashboardCardFilterClick(card.dataset.dashboardFilter));
   });
-  els.todayProgressHero?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   document.getElementById("dashboardTodayTotalChip")?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   document.getElementById("dashboardTodayRemainChip")?.addEventListener("click", () => handleDashboardCardFilterClick("today"));
   els.dashboardCalendarBtn?.addEventListener("click", () => switchView("calendar"));
@@ -3610,8 +3615,14 @@ function normalizeStudyRecord(study) {
   };
 }
 
+function parseWorkflowDueOffset(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.max(0, Math.round(num)) : null;
+}
+
 function normalizeWorkflowStep(step) {
-  const dueOffset = Number.isFinite(Number(step?.dueOffset)) ? Math.max(0, Math.round(Number(step.dueOffset))) : 0;
+  const dueOffset = parseWorkflowDueOffset(step?.dueOffset);
   return {
     id: step?.id || generateId(),
     taskName: step?.taskName?.trim() || "",
@@ -3658,13 +3669,10 @@ function sortFlowStepsByDueOffset(flowSteps) {
 }
 
 function normalizeWorkflowRecord(workflow) {
-  const preStepsRaw = Array.isArray(workflow?.preSteps)
+  const preSteps = Array.isArray(workflow?.preSteps)
     ? workflow.preSteps.map(normalizeWorkflowStep).filter((s) => s.taskName)
     : [];
-  const stepsRaw = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
-  const sorted = sortWorkflowStepsByDueOffset(preStepsRaw, stepsRaw);
-  const preSteps = sorted.preSteps;
-  const steps = sorted.steps;
+  const steps = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
   const tags = Array.isArray(workflow?.tags)
     ? [...new Set(workflow.tags.map((tag) => String(tag).trim()).filter(Boolean))]
     : [];
@@ -5179,6 +5187,10 @@ function openAddTaskModal(presetOrOptions = null) {
   if (els.dueDate) {
     els.dueDate.value = options.dueDate || toDateString(getToday());
   }
+  const workDueInput = document.getElementById("workDueDate");
+  if (workDueInput) {
+    workDueInput.value = options.workDueDate || "";
+  }
   refreshTaskStudySiteSelects();
   const resolvedSite =
     options.site && options.study
@@ -5247,10 +5259,17 @@ function handleQuickFilterClick(filter) {
 }
 
 function scrollFilteredTasksIntoView() {
-  const anchor = document.querySelector(".tasks-workspace__bar");
-  if (!anchor) return;
   requestAnimationFrame(() => {
-    anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+    const scrollRoot = document.querySelector(".workspace__body .main");
+    const sticky = document.querySelector(".tasks-workspace__sticky");
+    const firstTask = document.querySelector("#taskCardList .task-card");
+    if (!scrollRoot || !firstTask) return;
+
+    const stickyHeight = sticky?.offsetHeight ?? 0;
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const taskRect = firstTask.getBoundingClientRect();
+    const targetTop = taskRect.top - rootRect.top + scrollRoot.scrollTop - stickyHeight - 12;
+    scrollRoot.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
   });
 }
 
@@ -6782,7 +6801,7 @@ function workflowRecordToFlowSteps(workflow) {
   (workflow.steps || []).forEach((step) => {
     flowSteps.push({ kind: "post", ...normalizeWorkflowStep(step) });
   });
-  return sortFlowStepsByDueOffset(flowSteps);
+  return flowSteps;
 }
 
 function normalizeFlowStepKinds(flowSteps) {
@@ -6815,8 +6834,7 @@ function flowStepsToWorkflowPayload(flowSteps) {
     else steps.push(normalized);
   });
 
-  const sorted = sortWorkflowStepsByDueOffset(preSteps, steps);
-  return { preSteps: sorted.preSteps, steps: sorted.steps, rootTaskName };
+  return { preSteps, steps, rootTaskName };
 }
 
 function renderWorkflowDetailStepRow(step, index, total) {
@@ -6834,7 +6852,7 @@ function renderWorkflowDetailStepRow(step, index, total) {
         isRoot
           ? ""
           : `<div class="workflow-detail-step__offset-wrap">
-        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset}" min="0" step="1" data-field="dueOffset" />
+        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset ?? ""}" min="0" step="1" data-field="dueOffset" placeholder="선택" />
         <span class="workflow-detail-step__offset-label">${offsetLabel}</span>
       </div>
       <select class="workflow-detail-step__priority" data-field="priority">${renderWorkflowDetailPriorityOptions(step.priority)}</select>`
@@ -7236,30 +7254,51 @@ function isRoutineConnectedTask(task) {
 }
 
 function renderTaskWorkflowProgressBlock(task) {
-  const step = getWorkflowStepPosition(task);
-  if (!step?.workflowName && !step?.name) return "";
+  return getWorkflowProgressDisplay(task).sectionHtml;
+}
 
+function getWorkflowProgressDisplay(task) {
   const ctx = resolveWorkflowContext(task);
-  let completed = step.current || 0;
-  let total = step.total || 0;
-  if (ctx.workflow && ctx.root && ctx.instance) {
-    const stats = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
-    completed = stats.completed;
-    total = stats.total;
+  if (!ctx.workflow || !ctx.root || !ctx.instance) {
+    return { sectionHtml: "", inlineHtml: "", nextHtml: "" };
   }
-  if (total <= 0) total = 1;
-  const pct = Math.min(100, Math.round((completed / total) * 100));
-  const name = step.workflowName || step.name;
 
-  return `
-    <div class="task-wf-progress">
-      <span class="task-wf-progress__label">${escapeHtml(name)}</span>
-      <div class="task-wf-progress__track" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}" aria-label="${escapeAttr(name)} 진행률">
-        <span class="task-wf-progress__fill" style="width:${pct}%"></span>
+  const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
+  const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
+  const total = progress.total || 1;
+  const completed = progress.completed || 0;
+  const pct = Math.min(100, Math.round((completed / total) * 100));
+  const workflowName = ctx.workflow.name?.trim() || getWorkflowRootLabel(ctx.workflow);
+
+  const inlineHtml = `
+    <span class="dash-wf-inline" title="Workflow 진행률">
+      <span class="dash-wf-inline__bar" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}">
+        <span class="dash-wf-inline__fill" style="width:${pct}%"></span>
+      </span>
+      <span class="dash-wf-inline__count">${completed}/${total}</span>
+    </span>
+  `;
+
+  const sectionHtml = `
+    <div class="wf-progress-block" title="Workflow 진행률">
+      <div class="wf-progress-block__head">
+        <span class="wf-progress-block__label">${escapeHtml(workflowName)}</span>
+        <span class="wf-progress-block__count">${completed}/${total}</span>
       </div>
-      <span class="task-wf-progress__count">${completed} / ${total}</span>
+      <div class="wf-progress-block__track" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}" aria-label="${escapeAttr(workflowName)} 진행률">
+        <span class="wf-progress-block__fill" style="width:${pct}%"></span>
+      </div>
     </div>
   `;
+
+  let nextHtml = "";
+  if (stepLabels.nextStepName) {
+    nextHtml = `<span class="dash-wf-next">Next · ${escapeHtml(stepLabels.nextStepName)}</span>`;
+  } else if (stepLabels.currentStepName) {
+    nextHtml = `<span class="dash-wf-next">Current · ${escapeHtml(stepLabels.currentStepName)}</span>`;
+  }
+
+  return { sectionHtml, inlineHtml, nextHtml };
 }
 
 function renderTaskRoutineLabel(task) {
@@ -9981,6 +10020,9 @@ function normalizeTask(item) {
     site: item.site,
     task: item.task,
     dueDate: item.dueDate,
+    ...(typeof item.workDueDate === "string" && item.workDueDate.trim()
+      ? { workDueDate: item.workDueDate.trim() }
+      : {}),
     status: migrateTaskStatus(item.status),
     priority: PRIORITIES.includes(item.priority) ? item.priority : "Medium",
     memo: typeof item.memo === "string" ? item.memo : "",
@@ -10204,7 +10246,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "96";
+const APP_BUILD = "98";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10912,12 +10954,40 @@ function unlockSettingsBodyScroll() {
   settingsBodyOverflowBackup = "";
 }
 
+function getDueDayTier(diff, status) {
+  if (status === "Completed" || status === "Cancelled") return "done";
+  if (!Number.isFinite(diff)) return "none";
+  if (diff < 0) return "overdue";
+  if (diff === 0) return "today";
+  if (diff <= 3) return "soon";
+  return "upcoming";
+}
+
+function getDueDayBadge(dateStr, status) {
+  if (status === "Completed") {
+    return { label: "Done", tier: "done", className: "due-tier--done" };
+  }
+  if (!dateStr) {
+    return { label: "—", tier: "none", className: "due-tier--none" };
+  }
+  const diff = daysUntilDue(dateStr);
+  const tier = getDueDayTier(diff, status);
+  let label = `D-${diff}`;
+  if (diff < 0) label = "Overdue";
+  else if (diff === 0) label = "D-0";
+  return { label, tier, diff, className: `due-tier--${tier}` };
+}
+
+function getTaskPrimaryDueDate(task) {
+  return task.workDueDate || task.dueDate || "";
+}
+
 function getDueUrgency(dueDateStr, status) {
   if (status === "Completed" || status === "Cancelled") return "completed";
   if (!dueDateStr) return "normal";
-  const diff = daysUntilDue(dueDateStr);
-  if (diff < 0) return "overdue";
-  if (diff <= URGENT_DAYS) return "urgent";
+  const tier = getDueDayTier(daysUntilDue(dueDateStr), status);
+  if (tier === "overdue") return "overdue";
+  if (tier === "today" || tier === "soon") return "urgent";
   return "normal";
 }
 
@@ -10940,10 +11010,12 @@ function formatDueDisplay(task) {
 
 function getDueDateDisplayClass(dueDateStr, status) {
   if (status === "Completed" || status === "Cancelled") return "due-date--normal";
-  const diff = daysUntilDue(dueDateStr);
-  if (diff < 0) return "due-date--overdue";
-  if (diff <= URGENT_DAYS) return "due-date--urgent";
-  return "due-date--normal";
+  if (!dueDateStr) return "due-date--none";
+  const tier = getDueDayTier(daysUntilDue(dueDateStr), status);
+  if (tier === "overdue") return "due-date--overdue";
+  if (tier === "today") return "due-date--today";
+  if (tier === "soon") return "due-date--urgent";
+  return "due-date--upcoming";
 }
 
 function addDaysToDate(dateStr, days) {
@@ -11414,6 +11486,7 @@ function handleAddTask(e) {
   const site = form.get("site")?.trim() || "";
   const taskName = form.get("task")?.trim();
   const dueDate = form.get("dueDate") || "";
+  const workDueDate = form.get("workDueDate") || "";
 
   if (!taskName) {
     alert("Task를 입력해 주세요.");
@@ -11432,6 +11505,7 @@ function handleAddTask(e) {
     site: site ? getStandardSiteName(site) : "",
     task: taskName,
     dueDate,
+    ...(workDueDate ? { workDueDate } : {}),
     status: DEFAULT_STATUS,
     priority,
     createdAt: new Date().toISOString(),
@@ -11477,6 +11551,7 @@ function handleEditTask(e) {
   const wasCompleted = existing.status === "Completed";
   const wasCancelled = existing.status === "Cancelled";
   const newDueDate = document.getElementById("editDueDate").value;
+  const newWorkDueDate = document.getElementById("editWorkDueDate")?.value || "";
   const newTaskName = document.getElementById("editTask").value.trim();
   const dueDateChanged = existing.dueDate !== newDueDate;
   const isVisitParent = !existing.parentTaskId && detectVisitWorkflowRule(newTaskName || existing.task);
@@ -11492,6 +11567,7 @@ function handleEditTask(e) {
     site: editSite ? getStandardSiteName(editSite) : "",
     task: newTaskName,
     dueDate: newDueDate,
+    workDueDate: newWorkDueDate,
     status: newStatus,
     priority: document.getElementById("editPriority").value,
     memo: document.getElementById("editMemo")?.value ?? "",
@@ -11594,6 +11670,9 @@ function populateTaskDetailForm(task) {
   updateEditSiteInfoDisplay();
   document.getElementById("editTask").value = task.task;
   document.getElementById("editDueDate").value = task.dueDate;
+  if (document.getElementById("editWorkDueDate")) {
+    document.getElementById("editWorkDueDate").value = task.workDueDate || "";
+  }
   document.getElementById("editStatus").value = task.status;
   document.getElementById("editPriority").value = task.priority;
   if (document.getElementById("editMemo")) {
@@ -12284,42 +12363,19 @@ function scrollToTaskList() {
 }
 
 function getDashboardEncouragementMessage(remaining, total) {
-  if (total === 0) return "오늘 마감 Task가 없습니다. 여유로운 하루 되세요.";
-  if (remaining === 0) return "오늘 마감 Task를 모두 완료했습니다! 수고하셨습니다.";
-  if (remaining === 1) return "1건의 Task만이 남았습니다. 조금만 힘내십시오.";
-  if (remaining <= 3) return `${remaining}건의 Task가 남았습니다. 거의 다 왔습니다!`;
-  return `${remaining}건의 Task가 남았습니다. 하나씩 차근차근 진행해 보세요.`;
+  if (total === 0) return "☀️ 오늘 마감 Task가 없습니다. 여유로운 하루 되세요.";
+  if (remaining === 0) return "🎉 오늘 마감 Task를 모두 완료했습니다! 정말 수고하셨어요.";
+  if (remaining === 1) return "💪 1건만 남았습니다. 마지막까지 힘내세요!";
+  if (remaining <= 3) return `🔥 ${remaining}건의 Task가 남았습니다. 거의 다 왔어요!`;
+  return `✨ ${remaining}건의 Task가 남았습니다. 하나씩 차근차근, 오늘도 화이팅!`;
 }
 
-function getDashboardWorkflowDisplay(task) {
-  const ctx = resolveWorkflowContext(task);
-  if (!ctx.workflow || !ctx.root || !ctx.instance) {
-    return { inlineHtml: "", nextHtml: "" };
+function getDashboardWorkflowDisplay(task, options = {}) {
+  const display = getWorkflowProgressDisplay(task);
+  if (options.mode === "inline") {
+    return { inlineHtml: display.inlineHtml, nextHtml: display.nextHtml, sectionHtml: "" };
   }
-
-  const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
-  const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
-  const total = progress.total || 1;
-  const completed = progress.completed || 0;
-  const pct = Math.min(100, Math.round((completed / total) * 100));
-
-  const inlineHtml = `
-    <span class="dash-wf-inline" title="Workflow 진행률">
-      <span class="dash-wf-inline__bar" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}">
-        <span class="dash-wf-inline__fill" style="width:${pct}%"></span>
-      </span>
-      <span class="dash-wf-inline__count">${completed}/${total}</span>
-    </span>
-  `;
-
-  let nextHtml = "";
-  if (stepLabels.nextStepName) {
-    nextHtml = `<span class="dash-wf-next">Next · ${escapeHtml(stepLabels.nextStepName)}</span>`;
-  } else if (stepLabels.currentStepName) {
-    nextHtml = `<span class="dash-wf-next">Current · ${escapeHtml(stepLabels.currentStepName)}</span>`;
-  }
-
-  return { inlineHtml, nextHtml };
+  return display;
 }
 
 function renderDashboardTaskWorkflowStep(task) {
@@ -12499,15 +12555,22 @@ function renderDashboardWorkflowCard(entry) {
 
 function getDashboardDueBadge(task) {
   if (task.status === "Completed") {
-    return { label: "Completed", className: "dash-v2-badge--done" };
+    return { label: "Completed", className: "dash-v2-badge--done due-tier--done" };
   }
-  if (!task.dueDate) {
-    return { label: "—", className: "dash-v2-badge--neutral" };
+  const primaryDate = getTaskPrimaryDueDate(task);
+  if (!primaryDate) {
+    return { label: "—", className: "dash-v2-badge--neutral due-tier--none" };
   }
-  const diff = daysUntilDue(task.dueDate);
-  if (diff < 0) return { label: "Overdue", className: "dash-v2-badge--overdue" };
-  if (diff === 0) return { label: "D-0", className: "dash-v2-badge--today" };
-  return { label: `D-${diff}`, className: diff === 1 ? "dash-v2-badge--d1" : "dash-v2-badge--neutral" };
+  const badge = getDueDayBadge(primaryDate, task.status);
+  const classMap = {
+    overdue: "dash-v2-badge--overdue due-tier--overdue",
+    today: "dash-v2-badge--today due-tier--today",
+    soon: "dash-v2-badge--soon due-tier--soon",
+    upcoming: "dash-v2-badge--upcoming due-tier--upcoming",
+    done: "dash-v2-badge--done due-tier--done",
+    none: "dash-v2-badge--neutral due-tier--none",
+  };
+  return { label: badge.label, className: classMap[badge.tier] || "dash-v2-badge--neutral" };
 }
 
 function getDashboardWorkflowLabel(task) {
@@ -12560,7 +12623,7 @@ function renderDashboardTimelineTasks(taskList) {
       const label = group.date === "__none__" ? "일정 미정" : formatDashboardTimelineDayLabel(group.date);
       const items = group.tasks
         .map((task) => {
-          const wfDisplay = getDashboardWorkflowDisplay(task);
+          const wfDisplay = getDashboardWorkflowDisplay(task, { mode: "inline" });
           return `<button type="button" class="dash-timeline__item" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
             <span class="dash-timeline__head">
               <span class="dash-timeline__task">${escapeHtml(task.task)}</span>
@@ -12611,6 +12674,8 @@ function renderDashboardHero() {
   if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
   if (els.dashboardEncouragement) {
     els.dashboardEncouragement.textContent = getDashboardEncouragementMessage(progress.remaining, progress.total);
+    els.dashboardEncouragement.dataset.remaining = String(progress.remaining);
+    els.dashboardEncouragement.dataset.total = String(progress.total);
   }
 
   if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${progress.rate}%`;
@@ -12618,21 +12683,6 @@ function renderDashboardHero() {
     els.overallProgressSubtitle.textContent = `${progress.completed} / ${progress.total}`;
   }
   if (els.overallProgressFill) els.overallProgressFill.style.width = `${progress.rate}%`;
-
-  if (els.todayProgressHero) {
-    els.todayProgressHero.classList.remove(
-      "today-progress-hero--done",
-      "today-progress-hero--empty",
-      "today-progress-hero--active"
-    );
-    if (progress.total === 0) {
-      els.todayProgressHero.classList.add("today-progress-hero--empty");
-    } else if (progress.remaining === 0) {
-      els.todayProgressHero.classList.add("today-progress-hero--done");
-    } else {
-      els.todayProgressHero.classList.add("today-progress-hero--active");
-    }
-  }
 }
 
 function renderTodayProgressHero() {
@@ -12830,9 +12880,11 @@ function renderDashItem(task, type, options = {}) {
         <span class="dash-task-row__title-line">
           ${criticalBadge}
           <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
-          ${wfDisplay.inlineHtml}
         </span>
-        <span class="dash-task-row__meta">${escapeHtml(studyLabel + sitePart)}</span>
+        <div class="dash-task-row__sub-row">
+          <span class="dash-task-row__meta">${escapeHtml(studyLabel + sitePart)}</span>
+          ${wfDisplay.sectionHtml}
+        </div>
         ${wfFootBlock}
       </button>
       <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
@@ -12975,22 +13027,29 @@ function renderTaskDueProminent(task) {
   if (task.status === "Completed") {
     return `<span class="task-card__due-text task-card__due-text--done">Done</span>`;
   }
-  if (!task.dueDate) {
+
+  const workDue = task.workDueDate || "";
+  const todoDue = task.dueDate || "";
+  if (!workDue && !todoDue) {
     return `<span class="task-card__due-text task-card__due-text--none">—</span>`;
   }
 
-  const badge = getDashboardDueBadge(task);
-  const urgency = getDueUrgency(task.dueDate, task.status);
-  const urgencyClass =
-    urgency === "overdue"
-      ? "overdue"
-      : urgency === "urgent"
-        ? "urgent"
-        : badge.className.includes("today")
-          ? "today"
-          : "upcoming";
+  const primaryDate = workDue || todoDue;
+  const primaryBadge = getDueDayBadge(primaryDate, task.status);
+  let html = `<div class="task-card__due-stack">
+    <span class="task-card__due-primary ${primaryBadge.className}">${escapeHtml(primaryBadge.label)}</span>`;
 
-  return `<span class="task-card__due-text task-card__due-text--${urgencyClass}">${escapeHtml(badge.label)}</span>`;
+  if (workDue && todoDue) {
+    const todoBadge = getDueDayBadge(todoDue, task.status);
+    html += `<span class="task-card__due-secondary ${todoBadge.className}" title="To-do Due">TD ${escapeHtml(todoBadge.label)}</span>`;
+  } else if (workDue) {
+    html += `<span class="task-card__due-kind">Work</span>`;
+  } else {
+    html += `<span class="task-card__due-kind">To-do</span>`;
+  }
+
+  html += `</div>`;
+  return html;
 }
 
 function renderTaskQuickActions(task) {
@@ -13041,7 +13100,9 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
             <span class="task-card__title">${escapeHtml(task.task)}</span>
           </span>
           <span class="task-card__study-site">${escapeHtml(studySite)}</span>
-          ${workflowBlock}
+          <div class="task-card__sub-row">
+            ${workflowBlock}
+          </div>
           ${routineBlock}
         </button>
         <div class="task-card__meta-row">
@@ -13068,8 +13129,10 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
             ${criticalBadge}
             <span class="task-card__title">${escapeHtml(task.task)}</span>
           </span>
-          ${renderTaskStudySiteMeta(task)}
-          ${workflowBlock}
+          <div class="task-card__sub-row">
+            ${renderTaskStudySiteMeta(task)}
+            ${workflowBlock}
+          </div>
           ${routineBlock}
         </button>
       </div>
@@ -13165,6 +13228,7 @@ const CSV_COLUMNS = [
   "site",
   "task",
   "dueDate",
+  "workDueDate",
   "status",
   "priority",
   "sourceVisitType",
@@ -13287,6 +13351,7 @@ function csvRowToTask(cells, headerMap) {
     site: get("site"),
     task: get("task"),
     dueDate: get("duedate") || get("dueDate"),
+    workDueDate: get("workduedate") || get("workDueDate"),
     status: migrateTaskStatus(get("status")),
     priority: get("priority"),
     createdAt: get("createdat") || get("createdAt") || new Date().toISOString(),
