@@ -17,6 +17,20 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 105 — 2026-07-22 — Workflow parallel steps & offset UI
+
+### Added
+
+- **병렬 단계** — Workflow 편집 시 "병렬" 체크로 동일 Due·동시 진행 Task 지원 (예: PSV report + FSF)
+- Root 완료 시 다음 병렬 단계 Task 일괄 생성
+
+### Changed
+
+- Workflow **일수 입력** 칸 확대 (숫자 가독성)
+- Flow preview에 병렬 단계 표시
+
+---
+
 ## [1.4.0] — build 104 — 2026-07-22 — Workflow progress order & Work Due label
 
 ### Fixed

@@ -6360,6 +6360,31 @@ body.body--settings-open {
   padding-top: 0.15rem;
 }
 
+.workflow-flow-preview__parallel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.workflow-flow-preview__parallel-sep {
+  align-self: center;
+  color: #7c3aed;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.workflow-flow-preview__step--parallel {
+  border-color: #ddd6fe;
+  background: #faf5ff;
+}
+
+.workflow-flow-preview__meta--parallel {
+  color: #7c3aed;
+  font-weight: 700;
+}
+
 .workflow-meta-row {
   display: flex;
   flex-wrap: wrap;
@@ -6741,7 +6766,7 @@ body.body--settings-open {
 
 .workflow-detail-step {
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto minmax(7.5rem, 8.5rem) minmax(5.5rem, 6rem) auto auto;
   gap: 0.45rem;
   align-items: center;
   padding: 0.55rem 0.65rem;
@@ -6750,9 +6775,13 @@ body.body--settings-open {
   background: #fff;
 }
 
+.workflow-detail-step--parallel {
+  border-color: #c4b5fd;
+  background: #faf5ff;
+}
+
 .workflow-detail-step--root {
-  border: 2px solid #6366f1;
-  background: #fff;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
 }
 
 .workflow-detail-step__reorder {
@@ -6790,8 +6819,31 @@ body.body--settings-open {
   white-space: nowrap;
 }
 
+.workflow-detail-step--root {
+  border: 2px solid #6366f1;
+  background: #fff;
+}
+
+.workflow-detail-step__parallel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7c3aed;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.workflow-detail-step__parallel-input {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin: 0;
+  accent-color: #7c3aed;
+}
+
 .workflow-detail-step__name,
-.workflow-detail-step__offset,
 .workflow-detail-step__priority {
   width: 100%;
   padding: 0.45rem 0.55rem;
@@ -6801,10 +6853,23 @@ body.body--settings-open {
   font-size: 0.88rem;
 }
 
+.workflow-detail-step__offset {
+  width: 100%;
+  min-width: 3.25rem;
+  padding: 0.45rem 0.4rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .workflow-detail-step__offset-wrap {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  min-width: 7.5rem;
 }
 
 .workflow-detail-step__offset-label {

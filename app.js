@@ -3635,7 +3635,83 @@ function normalizeWorkflowStep(step) {
     defaultStatus: TASK_RULE_DEFAULT_STATUSES.includes(step?.defaultStatus)
       ? step.defaultStatus
       : DEFAULT_STATUS,
+    parallelGroup: step?.parallelGroup?.trim() || "",
   };
+}
+
+function resolveParallelGroupsInFlowSteps(flowSteps) {
+  let activeGroupId = null;
+
+  return flowSteps.map((step, index) => {
+    if (step.kind === "root") {
+      activeGroupId = null;
+      return { ...step, parallelGroup: "", parallelWithPrevious: false };
+    }
+
+    const parallelWithPrevious = Boolean(step.parallelWithPrevious);
+    if (parallelWithPrevious && index > 0) {
+      const prev = flowSteps[index - 1];
+      if (prev.kind !== "root") {
+        if (!activeGroupId) activeGroupId = prev.parallelGroup || generateId();
+        return {
+          ...normalizeWorkflowStep({ ...step, parallelGroup: activeGroupId }),
+          kind: step.kind,
+          parallelWithPrevious: true,
+        };
+      }
+    }
+
+    activeGroupId = null;
+    return {
+      ...normalizeWorkflowStep(step),
+      kind: step.kind,
+      parallelGroup: "",
+      parallelWithPrevious: false,
+    };
+  });
+}
+
+function buildWorkflowPhases(stepDefs) {
+  const phases = [];
+  let index = 0;
+
+  while (index < stepDefs.length) {
+    const def = stepDefs[index];
+    const group = def.stepDef?.parallelGroup?.trim();
+    const defs = [def];
+    const indices = [index];
+    let next = index + 1;
+
+    if (group && def.kind !== "root") {
+      while (next < stepDefs.length) {
+        const nextDef = stepDefs[next];
+        if (nextDef.stepDef?.parallelGroup?.trim() === group) {
+          defs.push(nextDef);
+          indices.push(next);
+          next += 1;
+        } else {
+          break;
+        }
+      }
+    } else {
+      next = index + 1;
+    }
+
+    phases.push({ defs, indices });
+    index = next;
+  }
+
+  return phases;
+}
+
+function isWorkflowPhaseComplete(phase, rootTask, instance) {
+  return phase.defs.every((def) => {
+    const matched =
+      def.kind === "root"
+        ? rootTask
+        : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true });
+    return matched?.status === "Completed";
+  });
 }
 
 function computeWorkflowStepCount(workflow) {
@@ -6122,26 +6198,57 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
   const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
   const showOffsets = options.showOffsets !== false;
   const compact = Boolean(options.compact);
-  const allSteps = [...preSteps.map((step) => ({ step, side: "pre" })), ...steps.map((step) => ({ step, side: "post" }))];
-  const maxSteps = options.maxSteps ?? (compact ? 4 : allSteps.length);
-  const visiblePre = compact ? preSteps.slice(0, Math.max(0, maxSteps - Math.min(steps.length, maxSteps))) : preSteps;
-  const remainingSlots = compact ? Math.max(0, maxSteps - visiblePre.length) : steps.length;
-  const visiblePost = compact ? steps.slice(0, remainingSlots) : steps;
-  const hiddenCount = compact ? Math.max(0, allSteps.length - visiblePre.length - visiblePost.length) : 0;
 
   const renderStep = (step, side) => {
     const offset = showOffsets ? formatWorkflowStepOffset(step, side) : "";
+    const parallel = step.parallelGroup ? ' workflow-flow-preview__step--parallel' : "";
     return `
-      <div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>
-      <div class="workflow-flow-preview__step${side === "pre" ? " workflow-flow-preview__step--pre" : ""}">
+      <div class="workflow-flow-preview__step${side === "pre" ? " workflow-flow-preview__step--pre" : ""}${parallel}">
         <span class="workflow-flow-preview__name">${escapeHtml(step.taskName)}</span>
         ${offset ? `<span class="workflow-flow-preview__meta">${escapeHtml(offset)}</span>` : ""}
+        ${step.parallelGroup ? '<span class="workflow-flow-preview__meta workflow-flow-preview__meta--parallel">병렬</span>' : ""}
       </div>
     `;
   };
 
-  const preHtml = visiblePre.map((step) => renderStep(step, "pre")).join("");
-  const postHtml = visiblePost.map((step) => renderStep(step, "post")).join("");
+  const renderSideSteps = (sideSteps, side) => {
+    let html = "";
+    let index = 0;
+    while (index < sideSteps.length) {
+      const step = sideSteps[index];
+      const group = step.parallelGroup?.trim();
+      if (group) {
+        const groupSteps = [step];
+        let next = index + 1;
+        while (next < sideSteps.length && sideSteps[next].parallelGroup?.trim() === group) {
+          groupSteps.push(sideSteps[next]);
+          next += 1;
+        }
+        html += `<div class="workflow-flow-preview__parallel">${groupSteps.map((item) => renderStep(item, side)).join('<span class="workflow-flow-preview__parallel-sep" aria-hidden="true">+</span>')}</div>`;
+        if (next < sideSteps.length) {
+          html += `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>`;
+        }
+        index = next;
+      } else {
+        html += `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>${renderStep(step, side)}`;
+        if (index < sideSteps.length - 1) {
+          html += `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>`;
+        }
+        index += 1;
+      }
+    }
+    return html;
+  };
+
+  const maxSteps = options.maxSteps ?? (compact ? 4 : preSteps.length + steps.length);
+  const visiblePre = compact ? preSteps.slice(0, maxSteps) : preSteps;
+  const visiblePost = compact ? steps.slice(0, Math.max(0, maxSteps - visiblePre.length)) : steps;
+  const hiddenCount = compact
+    ? Math.max(0, preSteps.length + steps.length - visiblePre.length - visiblePost.length)
+    : 0;
+
+  const preHtml = renderSideSteps(visiblePre, "pre");
+  const postHtml = renderSideSteps(visiblePost, "post");
   const moreHtml =
     hiddenCount > 0
       ? `<div class="workflow-flow-preview__more">… +${hiddenCount} more</div>`
@@ -6154,7 +6261,7 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
       <div class="workflow-flow-preview__step workflow-flow-preview__step--root">
         <span class="workflow-flow-preview__name">${escapeHtml(rootLabel)}</span>
       </div>
-      ${postHtml}
+      ${postHtml ? `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>${postHtml}` : ""}
       ${moreHtml}
     </div>
   `;
@@ -6899,20 +7006,45 @@ function renderWorkflowDetailPriorityOptions(selected = "Medium") {
 }
 
 function workflowRecordToFlowSteps(workflow) {
-  const flowSteps = (workflow.preSteps || []).map((step) => ({
-    kind: "pre",
-    ...normalizeWorkflowStep(step),
-  }));
+  const flowSteps = [];
+
+  (workflow.preSteps || []).forEach((step) => {
+    const normalized = normalizeWorkflowStep(step);
+    const prev = flowSteps[flowSteps.length - 1];
+    flowSteps.push({
+      kind: "pre",
+      ...normalized,
+      parallelWithPrevious: Boolean(
+        normalized.parallelGroup && prev?.parallelGroup && prev.parallelGroup === normalized.parallelGroup
+      ),
+    });
+  });
+
   flowSteps.push({
     kind: "root",
     taskName: workflow.rootTaskName || getWorkflowRootLabel(workflow),
     dueOffset: 0,
     dueUnit: "calendar",
     priority: "Medium",
+    parallelGroup: "",
+    parallelWithPrevious: false,
   });
+
   (workflow.steps || []).forEach((step) => {
-    flowSteps.push({ kind: "post", ...normalizeWorkflowStep(step) });
+    const normalized = normalizeWorkflowStep(step);
+    const prev = flowSteps[flowSteps.length - 1];
+    flowSteps.push({
+      kind: "post",
+      ...normalized,
+      parallelWithPrevious: Boolean(
+        normalized.parallelGroup &&
+          prev?.kind !== "root" &&
+          prev?.parallelGroup &&
+          prev.parallelGroup === normalized.parallelGroup
+      ),
+    });
   });
+
   return flowSteps;
 }
 
@@ -6949,11 +7081,23 @@ function flowStepsToWorkflowPayload(flowSteps) {
   return { preSteps, steps, rootTaskName };
 }
 
-function renderWorkflowDetailStepRow(step, index, total) {
+function renderWorkflowDetailStepRow(step, index, total, flowSteps = []) {
   const isRoot = step.kind === "root";
   const offsetLabel = step.kind === "pre" ? "일 전" : "일 후";
+  const prevStep = index > 0 ? flowSteps[index - 1] : null;
+  const canParallel = !isRoot && prevStep && prevStep.kind !== "root";
+
+  const parallelCell = isRoot
+    ? ""
+    : canParallel
+      ? `<label class="workflow-detail-step__parallel">
+        <input type="checkbox" class="workflow-detail-step__parallel-input" data-field="parallelWithPrevious"${step.parallelWithPrevious ? " checked" : ""} />
+        <span>병렬</span>
+      </label>`
+      : `<span class="workflow-detail-step__parallel workflow-detail-step__parallel--empty" aria-hidden="true"></span>`;
+
   return `
-    <div class="workflow-detail-step${isRoot ? " workflow-detail-step--root" : ""}" data-step-index="${index}">
+    <div class="workflow-detail-step${isRoot ? " workflow-detail-step--root" : ""}${step.parallelWithPrevious ? " workflow-detail-step--parallel" : ""}" data-step-index="${index}">
       <div class="workflow-detail-step__reorder">
         <button type="button" class="workflow-detail-step__move" data-move-up aria-label="위로"${index === 0 ? " disabled" : ""}>↑</button>
         <button type="button" class="workflow-detail-step__move" data-move-down aria-label="아래로"${index === total - 1 ? " disabled" : ""}>↓</button>
@@ -6963,8 +7107,9 @@ function renderWorkflowDetailStepRow(step, index, total) {
       ${
         isRoot
           ? ""
-          : `<div class="workflow-detail-step__offset-wrap">
-        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset ?? ""}" min="0" step="1" data-field="dueOffset" placeholder="선택" />
+          : `${parallelCell}
+      <div class="workflow-detail-step__offset-wrap">
+        <input type="number" class="workflow-detail-step__offset" value="${step.dueOffset ?? ""}" min="0" step="1" data-field="dueOffset" placeholder="0" inputmode="numeric" aria-label="${offsetLabel} 일수" />
         <span class="workflow-detail-step__offset-label">${offsetLabel}</span>
       </div>
       <select class="workflow-detail-step__priority" data-field="priority">${renderWorkflowDetailPriorityOptions(step.priority)}</select>`
@@ -7018,10 +7163,12 @@ function syncWorkflowDetailDraftFromDom() {
       dueOffset: row.querySelector('[data-field="dueOffset"]')?.value,
       dueUnit: "calendar",
       priority: row.querySelector('[data-field="priority"]')?.value,
+      parallelWithPrevious: row.querySelector('[data-field="parallelWithPrevious"]')?.checked || false,
     });
   });
 
   workflowDetailDraft.flowSteps = normalizeFlowStepKinds(workflowDetailDraft.flowSteps);
+  workflowDetailDraft.flowSteps = resolveParallelGroupsInFlowSteps(workflowDetailDraft.flowSteps);
 
   return workflowDetailDraft;
 }
@@ -7082,9 +7229,25 @@ function bindWorkflowDetailEditorEvents() {
       workflowDetailDraft.flowSteps.splice(index + 1, 0, {
         kind,
         ...normalizeWorkflowStep({ taskName: "", dueOffset: 1, dueUnit: "calendar", priority: "Medium" }),
+        parallelWithPrevious: false,
       });
       workflowDetailDraft.flowSteps = normalizeFlowStepKinds(workflowDetailDraft.flowSteps);
       renderWorkflowDetailEditor();
+    });
+  });
+
+  els.workflowDetailBody.querySelectorAll('[data-field="parallelWithPrevious"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      const row = input.closest(".workflow-detail-step");
+      const index = Number(row?.dataset.stepIndex);
+      if (!Number.isFinite(index) || index <= 0) return;
+      const offsetInput = row.querySelector('[data-field="dueOffset"]');
+      const prevRow = els.workflowDetailBody.querySelector(`.workflow-detail-step[data-step-index="${index - 1}"]`);
+      const prevOffset = prevRow?.querySelector('[data-field="dueOffset"]')?.value;
+      if (offsetInput && prevOffset !== undefined && prevOffset !== "") {
+        offsetInput.value = prevOffset;
+      }
     });
   });
 
@@ -7108,7 +7271,7 @@ function renderWorkflowDetailEditor() {
   const flowSteps = draft.flowSteps || [];
   const rows = flowSteps
     .map((step, index) => {
-      const row = renderWorkflowDetailStepRow(step, index, flowSteps.length);
+      const row = renderWorkflowDetailStepRow(step, index, flowSteps.length, flowSteps);
       return index > 0 ? `<div class="workflow-detail-arrow" aria-hidden="true">↓</div>${row}` : row;
     })
     .join("");
@@ -7511,46 +7674,77 @@ function createWorkflowStepTask({ workflow, root, instance, stepEntry, anchorTas
 function processWorkflowTaskCompletion(completedTask) {
   const { workflow, root, instance } = resolveWorkflowContext(completedTask);
   if (!workflow || !root || !instance) {
-    return { handled: false, created: null, isLastStep: false, workflowName: "", nextTaskName: null };
+    return { handled: false, created: null, createdAll: [], isLastStep: false, workflowName: "", nextTaskName: null };
   }
 
   const workflowName = workflow.name?.trim() || getWorkflowRootLabel(workflow);
-  const adjacent = getAdjacentWorkflowStepInfo(completedTask, workflow, root, instance);
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
+  const phases = buildWorkflowPhases(stepDefs);
+  const currentIndex = Math.max(
+    0,
+    (completedTask.stepIndex || getWorkflowStepIndexForTask(completedTask, root, workflow) || 1) - 1
+  );
+  const phaseIndex = phases.findIndex((phase) => phase.indices.includes(currentIndex));
+  const currentPhase = phaseIndex >= 0 ? phases[phaseIndex] : null;
+
+  if (!currentPhase || !isWorkflowPhaseComplete(currentPhase, root, instance)) {
+    return {
+      handled: true,
+      created: null,
+      createdAll: [],
+      isLastStep: false,
+      workflowName,
+      nextTaskName: null,
+      waitingForParallel: true,
+    };
+  }
+
+  const nextPhase = phases[phaseIndex + 1];
   const progress = getWorkflowProgressStats(workflow, root, instance);
 
-  if (!adjacent.next || progress.completed >= progress.total) {
+  if (!nextPhase || progress.completed >= progress.total) {
     WorkflowInstanceStore.markCompleted(instance.id);
     return {
       handled: true,
       created: null,
+      createdAll: [],
       isLastStep: true,
       workflowName,
       nextTaskName: null,
     };
   }
 
-  const nextTaskName = (adjacent.next.def.taskName || "").trim();
-  let existingNext = adjacent.next.matchedTask;
-  let created = null;
+  const createdAll = [];
+  const nextNames = [];
 
-  if (!existingNext && nextTaskName) {
-    created = createWorkflowStepTask({
+  nextPhase.defs.forEach((def, phaseDefIndex) => {
+    if (def.kind === "root") return;
+    const stepIndex = nextPhase.indices[phaseDefIndex];
+    const stepEntry = { def, index: stepIndex };
+    const existing = findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
+    if (existing) return;
+
+    const created = createWorkflowStepTask({
       workflow,
       root,
       instance,
-      stepEntry: adjacent.next,
+      stepEntry,
       anchorTask: completedTask,
     });
-    existingNext = created;
-  }
+    if (created) {
+      createdAll.push(created);
+      nextNames.push(created.task);
+    }
+  });
 
   return {
     handled: true,
-    created,
+    created: createdAll[0] || null,
+    createdAll,
     isLastStep: false,
     workflowName,
-    nextTaskName,
-    nextTask: existingNext,
+    nextTaskName: nextNames.join(", "),
+    nextTask: createdAll[0] || null,
   };
 }
 
@@ -7570,6 +7764,13 @@ function finalizeWorkflowTaskCompletion(completedTask, result) {
   };
 
   if (!result?.handled) return;
+
+  if (result.createdAll?.length > 1) {
+    showToast(
+      `${result.workflowName} Workflow — 병렬 Task ${result.createdAll.length}건이 생성되었습니다. (${result.nextTaskName})`
+    );
+    return;
+  }
 
   if (result.created) {
     showToast(
@@ -10388,7 +10589,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "104";
+const APP_BUILD = "105";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12740,21 +12941,26 @@ function getDashboardAggregateWorkflowProgress() {
 
 function getWorkflowStepLabels(workflow, root, instance) {
   const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
+  const phases = buildWorkflowPhases(stepDefs);
   let currentStepName = null;
   let nextStepName = null;
 
-  for (let index = 0; index < stepDefs.length; index += 1) {
-    const def = stepDefs[index];
-    const matched =
-      def.kind === "root"
-        ? root
-        : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
-    const isDone = matched?.status === "Completed";
-    if (!isDone) {
-      currentStepName = def.taskName;
-      nextStepName = stepDefs[index + 1]?.taskName || null;
-      break;
-    }
+  for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex += 1) {
+    const phase = phases[phaseIndex];
+    const openDefs = phase.defs.filter((def) => {
+      const matched =
+        def.kind === "root"
+          ? root
+          : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
+      return matched?.status !== "Completed";
+    });
+
+    if (!openDefs.length) continue;
+
+    currentStepName = openDefs.map((def) => def.taskName).join(", ");
+    const nextPhase = phases[phaseIndex + 1];
+    nextStepName = nextPhase ? nextPhase.defs.map((def) => def.taskName).join(", ") : null;
+    break;
   }
 
   if (!currentStepName && stepDefs.length) {
