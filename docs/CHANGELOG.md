@@ -17,6 +17,19 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 104 — 2026-07-22 — Workflow progress order & Work Due label
+
+### Fixed
+
+- **Workflow 진행률** — pre/root/post 순서대로 단계 매칭·연결, 기존 Task 자동 reconcile
+- Workflow 저장 시 인스턴스 stepIndex 재동기화
+
+### Changed
+
+- **Due 배지** — Work Due만 `업무 마감일: D-N` 형식으로 표시 (To-do Due 병기 제거)
+
+---
+
 ## [1.4.0] — build 103 — 2026-07-22 — To-do Due vs Work Due split
 
 ### Changed

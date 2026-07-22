@@ -3942,9 +3942,102 @@ function assignTaskToWorkflowInstance(taskId, instance, workflowRecord, stepInde
   });
 }
 
-function findTaskForWorkflowStepInInstance(stepName, rootTask, instance) {
+function getWorkflowRelatedTaskIds(rootTask) {
+  const ids = new Set();
+  if (!rootTask) return ids;
+
+  ids.add(rootTask.id);
+
+  let current = rootTask;
+  const visited = new Set();
+  while (current?.parentTaskId && !visited.has(current.parentTaskId)) {
+    visited.add(current.id);
+    const parent = tasks.find((item) => item.id === current.parentTaskId);
+    if (!parent) break;
+    ids.add(parent.id);
+    current = parent;
+  }
+
+  const queue = [...getSubtasks(rootTask.id)];
+  while (queue.length) {
+    const child = queue.shift();
+    if (ids.has(child.id)) continue;
+    ids.add(child.id);
+    queue.push(...getSubtasks(child.id));
+  }
+
+  if (rootTask.parentTaskId) {
+    getSubtasks(rootTask.parentTaskId).forEach((sibling) => ids.add(sibling.id));
+  }
+
+  return ids;
+}
+
+function findTaskForWorkflowStepInInstance(stepName, rootTask, instance, options = {}) {
   const pool = getWorkflowInstanceTasks(instance.id);
-  return findTaskForWorkflowStepName(stepName, rootTask, pool);
+  const matchedInPool = findTaskForWorkflowStepName(stepName, rootTask, pool);
+  if (matchedInPool) return matchedInPool;
+
+  if (!options.matchExternal) return null;
+
+  const nameLower = (stepName || "").trim().toLowerCase();
+  if (!nameLower || !rootTask) return null;
+
+  const relatedIds = getWorkflowRelatedTaskIds(rootTask);
+  const rootSite = rootTask.site?.trim() ? getStandardSiteName(rootTask.site) : "";
+  const candidates = tasks.filter((task) => {
+    if ((task.task || "").trim().toLowerCase() !== nameLower) return false;
+    if (task.workflowInstanceId && task.workflowInstanceId !== instance.id) return false;
+    if (rootTask.study?.trim() && task.study !== rootTask.study) return false;
+    if (rootSite) {
+      const taskSite = task.site?.trim() ? getStandardSiteName(task.site) : "";
+      if (taskSite && taskSite !== rootSite) return false;
+    }
+    return true;
+  });
+
+  if (!candidates.length) return null;
+
+  candidates.sort((a, b) => {
+    const aRelated = relatedIds.has(a.id) ? 0 : 1;
+    const bRelated = relatedIds.has(b.id) ? 0 : 1;
+    if (aRelated !== bRelated) return aRelated - bRelated;
+    if (a.status === "Completed" && b.status !== "Completed") return -1;
+    if (b.status === "Completed" && a.status !== "Completed") return 1;
+    return (a.createdAt || "").localeCompare(b.createdAt || "");
+  });
+
+  return candidates[0];
+}
+
+function reconcileWorkflowInstanceSteps(workflow, instance, root) {
+  if (!workflow || !instance || !root) return;
+
+  const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
+  stepDefs.forEach((def, index) => {
+    const stepIndex = index + 1;
+    const matched =
+      def.kind === "root"
+        ? root
+        : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
+
+    if (!matched) return;
+
+    if (matched.workflowInstanceId !== instance.id || matched.stepIndex !== stepIndex) {
+      assignTaskToWorkflowInstance(matched.id, instance, workflow, stepIndex);
+    }
+  });
+}
+
+function reconcileWorkflowInstancesForRecord(workflowId) {
+  if (!workflowId) return;
+
+  WorkflowInstanceStore.getAll().forEach((instance) => {
+    if (instance.workflowRecordId !== workflowId) return;
+    const workflow = findWorkflowRecordById(instance.workflowRecordId, instance.studyProtocol);
+    const root = getWorkflowRootTaskForInstance(instance);
+    if (workflow && root) reconcileWorkflowInstanceSteps(workflow, instance, root);
+  });
 }
 
 function getWorkflowRootTaskForRecord(task, workflow) {
@@ -6271,25 +6364,35 @@ function applyWorkflowToRootTask(rootTask, workflow, ref, options = {}) {
   if (options.createAllSteps) {
     const baseDate = rootTask.dueDate || toDateString(getToday());
     const stepDefs = buildWorkflowTimelineStepDefs(workflow, rootTask);
-    followUps = (workflow.steps || [])
-      .filter((step) => step.taskName && !hasExistingFollowUp(rootTask.id, step.taskName))
-      .map((step) => {
-        const stepIndex = stepDefs.findIndex(
-          (def) => (def.taskName || "").trim().toLowerCase() === (step.taskName || "").trim().toLowerCase()
-        );
+
+    followUps = stepDefs
+      .filter((def) => def.kind !== "root")
+      .filter(
+        (def) => !findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true })
+      )
+      .map((def) => {
+        const stepIndex = stepDefs.indexOf(def) + 1;
+        const step = def.stepDef || {};
+        const offset = Number(step.dueOffset) || 0;
+        const dueUnit = step.dueUnit || "calendar";
+        const dueDate =
+          def.kind === "pre"
+            ? addDaysToDate(baseDate, -Math.abs(offset))
+            : calculateDueDateFromRule(baseDate, offset, dueUnit);
+
         return {
           id: generateId(),
           study: rootTask.study,
           site: rootTask.site,
-          task: step.taskName,
-          dueDate: calculateDueDateFromRule(baseDate, step.dueOffset, step.dueUnit),
+          task: def.taskName,
+          dueDate,
           status: step.defaultStatus || DEFAULT_STATUS,
           priority: step.priority || rootTask.priority || "Medium",
           parentTaskId: rootTask.id,
           autoGenerated: true,
           workflowInstanceId: instance.id,
           workflowRecordId: workflow.id,
-          stepIndex: stepIndex >= 0 ? stepIndex + 1 : null,
+          stepIndex,
           workflowId: workflow.id,
           createdAt: new Date().toISOString(),
         };
@@ -6299,11 +6402,7 @@ function applyWorkflowToRootTask(rootTask, workflow, ref, options = {}) {
       TaskStore.addMany(followUps);
     }
 
-    getWorkflowInstanceTasks(instance.id).forEach((child) => {
-      if (child.id !== rootTask.id && !child.stepIndex) {
-        assignTaskToWorkflowInstance(child.id, instance, workflow);
-      }
-    });
+    reconcileWorkflowInstanceSteps(workflow, instance, rootTask);
   }
 
   if (ref?.studyId) {
@@ -7104,6 +7203,8 @@ function handleWorkflowDetailSave() {
 
   if (!applyWorkflowScopeFromDraft(ref.id, draft.scopeMode, draft.studyIds)) return;
 
+  reconcileWorkflowInstancesForRecord(ref.id);
+
   renderWorkflowMaster();
   StudyMasterStore.getAll().forEach((study) => {
     if (selectedStudyMasterId === study.id) renderStudyAppliedWorkflows(study);
@@ -7727,10 +7828,14 @@ function formatWorkflowStepDueHint(def, matchedTask) {
 }
 
 function getWorkflowProgressStats(workflow, rootTask, instance) {
+  reconcileWorkflowInstanceSteps(workflow, rootTask, instance);
   const stepDefs = buildWorkflowTimelineStepDefs(workflow, rootTask);
   let completed = 0;
   stepDefs.forEach((def) => {
-    const matched = findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance);
+    const matched =
+      def.kind === "root"
+        ? rootTask
+        : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true });
     if (matched?.status === "Completed") completed += 1;
   });
   return { completed, total: stepDefs.length };
@@ -7745,9 +7850,13 @@ function getAdjacentWorkflowStepInfo(task, workflow, rootTask, instance) {
 
   const buildEntry = (def, index) => {
     if (!def || index < 0 || index >= stepDefs.length) return null;
+    const matchedTask =
+      def.kind === "root"
+        ? rootTask
+        : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true });
     return {
       def,
-      matchedTask: findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance),
+      matchedTask,
       index,
     };
   };
@@ -7847,7 +7956,10 @@ function renderWorkflowTimeline(task, options = {}) {
 
   const rows = stepDefs
     .map((def, index) => {
-      const matchedTask = findTaskForWorkflowStepInInstance(def.taskName, root, instance);
+      const matchedTask =
+        def.kind === "root"
+          ? root
+          : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
       const isDone = matchedTask?.status === "Completed";
       const isCurrent = index === currentIndex && !isDone;
       let icon;
@@ -10276,7 +10388,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "103";
+const APP_BUILD = "104";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -11014,9 +11126,9 @@ function getTaskSchedulingDueDate(task) {
   return task?.dueDate?.trim() || "";
 }
 
-/** Work Due — D-day 배지·표시 기준 (미설정 시 To-do Due fallback) */
+/** Work Due — D-day 배지·표시 기준 (Work Due만 표시) */
 function getTaskDisplayDueDate(task) {
-  return task?.workDueDate?.trim() || task?.dueDate?.trim() || "";
+  return task?.workDueDate?.trim() || "";
 }
 
 function getTaskPrimaryDueDate(task) {
@@ -12633,7 +12745,10 @@ function getWorkflowStepLabels(workflow, root, instance) {
 
   for (let index = 0; index < stepDefs.length; index += 1) {
     const def = stepDefs[index];
-    const matched = findTaskForWorkflowStepInInstance(def.taskName, root, instance);
+    const matched =
+      def.kind === "root"
+        ? root
+        : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
     const isDone = matched?.status === "Completed";
     if (!isDone) {
       currentStepName = def.taskName;
@@ -12759,11 +12874,11 @@ function getDashboardDueBadge(task) {
   if (task.status === "Completed") {
     return { label: "Completed", className: "dash-v2-badge--done due-tier--done" };
   }
-  const displayDate = getTaskDisplayDueDate(task);
-  if (!displayDate) {
+  const workDue = task.workDueDate?.trim();
+  if (!workDue) {
     return { label: "—", className: "dash-v2-badge--neutral due-tier--none" };
   }
-  const badge = getDueDayBadge(displayDate, task.status);
+  const badge = getDueDayBadge(workDue, task.status);
   const classMap = {
     overdue: "dash-v2-badge--overdue due-tier--overdue",
     today: "dash-v2-badge--today due-tier--today",
@@ -12772,12 +12887,11 @@ function getDashboardDueBadge(task) {
     done: "dash-v2-badge--done due-tier--done",
     none: "dash-v2-badge--neutral due-tier--none",
   };
-  const schedulingDate = getTaskSchedulingDueDate(task);
-  const title =
-    task.workDueDate?.trim() && schedulingDate && task.workDueDate.trim() !== schedulingDate
-      ? `Work Due ${badge.label} · To-do ${getDueDayBadge(schedulingDate, task.status).label}`
-      : "";
-  return { label: badge.label, className: classMap[badge.tier] || "dash-v2-badge--neutral", title };
+  return {
+    label: `업무 마감일: ${badge.label}`,
+    className: classMap[badge.tier] || "dash-v2-badge--neutral",
+    title: "",
+  };
 }
 
 function getDashboardWorkflowLabel(task) {
@@ -13270,27 +13384,12 @@ function renderTaskDueProminent(task) {
   }
 
   const workDue = task.workDueDate?.trim() || "";
-  const todoDue = getTaskSchedulingDueDate(task);
-  const displayDate = getTaskDisplayDueDate(task);
-  if (!displayDate) {
+  if (!workDue) {
     return `<span class="task-card__due-text task-card__due-text--none">—</span>`;
   }
 
-  const primaryBadge = getDueDayBadge(displayDate, task.status);
-  let html = `<div class="task-card__due-stack">
-    <span class="task-card__due-primary ${primaryBadge.className}">${escapeHtml(primaryBadge.label)}</span>`;
-
-  if (workDue && todoDue) {
-    const todoBadge = getDueDayBadge(todoDue, task.status);
-    html += `<span class="task-card__due-secondary ${todoBadge.className}" title="To-do Due">TD ${escapeHtml(todoBadge.label)}</span>`;
-  } else if (workDue) {
-    html += `<span class="task-card__due-kind">Work</span>`;
-  } else {
-    html += `<span class="task-card__due-kind">To-do</span>`;
-  }
-
-  html += `</div>`;
-  return html;
+  const badge = getDueDayBadge(workDue, task.status);
+  return `<span class="task-card__due-text ${badge.className}">업무 마감일: ${escapeHtml(badge.label)}</span>`;
 }
 
 function renderTaskQuickActions(task) {
