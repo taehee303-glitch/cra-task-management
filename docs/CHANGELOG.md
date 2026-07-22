@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 107 — 2026-07-22 — Workflow Work Due vs To-do Due
+
+### Changed
+
+- **Workflow Task 생성** — 단계 offset은 **Work Due(업무 마감일)** 로만 설정, To-do Due는 비워 둠
+- Task 상세에서 Workflow 자동 생성 Task에 To-do Due 설정 안내 표시
+- 이전 Task 완료 후 생성되는 후속 Task도 동일 (Work Due 자동 · To-do Due 수동)
+
+---
+
 ## [1.4.0] — build 106 — 2026-07-22 — Workflow editor layout fix
 
 ### Fixed
