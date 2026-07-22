@@ -7114,8 +7114,10 @@ function renderWorkflowDetailStepRow(step, index, total, flowSteps = []) {
       </div>
       <select class="workflow-detail-step__priority" data-field="priority">${renderWorkflowDetailPriorityOptions(step.priority)}</select>`
       }
-      <button type="button" class="btn btn--ghost btn--sm workflow-detail-step__remove" data-remove-step aria-label="단계 삭제"${isRoot ? " disabled" : ""}>삭제</button>
-      <button type="button" class="btn btn--ghost btn--sm workflow-detail-step__insert" data-insert-after aria-label="아래 단계 추가">+ 아래</button>
+      <div class="workflow-detail-step__actions">
+        <button type="button" class="btn btn--ghost workflow-detail-step__action workflow-detail-step__remove" data-remove-step aria-label="단계 삭제" title="삭제"${isRoot ? " disabled" : ""}>×</button>
+        <button type="button" class="btn btn--ghost workflow-detail-step__action workflow-detail-step__insert" data-insert-after aria-label="아래 단계 추가" title="아래 추가">+</button>
+      </div>
     </div>
   `;
 }
@@ -10589,7 +10591,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "105";
+const APP_BUILD = "106";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

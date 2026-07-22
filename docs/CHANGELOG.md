@@ -17,6 +17,19 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 106 — 2026-07-22 — Workflow editor layout fix
+
+### Fixed
+
+- Workflow 단계 편집 — Task 이름 칸이 보이지 않던 grid column 불일치 수정
+
+### Changed
+
+- 삭제/추가 버튼 compact (× / +)
+- 일수·우선순위 입력 칸 크기 축소, Task 이름 영역 확대
+
+---
+
 ## [1.4.0] — build 105 — 2026-07-22 — Workflow parallel steps & offset UI
 
 ### Added
