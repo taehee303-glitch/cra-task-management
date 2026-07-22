@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=99" />
+  <link rel="stylesheet" href="styles.css?v=100" />
   <script>
     (function () {
       var BUILD = "86";
@@ -391,122 +391,130 @@
 
       <!-- Dashboard View -->
       <div id="viewDashboard" class="view-panel">
-        <section class="dashboard dashboard--readable dashboard--time dashboard--v2 dashboard--compact">
+        <section class="dashboard dashboard--readable dashboard--time dashboard--v2 dashboard--compact dashboard--command-center">
           <div class="dashboard-quick-capture dashboard-quick-capture--top">
             <input type="text" id="dashboardQuickAddInput" class="dashboard-quick-capture__input" placeholder="빠르게 캡처 → Inbox (Study·Site·Due는 나중에)" autocomplete="off" aria-label="Inbox 빠른 캡처" />
             <button type="button" class="btn btn--primary btn--sm dashboard-quick-capture__btn" id="dashboardQuickAddBtn" aria-label="Inbox에 추가">+</button>
           </div>
 
-          <section class="dashboard-hero dashboard-hero--compact dashboard-hero--slim" aria-label="오늘 업무 Hero">
-            <div class="dashboard-hero__slim-top">
-              <div class="dashboard-hero__greeting-block">
-                <div class="dashboard-hero__greeting-line">
-                  <h2 class="dashboard-v2__greeting-title" id="dashboardGreeting">Good morning 👋</h2>
-                  <span class="dashboard-v2__date" id="dashboardHeaderDate"></span>
-                </div>
-                <div class="dashboard-hero__today-chips">
-                  <button type="button" class="dashboard-hero__chip" id="dashboardTodayTotalChip" data-dashboard-filter="today">
-                    오늘 <strong id="todayProgressTotal">0</strong>
-                  </button>
-                  <button type="button" class="dashboard-hero__chip dashboard-hero__chip--remain" id="dashboardTodayRemainChip" data-dashboard-filter="today">
-                    남음 <strong id="todayProgressRemaining">0</strong>
-                  </button>
-                </div>
+          <section class="dashboard-command-bar" aria-label="CRA Command Summary">
+            <div class="dashboard-command-bar__top">
+              <div class="dashboard-command-bar__greeting">
+                <h2 class="dashboard-command-bar__title" id="dashboardGreeting">Good morning</h2>
+                <span class="dashboard-command-bar__date" id="dashboardHeaderDate"></span>
               </div>
-              <span class="attention-panel__reminder-badge dashboard-v2__reminder dashboard-v2__reminder--slim" id="reminderStatusBadge">Reminder ON</span>
+              <span class="attention-panel__reminder-badge dashboard-command-bar__reminder" id="reminderStatusBadge">Reminder ON</span>
             </div>
 
-            <div class="dashboard-hero__progress-slim">
-              <div class="dashboard-hero__progress-top">
-                <span class="dashboard-hero__progress-label">오늘 진행률</span>
-                <span class="dashboard-hero__progress-percent" id="todayProgressPercent">0%</span>
-              </div>
-              <div class="dashboard-hero__progress-bar-wrap">
-                <div class="progress-bar dashboard-hero__progress-bar">
-                  <div class="progress-bar__fill dashboard-hero__progress-fill" id="todayProgressFill" style="width: 0%"></div>
-                </div>
-              </div>
+            <div class="dashboard-command-bar__metrics">
+              <button type="button" class="dash-cmd-metric" data-dashboard-filter="in-progress" aria-pressed="false">
+                <span class="dash-cmd-metric__value" id="dashboardSummaryInProgress">0</span>
+                <span class="dash-cmd-metric__label">진행 중</span>
+              </button>
+              <button type="button" class="dash-cmd-metric dash-cmd-metric--today" data-dashboard-filter="today" aria-pressed="false">
+                <span class="dash-cmd-metric__value" id="dashboardSummaryToday">0</span>
+                <span class="dash-cmd-metric__label">Today Due</span>
+              </button>
+              <button type="button" class="dash-cmd-metric" data-dashboard-filter="week" aria-pressed="false">
+                <span class="dash-cmd-metric__value" id="dashboardSummaryWeek">0</span>
+                <span class="dash-cmd-metric__label">This Week</span>
+              </button>
+              <button type="button" class="dash-cmd-metric dash-cmd-metric--overdue" data-dashboard-filter="overdue" aria-pressed="false">
+                <span class="dash-cmd-metric__value" id="dashboardSummaryOverdue">0</span>
+                <span class="dash-cmd-metric__label">Overdue</span>
+              </button>
             </div>
 
-            <p class="dashboard-hero__encouragement" id="dashboardEncouragement" role="status">오늘도 화이팅입니다.</p>
+            <div class="dashboard-command-bar__study" id="dashboardStudySnapshot" aria-live="polite"></div>
 
             <span class="dashboard-hero__hidden-metrics" hidden aria-hidden="true">
+              <span id="todayProgressTotal">0</span>
               <span id="todayProgressCompleted">0</span>
+              <span id="todayProgressRemaining">0</span>
               <span id="todayProgressCount"></span>
+              <span id="todayProgressPercent">0%</span>
+              <span id="todayProgressFill" style="width:0%"></span>
               <span id="dashboardGreetingSub"></span>
+              <span id="dashboardEncouragement"></span>
             </span>
-            <div class="dashboard-overall-progress dashboard-overall-progress--compact" hidden aria-hidden="true">
-              <span id="overallProgressPercent"></span>
-              <span id="overallProgressSubtitle"></span>
-              <div class="progress-bar progress-bar--compact"><div class="progress-bar__fill" id="overallProgressFill" style="width: 0%"></div></div>
-            </div>
           </section>
 
-          <div class="dashboard-v2__main-grid">
-            <div class="dashboard-v2__primary">
-              <section class="dash-card dash-card--v2 dash-card--primary dash-card--time-today dash-card--execute" aria-labelledby="attentionTodayHeading">
-                <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-                  <h3 id="attentionTodayHeading">오늘 Task</h3>
+          <div class="dashboard-command">
+            <div class="dashboard-command__main">
+              <section class="dash-card dash-card--command dash-card--command-primary dash-card--time-today" aria-labelledby="attentionTodayHeading">
+                <div class="dash-card-header dash-card-header--command">
+                  <div class="dash-card-header__copy">
+                    <h3 id="attentionTodayHeading">오늘 Task</h3>
+                    <p class="dash-card-header__hint">오늘 처리해야 하는 업무 · 우선순위 순</p>
+                  </div>
                   <span class="badge badge--today" id="attentionTodayCount">0</span>
                 </div>
-                <div class="dash-list dash-list--execute dash-list--time dash-list--v2" id="attentionTodayList">
+                <div class="dash-list dash-list--command" id="attentionTodayList">
                   <p class="empty-msg empty-msg--compact">✓ 오늘 마감 업무가 없습니다.</p>
                 </div>
               </section>
 
-              <section class="dash-card dash-card--v2 dash-card--primary dash-card--time-tomorrow dash-card--execute" aria-labelledby="attentionTomorrowHeading">
-                <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-                  <h3 id="attentionTomorrowHeading">내일 Task</h3>
-                  <span class="badge badge--tomorrow" id="attentionTomorrowCount">0</span>
-                </div>
-                <div class="dash-list dash-list--execute dash-list--time dash-list--v2" id="attentionTomorrowList">
-                  <p class="empty-msg empty-msg--compact">✓ 내일 마감 업무가 없습니다.</p>
-                </div>
-              </section>
-
-              <section class="dash-card dash-card--v2 dash-card--inline dash-card--time-overdue" aria-labelledby="attentionOverdueHeading" id="dashboardOverdueSection">
-                <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-                  <h3 id="attentionOverdueHeading">지연</h3>
+              <section class="dash-card dash-card--command dash-card--time-overdue" aria-labelledby="attentionOverdueHeading" id="dashboardOverdueSection">
+                <div class="dash-card-header dash-card-header--command">
+                  <div class="dash-card-header__copy">
+                    <h3 id="attentionOverdueHeading">Overdue</h3>
+                    <p class="dash-card-header__hint">지연된 업무 · 즉시 확인</p>
+                  </div>
                   <span class="badge badge--danger" id="attentionOverdueCount">0</span>
                 </div>
-                <div class="dash-list dash-list--compact dash-list--time dash-list--v2" id="attentionOverdueList">
+                <div class="dash-list dash-list--command" id="attentionOverdueList">
                   <p class="empty-msg empty-msg--compact">✓ 지연된 업무가 없습니다.</p>
                 </div>
               </section>
-            </div>
 
-            <div class="dashboard-v2__aside">
-              <section class="dash-card dash-card--v2 dash-card--medium dash-card--time-week" aria-labelledby="dashboardWeekPrepHeading">
-                <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-                  <h3 id="dashboardWeekPrepHeading">이번 주</h3>
-                  <span class="badge badge--neutral" id="dashboardWeekPrepCount">0</span>
+              <section class="dash-card dash-card--command dash-card--time-tomorrow" aria-labelledby="attentionTomorrowHeading">
+                <div class="dash-card-header dash-card-header--command">
+                  <div class="dash-card-header__copy">
+                    <h3 id="attentionTomorrowHeading">내일 Task</h3>
+                  </div>
+                  <span class="badge badge--tomorrow" id="attentionTomorrowCount">0</span>
                 </div>
-                <div class="dash-timeline" id="dashboardWeekPrepList">
-                  <p class="empty-msg empty-msg--compact">✓ 이번 주 일정 없음</p>
-                </div>
-              </section>
-
-              <section class="dash-card dash-card--v2 dash-card--small dash-card--time-recent" aria-labelledby="dashboardRecentCompletedHeading">
-                <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-                  <h3 id="dashboardRecentCompletedHeading">최근 완료</h3>
-                  <span class="badge badge--neutral" id="dashboardRecentCompletedCount">0</span>
-                </div>
-                <div class="dash-list dash-list--compact dash-list--v2 dash-list--updates" id="dashboardRecentCompletedList">
-                  <p class="empty-msg empty-msg--compact">✓ 없음</p>
+                <div class="dash-list dash-list--command" id="attentionTomorrowList">
+                  <p class="empty-msg empty-msg--compact">✓ 내일 마감 업무가 없습니다.</p>
                 </div>
               </section>
             </div>
+
+            <details class="dashboard-command__more">
+              <summary class="dashboard-command__more-summary">이번 주 · 최근 완료 · 다음 주</summary>
+              <div class="dashboard-command__secondary">
+                <section class="dash-card dash-card--command dash-card--time-week" aria-labelledby="dashboardWeekPrepHeading">
+                  <div class="dash-card-header dash-card-header--command">
+                    <h3 id="dashboardWeekPrepHeading">이번 주</h3>
+                    <span class="badge badge--neutral" id="dashboardWeekPrepCount">0</span>
+                  </div>
+                  <div class="dash-timeline" id="dashboardWeekPrepList">
+                    <p class="empty-msg empty-msg--compact">✓ 이번 주 일정 없음</p>
+                  </div>
+                </section>
+
+                <section class="dash-card dash-card--command dash-card--time-recent" aria-labelledby="dashboardRecentCompletedHeading">
+                  <div class="dash-card-header dash-card-header--command">
+                    <h3 id="dashboardRecentCompletedHeading">최근 완료</h3>
+                    <span class="badge badge--neutral" id="dashboardRecentCompletedCount">0</span>
+                  </div>
+                  <div class="dash-list dash-list--command dash-list--updates" id="dashboardRecentCompletedList">
+                    <p class="empty-msg empty-msg--compact">✓ 없음</p>
+                  </div>
+                </section>
+
+                <section class="dash-card dash-card--command dash-card--time-next-week" aria-labelledby="dashboardNextWeekHeading" id="dashboardNextWeekSection">
+                  <div class="dash-card-header dash-card-header--command">
+                    <h3 id="dashboardNextWeekHeading">다음 주</h3>
+                    <span class="badge badge--neutral" id="dashboardNextWeekCount">0</span>
+                  </div>
+                  <div class="dash-list dash-list--command" id="dashboardNextWeekList">
+                    <p class="empty-msg empty-msg--compact">✓ 없음</p>
+                  </div>
+                </section>
+              </div>
+            </details>
           </div>
-
-          <section class="dash-card dash-card--v2 dash-card--inline dash-card--time-next-week" aria-labelledby="dashboardNextWeekHeading" id="dashboardNextWeekSection">
-            <div class="dash-card-header dash-card-header--v2 dash-card-header--compact">
-              <h3 id="dashboardNextWeekHeading">다음 주</h3>
-              <span class="badge badge--neutral" id="dashboardNextWeekCount">0</span>
-            </div>
-            <div class="dash-list dash-list--compact dash-list--time dash-list--v2" id="dashboardNextWeekList">
-              <p class="empty-msg empty-msg--compact">✓ 없음</p>
-            </div>
-          </section>
 
           <details class="dashboard-stats-collapse">
             <summary class="dashboard-stats-collapse__summary">더 보기 · 통계</summary>
@@ -1753,7 +1761,7 @@
   <script src="firebase-sync.js?v=95"></script>
   <script src="calendar-config.js?v=95"></script>
   <script src="calendar-sync.js?v=95"></script>
-  <script src="app.js?v=99"></script>
+  <script src="app.js?v=100"></script>
   <script src="pwa.js?v=95"></script>
 </body>
 </html>

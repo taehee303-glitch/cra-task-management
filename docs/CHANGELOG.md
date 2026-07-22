@@ -17,6 +17,17 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 100 — 2026-07-22 — CRA Command Center Dashboard
+
+### Changed
+
+- **Dashboard** — CRA Command Center 재설계: Task 중심 단일 컬럼, Today 패널 강조
+- **Command Bar** — 진행 중 / Today / This Week / Overdue 요약 + Study Workflow 스냅샷
+- **Task Row** — 제목·Study/Site·WF Badge·Due·Priority·Status + WF Progress(우측 compact)
+- **Secondary** — 이번 주·완료·다음 주는 접이식 영역으로 이동
+
+---
+
 ## [1.3.0] — build 99 — 2026-07-22 — Dashboard WF grid layout, workflow order save fix
 
 ### Changed
