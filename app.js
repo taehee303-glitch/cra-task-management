@@ -10962,7 +10962,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "113";
+const APP_BUILD = "114";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -14096,11 +14096,11 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
             <span class="task-card__title">${escapeHtml(task.task)}</span>
           </span>
           <span class="task-card__study-site">${escapeHtml(studySite)}</span>
-          ${wfBar ? `<div class="task-card__sub-row task-card__sub-row--wf">${wfBar}</div>` : ""}
           ${routineBlock}
         </button>
         <div class="task-card__meta-row">
           ${workDueRef}
+          ${wfBar ? `<div class="task-card__aside-wf">${wfBar}</div>` : ""}
           ${priorityBadge}
         </div>
       </div>
@@ -14125,12 +14125,12 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
           <div class="task-card__sub-row">
             ${renderTaskStudySiteMeta(task)}
           </div>
-          ${wfBar ? `<div class="task-card__sub-row task-card__sub-row--wf">${wfBar}</div>` : ""}
           ${routineBlock}
         </button>
       </div>
       <div class="task-card__aside">
         ${workDueRef}
+        ${wfBar ? `<div class="task-card__aside-wf">${wfBar}</div>` : ""}
       </div>
       ${renderTaskQuickActions(task)}
     </article>
@@ -14162,11 +14162,15 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
         <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
         <span class="task-card__study-site task-card__study-site--muted">${escapeHtml([studyLabel !== "—" ? studyLabel : "", siteLabel !== "—" ? siteLabel : ""].filter(Boolean).join(" · ") || "Study · Site 미정")}</span>
         ${workflowLabel ? `<span class="task-list-wf">${escapeHtml(workflowLabel)}</span>` : ""}
-        ${renderDashboardTaskWorkflowBar(task)}
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
-      <td class="task-list-due-cell">${workDueRef || '<span class="task-card__work-due-ref task-card__work-due-ref--none">—</span>'}</td>
+      <td class="task-list-due-cell">
+        <div class="task-card__aside task-card__aside--inline">
+          ${workDueRef || '<span class="task-card__work-due-ref task-card__work-due-ref--none">—</span>'}
+          ${renderDashboardTaskWorkflowBar(task)}
+        </div>
+      </td>
       <td class="actions-cell actions-cell--quick">
         ${renderTaskQuickActions(task)}
       </td>
