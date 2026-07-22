@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=111" />
+  <link rel="stylesheet" href="styles.css?v=112" />
   <script>
     (function () {
       var BUILD = "86";
@@ -1371,8 +1371,11 @@
           <div id="routineAnchorFields" class="form-group form-group--wide">
             <label for="routineAnchorDate">기준일 (Anchor Date)</label>
             <input type="date" id="routineAnchorDate" />
-            <label for="routineOffsets" class="routine-offsets-label">Offset (일, 쉼표 구분)</label>
-            <input type="text" id="routineOffsets" placeholder="14, 7, 3, 0" value="14, 7, 3, 0" />
+          </div>
+          <div id="routineOffsetFields" class="form-group form-group--wide">
+            <label for="routineOffsets">Offset (일 전, 쉼표 구분)</label>
+            <input type="text" id="routineOffsets" placeholder="14, 7, 3, 0" value="14, 7, 3, 0" inputmode="numeric" />
+            <p class="form-hint" id="routineOffsetHint">기준일(Anchor Date)로부터 D-N일 전에 Task가 생성됩니다. 예: 14, 7, 3, 0</p>
           </div>
           <div id="routineWeeklyFields" class="form-group" hidden>
             <label for="routineWeekday">요일</label>
@@ -1747,7 +1750,7 @@
   <script src="firebase-sync.js?v=95"></script>
   <script src="calendar-config.js?v=95"></script>
   <script src="calendar-sync.js?v=95"></script>
-  <script src="app.js?v=111"></script>
+  <script src="app.js?v=112"></script>
   <script src="pwa.js?v=95"></script>
 </body>
 </html>

@@ -159,14 +159,14 @@ const ROUTINE_PRESETS = {
     name: "Weekly Query Check",
     taskName: "Query Check",
     priority: "High",
-    schedule: { type: "weekly", weekday: 5 },
+    schedule: { type: "weekly", weekday: 5, offsets: [3, 0] },
     category: "General",
   },
   tmfCheck: {
     name: "Weekly TMF Check",
     taskName: "TMF Check",
     priority: "Medium",
-    schedule: { type: "weekly", weekday: 1 },
+    schedule: { type: "weekly", weekday: 1, offsets: [3, 0] },
     category: "General",
   },
 };
@@ -3709,10 +3709,21 @@ function resolveParallelGroupsInFlowSteps(flowSteps) {
   });
 
   for (let i = 1; i < steps.length; i += 1) {
-    if (steps[i].kind === "root" || steps[i - 1].kind === "root") continue;
+    if (steps[i].kind === "root") continue;
     const group = steps[i].parallelGroup?.trim();
-    if (group && group === steps[i - 1].parallelGroup?.trim()) {
+    if (group && steps[i - 1].kind !== "root" && group === steps[i - 1].parallelGroup?.trim()) {
       steps[i].parallelWithPrevious = true;
+    }
+  }
+
+  for (let i = 0; i < steps.length - 1; i += 1) {
+    if (steps[i].kind === "root") continue;
+    const nextStep = steps[i + 1];
+    if (nextStep.kind === "root") continue;
+    if (nextStep.parallelWithPrevious) {
+      const nextGroup = nextStep.parallelGroup?.trim() || generateId();
+      if (!nextStep.parallelGroup?.trim()) nextStep.parallelGroup = nextGroup;
+      if (!steps[i].parallelGroup?.trim()) steps[i].parallelGroup = nextGroup;
     }
   }
 
@@ -3728,6 +3739,14 @@ function resolveParallelGroupsInFlowSteps(flowSteps) {
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
     if (step.kind === "root" || !step.parallelWithPrevious || i === 0) continue;
+
+    const prev = steps[i - 1];
+    if (prev?.kind === "root") {
+      const groupId = step.parallelGroup?.trim() || generateId();
+      step.parallelGroup = groupId;
+      step.parallelWithPrevious = false;
+      continue;
+    }
 
     const groupId = step.parallelGroup?.trim() || generateId();
     step.parallelGroup = groupId;
@@ -3831,6 +3850,10 @@ function buildWorkflowPhases(stepDefs) {
       if (nextStepDef?.parallelWithPrevious && nextStepDef?.parallelGroup?.trim()) {
         group = nextStepDef.parallelGroup.trim();
       }
+    }
+
+    if (!group && def.kind !== "root" && def.stepDef?.parallelGroup?.trim()) {
+      group = def.stepDef.parallelGroup.trim();
     }
 
     if (group && def.kind !== "root") {
@@ -7246,14 +7269,15 @@ function renderWorkflowDetailStepRow(step, index, total, flowSteps = []) {
   const isRoot = step.kind === "root";
   const offsetLabel = step.kind === "pre" ? "일 전" : "일 후";
   const prevStep = index > 0 ? flowSteps[index - 1] : null;
-  const canParallel = !isRoot && prevStep && prevStep.kind !== "root";
+  const canParallel = !isRoot && prevStep;
+  const parallelLabel = prevStep?.kind === "root" ? "병렬 시작" : "병렬";
 
   const parallelCell = isRoot
     ? ""
     : canParallel
       ? `<label class="workflow-detail-step__parallel">
         <input type="checkbox" class="workflow-detail-step__parallel-input" data-field="parallelWithPrevious"${step.parallelWithPrevious ? " checked" : ""} />
-        <span>병렬</span>
+        <span>${parallelLabel}</span>
       </label>`
       : `<span class="workflow-detail-step__parallel workflow-detail-step__parallel--empty" aria-hidden="true"></span>`;
 
@@ -9009,9 +9033,31 @@ function applyRoutineScheduleFieldsVisibility() {
   const anchorFields = document.getElementById("routineAnchorFields");
   const weeklyFields = document.getElementById("routineWeeklyFields");
   const monthlyFields = document.getElementById("routineMonthlyFields");
+  const offsetHint = document.getElementById("routineOffsetHint");
   if (anchorFields) anchorFields.hidden = type !== "anchor";
   if (weeklyFields) weeklyFields.hidden = type !== "weekly";
   if (monthlyFields) monthlyFields.hidden = type !== "monthly";
+  if (offsetHint) {
+    if (type === "anchor") {
+      offsetHint.textContent = "기준일(Anchor Date)로부터 D-N일 전에 Task가 생성됩니다. 예: 14, 7, 3, 0";
+    } else if (type === "weekly") {
+      offsetHint.textContent = "매주 반복일 기준 D-N일 전에 Task가 생성됩니다. 예: 7, 3, 0";
+    } else {
+      offsetHint.textContent = "매월 반복일 기준 D-N일 전에 Task가 생성됩니다. 예: 7, 3, 0";
+    }
+  }
+}
+
+function expandRoutineDatesWithOffsets(baseDates, offsets, todayStr) {
+  const dates = new Set();
+  const offsetList = offsets?.length ? offsets : [0];
+  baseDates.forEach((baseDate) => {
+    offsetList.forEach((offset) => {
+      const due = addDaysToDate(baseDate, -Math.max(0, Math.round(Number(offset)) || 0));
+      if (due >= todayStr) dates.add(due);
+    });
+  });
+  return [...dates];
 }
 
 function handleRoutineSubmit(e) {
@@ -9070,38 +9116,37 @@ function taskExistsForRoutine(routineId, dueDate, taskName) {
 
 function computeRoutineDueDates(routine, todayStr) {
   const schedule = routine.schedule || {};
-  const dates = new Set();
+  const offsets = schedule.offsets?.length ? schedule.offsets : [14, 7, 3, 0];
 
   if (schedule.type === "anchor") {
     const anchor = schedule.anchorDate || todayStr;
-    (schedule.offsets || [14, 7, 3, 0]).forEach((offset) => {
-      const due = addDaysToDate(anchor, -offset);
-      if (due >= todayStr) dates.add(due);
-    });
-    return [...dates];
+    return expandRoutineDatesWithOffsets([anchor], offsets, todayStr);
   }
 
   if (schedule.type === "weekly") {
     const today = parseDate(todayStr);
     const targetDow = schedule.weekday ?? 1;
-    for (let i = 0; i < 14; i += 1) {
+    const baseDates = [];
+    for (let i = 0; i < 21; i += 1) {
       const d = new Date(today);
       d.setDate(d.getDate() + i);
       if (d.getDay() === targetDow) {
-        dates.add(toDateString(d));
+        baseDates.push(toDateString(d));
       }
     }
-    return [...dates];
+    return expandRoutineDatesWithOffsets(baseDates, offsets, todayStr);
   }
 
   if (schedule.type === "monthly") {
     const today = parseDate(todayStr);
     const dom = schedule.dayOfMonth ?? 1;
-    for (let m = 0; m < 2; m += 1) {
+    const baseDates = [];
+    for (let m = 0; m < 3; m += 1) {
       const d = new Date(today.getFullYear(), today.getMonth() + m, dom);
-      if (toDateString(d) >= todayStr) dates.add(toDateString(d));
+      const dateStr = toDateString(d);
+      if (dateStr >= todayStr) baseDates.push(dateStr);
     }
-    return [...dates];
+    return expandRoutineDatesWithOffsets(baseDates, offsets, todayStr);
   }
 
   return [];
@@ -10846,7 +10891,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "111";
+const APP_BUILD = "112";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 112 — 2026-07-22 — Root parallel + Routine offset
+
+### Changed
+
+- **Workflow** — Root 바로 다음 단계에서 **「병렬 시작」** 선택 가능 (Root 직후 병렬 그룹 시작)
+- **Routine** — Offset 필드를 반복 방식과 관계없이 항상 표시
+- Weekly/Monthly Routine도 **D-N offset** 으로 Task 생성 (예: 7, 3, 0)
+
+---
+
 ## [1.4.0] — build 111 — 2026-07-22 — Parallel workflow visual display fix
 
 ### Fixed
