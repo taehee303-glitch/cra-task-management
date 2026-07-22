@@ -5177,9 +5177,10 @@ function renderMobileTaskActionList() {
     return;
   }
 
-  els.mobileTaskActionList.innerHTML = hierarchicalRows
-    .map((row) => renderTaskCard({ ...row, mobile: true }))
-    .join("");
+  els.mobileTaskActionList.innerHTML = renderGroupedTaskRowsHtml(
+    groupHierarchicalRowsByStudy(hierarchicalRows),
+    (row) => renderTaskCard({ ...row, mobile: true })
+  );
   bindTaskListActions(els.mobileTaskActionList);
 }
 
@@ -10962,7 +10963,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "114";
+const APP_BUILD = "116";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -13326,6 +13327,16 @@ function renderDashboardCommandBar(stats) {
   renderDashboardStudySnapshot();
 }
 
+function renderDashboardTaskStudySiteMeta(task) {
+  const study = task.study?.trim() || "";
+  const siteNumber = getTaskStudySiteNumber(task);
+  const parts = [];
+  if (study) parts.push(study);
+  if (siteNumber) parts.push(siteNumber);
+  if (!parts.length) return "";
+  return escapeHtml(parts.join(" · "));
+}
+
 function renderDashboardTaskSiteMeta(task) {
   const siteNumber = getTaskStudySiteNumber(task);
   const siteName = task.site?.trim() ? getStandardSiteName(task.site) : "";
@@ -13762,7 +13773,7 @@ function renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks) {
   if (els.dashboardWeekPrepList) {
     els.dashboardWeekPrepList.innerHTML = weekPrepTasks.length
       ? renderDashboardSectionTasks(weekPrepTasks, "time-week", "week", DASHBOARD_WEEK_PREVIEW_LIMIT, {
-          layout: "schedule",
+          layout: "v2",
         })
       : renderDashboardEmptyMsg("이번 주 일정 없음");
     setDashCardEmptyState(els.dashboardWeekPrepList, weekPrepTasks.length === 0);
@@ -13878,7 +13889,7 @@ function renderDashItem(task, type, options = {}) {
     const badge = getDashboardDueBadge(task);
     const wfBar = renderDashboardTaskWorkflowBar(task);
     const hasWf = Boolean(wfBar);
-    const siteMeta = renderDashboardTaskSiteMeta(task);
+    const siteMeta = renderDashboardTaskStudySiteMeta(task);
     const siteMetaHtml = siteMeta ? `<span class="dash-task-row__meta">${siteMeta}</span>` : "";
 
     return `
@@ -13973,6 +13984,54 @@ function updateStudyFilterOptions() {
   }
 }
 
+function groupHierarchicalRowsByStudy(hierarchicalRows) {
+  const groups = new Map();
+  const order = [];
+  let activeStudy = null;
+
+  hierarchicalRows.forEach((row) => {
+    if (!row.isSubtask) {
+      activeStudy = row.task.study?.trim() || "Study 미정";
+    }
+    const study = activeStudy || row.task.study?.trim() || "Study 미정";
+    if (!groups.has(study)) {
+      groups.set(study, []);
+      order.push(study);
+    }
+    groups.get(study).push(row);
+  });
+
+  return order.map((study) => [study, groups.get(study)]);
+}
+
+function shouldShowStudyGroupHeaders(grouped) {
+  return grouped.length > 1 || grouped.some(([, rows]) => rows.filter((row) => !row.isSubtask).length > 1);
+}
+
+function renderGroupedTaskRowsHtml(grouped, renderRow, options = {}) {
+  const groupClass = options.groupClass || "task-study-group";
+  const titleClass = options.titleClass || "task-study-group__title";
+  const listClass = options.listClass || "task-study-group__list";
+  const showHeaders = shouldShowStudyGroupHeaders(grouped);
+
+  return grouped
+    .map(([study, rows]) => {
+      const html = rows.map(renderRow).join("");
+      if (!showHeaders) return html;
+      return `
+        <section class="${groupClass}">
+          <h3 class="${titleClass}">${escapeHtml(study)}</h3>
+          <div class="${listClass}">${html}</div>
+        </section>
+      `;
+    })
+    .join("");
+}
+
+function renderTableStudyHeader(study) {
+  return `<tr class="task-table-study-row"><td colspan="5"><span class="task-study-group__title">${escapeHtml(study)}</span></td></tr>`;
+}
+
 function renderTaskList() {
   const filtered = getFilteredTasks();
   updateTasksHomeHeader(filtered.length);
@@ -13982,6 +14041,7 @@ function renderTaskList() {
   filtered.sort(compareTasks);
   const expanded = expandFilteredWithHierarchy(filtered);
   const hierarchicalRows = buildHierarchicalRows(expanded);
+  const groupedRows = groupHierarchicalRowsByStudy(hierarchicalRows);
 
   if (!els.taskCardList) return;
 
@@ -13996,14 +14056,20 @@ function renderTaskList() {
   if (taskViewMode === "list" && els.taskTableWrap && els.taskTableBody) {
     els.taskCardList.hidden = true;
     els.taskTableWrap.hidden = false;
-    els.taskTableBody.innerHTML = hierarchicalRows.map(renderTableRow).join("");
+    const showHeaders = shouldShowStudyGroupHeaders(groupedRows);
+    els.taskTableBody.innerHTML = groupedRows
+      .map(([study, rows]) => {
+        const header = showHeaders ? renderTableStudyHeader(study) : "";
+        return `${header}${rows.map(renderTableRow).join("")}`;
+      })
+      .join("");
     bindTaskListActions(els.taskTableWrap);
     return;
   }
 
   if (els.taskTableWrap) els.taskTableWrap.hidden = true;
   els.taskCardList.hidden = false;
-  els.taskCardList.innerHTML = hierarchicalRows.map(renderTaskCard).join("");
+  els.taskCardList.innerHTML = renderGroupedTaskRowsHtml(groupedRows, (row) => renderTaskCard(row));
   bindTaskListActions(els.taskCardList);
 }
 
@@ -14047,12 +14113,17 @@ function renderTaskDueProminent(task) {
   return "";
 }
 
-function renderTaskQuickActions(task) {
+function renderTaskQuickActions(task, options = {}) {
   const calendarSynced = task.calendarSync?.eventId;
   const isDone = task.status === "Completed";
+  const includeMeta = Boolean(options.includeMeta);
+  const wfBar = includeMeta ? renderDashboardTaskWorkflowBar(task) : "";
+  const workDueRef = includeMeta ? renderTaskWorkDueRef(task) : "";
 
   return `
     <div class="task-card__quick-actions">
+      ${wfBar ? `<div class="task-card__quick-wf">${wfBar}</div>` : ""}
+      ${workDueRef ? `<div class="task-card__quick-due">${workDueRef}</div>` : ""}
       <div class="task-card__quick-action">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</div>
       <button type="button" class="task-card__icon-btn${calendarSynced ? " task-card__icon-btn--synced" : ""}" data-google-calendar="${escapeAttr(task.id)}" title="Google Calendar" aria-label="Google Calendar">📅</button>
       <button type="button" class="task-card__icon-btn task-card__icon-btn--complete${isDone ? " task-card__icon-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>✓</button>
@@ -14069,8 +14140,6 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
   const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "";
   const studySite =
     siteLabel && siteLabel !== "Site 미정" ? `${studyLabel} · ${siteLabel}` : studyLabel;
-  const wfBar = renderDashboardTaskWorkflowBar(task);
-  const workDueRef = renderTaskWorkDueRef(task);
   const routineBlock = renderTaskRoutineLabel(task);
   const isDone = task.status === "Completed";
   const priorityClassName = priorityClass(task.priority);
@@ -14099,13 +14168,11 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
           ${routineBlock}
         </button>
         <div class="task-card__meta-row">
-          ${workDueRef}
-          ${wfBar ? `<div class="task-card__aside-wf">${wfBar}</div>` : ""}
           ${priorityBadge}
         </div>
       </div>
-      <div class="task-card__actions task-card__actions--action">
-        <span class="task-card__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
+      <div class="task-card__actions task-card__actions--action task-card__actions--meta">
+        ${renderTaskQuickActions(task, { includeMeta: true })}
         <button type="button" class="task-card__action task-card__action--detail" data-edit="${escapeAttr(task.id)}" title="상세 보기" aria-label="상세 보기">›</button>
         ${renderTaskMoreMenu(task)}
       </div>
@@ -14128,11 +14195,7 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
           ${routineBlock}
         </button>
       </div>
-      <div class="task-card__aside">
-        ${workDueRef}
-        ${wfBar ? `<div class="task-card__aside-wf">${wfBar}</div>` : ""}
-      </div>
-      ${renderTaskQuickActions(task)}
+      ${renderTaskQuickActions(task, { includeMeta: true })}
     </article>
   `;
 }
@@ -14151,7 +14214,6 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const workDueRef = renderTaskWorkDueRef(task);
   const studyLabel = task.study?.trim() || "—";
   const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "—";
   const workflowLabel = getDashboardWorkflowLabel(task);
@@ -14165,14 +14227,9 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
-      <td class="task-list-due-cell">
-        <div class="task-card__aside task-card__aside--inline">
-          ${workDueRef || '<span class="task-card__work-due-ref task-card__work-due-ref--none">—</span>'}
-          ${renderDashboardTaskWorkflowBar(task)}
-        </div>
-      </td>
+      <td class="task-list-due-cell"><span class="task-card__work-due-ref task-card__work-due-ref--none">—</span></td>
       <td class="actions-cell actions-cell--quick">
-        ${renderTaskQuickActions(task)}
+        ${renderTaskQuickActions(task, { includeMeta: true })}
       </td>
     </tr>
   `;

@@ -10391,15 +10391,6 @@ button.dashboard-v2__urgent-bucket:hover {
   margin-top: calc(4px * var(--ui-scale));
 }
 
-.task-card__meta-row .task-card__aside-wf .dash-task-wf-bar {
-  min-width: calc(6.5rem * var(--ui-scale));
-}
-
-.task-card__meta-row .task-card__aside-wf .dash-task-wf-bar__track {
-  min-width: calc(6.5rem * var(--ui-scale));
-  height: calc(9px * var(--ui-scale));
-}
-
 .task-card__due-badge {
   flex-shrink: 0;
   font-size: calc(11px * var(--ui-scale));
@@ -11436,31 +11427,63 @@ button.dashboard-v2__urgent-bucket:hover {
 
 /* ── Build 91: My Tasks row layout ── */
 .task-card--row {
-  grid-template-columns: minmax(44px, 52px) minmax(0, 1fr) auto max-content;
+  grid-template-columns: minmax(44px, 52px) minmax(0, 1fr) max-content;
   align-items: center;
   gap: calc(12px * var(--ui-scale));
 }
 
-.task-card__aside {
+.task-card__quick-wf,
+.task-card__quick-due {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.task-card__quick-actions .dash-task-wf-bar {
+  flex-direction: row;
+  align-items: center;
   justify-content: center;
+  height: calc(38px * var(--ui-scale));
+  min-height: calc(38px * var(--ui-scale));
+  min-width: calc(84px * var(--ui-scale));
+  padding: 0 calc(10px * var(--ui-scale));
+  border: 1px solid #ddd6fe;
+  border-radius: calc(10px * var(--ui-scale));
+  background: #faf5ff;
+  box-sizing: border-box;
   gap: calc(6px * var(--ui-scale));
-  min-width: calc(7.5rem * var(--ui-scale));
-  padding-inline: calc(2px * var(--ui-scale));
 }
 
-.task-card__aside--inline {
-  flex-direction: column;
-  align-items: flex-end;
-  min-width: 0;
+.task-card__quick-actions .dash-task-wf-bar__track {
+  flex: 1 1 auto;
+  width: calc(52px * var(--ui-scale));
+  min-width: calc(52px * var(--ui-scale));
+  height: calc(8px * var(--ui-scale));
 }
 
-.task-card__aside-wf {
+.task-card__quick-actions .dash-task-wf-bar__pct {
+  font-size: calc(12px * var(--ui-scale));
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.task-card__quick-actions .task-card__work-due-ref {
+  min-width: calc(84px * var(--ui-scale));
+  height: calc(38px * var(--ui-scale));
+  min-height: calc(38px * var(--ui-scale));
+  padding-inline: calc(10px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
+}
+
+.task-card__actions--meta {
   display: flex;
-  justify-content: flex-end;
-  width: 100%;
+  align-items: center;
+  gap: calc(4px * var(--ui-scale));
+  flex-shrink: 0;
+}
+
+.task-card__actions--meta .task-card__quick-actions {
+  margin-left: 0;
 }
 
 .task-card__work-due-ref {
@@ -11516,37 +11539,14 @@ button.dashboard-v2__urgent-bucket:hover {
   margin-top: calc(4px * var(--ui-scale));
 }
 
-.task-card__aside .dash-task-wf-bar,
-.task-card__aside-wf .dash-task-wf-bar,
-.task-card__aside--inline .dash-task-wf-bar {
-  min-width: calc(7.5rem * var(--ui-scale));
-  width: 100%;
-  gap: calc(4px * var(--ui-scale));
-}
-
-.task-card__aside .dash-task-wf-bar__track,
-.task-card__aside-wf .dash-task-wf-bar__track,
-.task-card__aside--inline .dash-task-wf-bar__track {
-  width: 100%;
-  min-width: calc(7.5rem * var(--ui-scale));
-  height: calc(10px * var(--ui-scale));
-}
-
-.task-card__aside .dash-task-wf-bar__pct,
-.task-card__aside-wf .dash-task-wf-bar__pct,
-.task-card__aside--inline .dash-task-wf-bar__pct {
-  font-size: calc(12px * var(--ui-scale));
-  font-weight: 800;
-}
-
 .task-list-due-cell {
   text-align: right;
   white-space: nowrap;
   vertical-align: middle;
 }
 
-.task-list-due-cell .task-card__aside--inline {
-  gap: calc(5px * var(--ui-scale));
+.actions-cell--quick .task-card__quick-actions {
+  justify-content: flex-end;
 }
 
 .routine-reminder-grid {
@@ -11819,6 +11819,15 @@ button.dashboard-v2__urgent-bucket:hover {
   .task-card--row .task-card__quick-actions {
     grid-column: 1 / -1;
     justify-content: flex-end;
+    flex-wrap: wrap;
+    padding-top: calc(8px * var(--ui-scale));
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .task-card--mobile .task-card__actions--meta {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     padding-top: calc(8px * var(--ui-scale));
     border-top: 1px solid #f1f5f9;
   }
@@ -12358,6 +12367,71 @@ button.dashboard-v2__urgent-bucket:hover {
   line-height: 1;
 }
 
+.dash-list--v2 {
+  padding: 0.35rem 0.45rem 0.5rem;
+}
+
+.dash-list--v2 .dash-task-row {
+  background: #fff;
+  border: 1px solid #e8eef4;
+  border-radius: 10px;
+  padding: 0.5rem 0.55rem;
+  margin-bottom: 0.35rem;
+  border-bottom: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.dash-list--v2 .dash-study-group__list .dash-task-row:last-child,
+.dash-list--v2 .dash-task-row:last-child {
+  margin-bottom: 0;
+}
+
+.dash-list--updates .dash-update-item {
+  background: #fff;
+  border: 1px solid #e8eef4;
+  border-radius: 10px;
+  margin-bottom: 0.35rem;
+  padding: 0.45rem 0.5rem;
+  border-bottom: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.dash-list--updates .dash-update-item:last-child {
+  margin-bottom: 0;
+}
+
+.task-study-group + .task-study-group {
+  margin-top: calc(14px * var(--ui-scale));
+  padding-top: calc(10px * var(--ui-scale));
+  border-top: 1px dashed #e2e8f0;
+}
+
+.task-study-group__title {
+  margin: 0 0 calc(8px * var(--ui-scale));
+  padding: 0 calc(4px * var(--ui-scale));
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.task-study-group__list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--ui-scale));
+}
+
+.task-table-study-row td {
+  padding: calc(10px * var(--ui-scale)) calc(8px * var(--ui-scale)) calc(4px * var(--ui-scale));
+  background: transparent;
+  border-bottom: none;
+}
+
+.task-table-study-row .task-study-group__title {
+  margin: 0;
+}
+
 .dash-study-group + .dash-study-group {
   margin-top: 0.55rem;
   padding-top: 0.55rem;
@@ -12377,6 +12451,7 @@ button.dashboard-v2__urgent-bucket:hover {
 .dash-study-group__list {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
 }
 
 @media (max-width: 640px) {
