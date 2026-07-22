@@ -6764,6 +6764,44 @@ body.body--settings-open {
   gap: 0;
 }
 
+.workflow-detail-parallel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border: 1px dashed #c4b5fd;
+  border-radius: 12px;
+  background: #faf5ff;
+}
+
+.workflow-detail-parallel__badge {
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #7c3aed;
+  letter-spacing: 0.04em;
+}
+
+.workflow-detail-parallel__steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.workflow-detail-parallel__sep {
+  color: #a78bfa;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.workflow-detail-step--parallel-member {
+  flex: 1 1 14rem;
+  min-width: min(100%, 14rem);
+}
+
 .workflow-detail-step {
   display: grid;
   grid-template-columns: auto minmax(8rem, 1fr) auto 4.25rem 4.75rem auto;
@@ -8095,6 +8133,47 @@ body.body--settings-open {
   color: #c4b5fd;
   font-size: 0.95rem;
   line-height: 1;
+}
+
+.workflow-timeline__parallel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px dashed #ddd6fe;
+  border-radius: 10px;
+  background: #faf5ff;
+}
+
+.workflow-timeline__parallel-badge {
+  flex: 0 0 100%;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #7c3aed;
+  letter-spacing: 0.04em;
+}
+
+.workflow-timeline__parallel-sep {
+  color: #a78bfa;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.dashboard-workflow-adjacent__parallel {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.dashboard-workflow-adjacent__row--parallel .dashboard-workflow-adjacent__content {
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
 /* Compact dashboard status chip */

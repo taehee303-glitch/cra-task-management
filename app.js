@@ -3640,34 +3640,125 @@ function normalizeWorkflowStep(step) {
 }
 
 function resolveParallelGroupsInFlowSteps(flowSteps) {
-  let activeGroupId = null;
-
-  return flowSteps.map((step, index) => {
+  const steps = flowSteps.map((step) => {
     if (step.kind === "root") {
-      activeGroupId = null;
-      return { ...step, parallelGroup: "", parallelWithPrevious: false };
+      return {
+        ...step,
+        parallelGroup: "",
+        parallelWithPrevious: false,
+      };
     }
-
-    const parallelWithPrevious = Boolean(step.parallelWithPrevious);
-    if (parallelWithPrevious && index > 0) {
-      const prev = flowSteps[index - 1];
-      if (prev.kind !== "root") {
-        if (!activeGroupId) activeGroupId = prev.parallelGroup || generateId();
-        return {
-          ...normalizeWorkflowStep({ ...step, parallelGroup: activeGroupId }),
-          kind: step.kind,
-          parallelWithPrevious: true,
-        };
-      }
-    }
-
-    activeGroupId = null;
     return {
       ...normalizeWorkflowStep(step),
       kind: step.kind,
-      parallelGroup: "",
-      parallelWithPrevious: false,
+      parallelWithPrevious: Boolean(step.parallelWithPrevious),
     };
+  });
+
+  for (let i = 1; i < steps.length; i += 1) {
+    if (steps[i].kind === "root" || steps[i - 1].kind === "root") continue;
+    const group = steps[i].parallelGroup?.trim();
+    if (group && group === steps[i - 1].parallelGroup?.trim()) {
+      steps[i].parallelWithPrevious = true;
+    }
+  }
+
+  for (let i = 0; i < steps.length - 1; i += 1) {
+    if (steps[i].kind === "root") continue;
+    const nextGroup = steps[i + 1].parallelGroup?.trim();
+    if (!nextGroup || steps[i + 1].kind === "root") continue;
+    if (!steps[i].parallelGroup?.trim()) {
+      steps[i].parallelGroup = nextGroup;
+    }
+  }
+
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    if (step.kind === "root" || !step.parallelWithPrevious || i === 0) continue;
+
+    const groupId = step.parallelGroup?.trim() || generateId();
+    step.parallelGroup = groupId;
+
+    let j = i - 1;
+    while (j >= 0 && steps[j].kind !== "root") {
+      steps[j].parallelGroup = groupId;
+      if (steps[j].parallelWithPrevious) {
+        j -= 1;
+      } else {
+        break;
+      }
+    }
+  }
+
+  const seenGroups = new Set();
+  steps.forEach((step, index) => {
+    const group = step.parallelGroup?.trim();
+    if (!group || seenGroups.has(group)) return;
+    seenGroups.add(group);
+
+    const memberIndices = steps
+      .map((item, itemIndex) => (item.parallelGroup?.trim() === group ? itemIndex : -1))
+      .filter((itemIndex) => itemIndex >= 0);
+
+    let sharedOffset = null;
+    memberIndices.forEach((memberIndex) => {
+      const offset = parseWorkflowDueOffset(steps[memberIndex].dueOffset);
+      if (offset !== null) sharedOffset = offset;
+    });
+    if (sharedOffset === null) sharedOffset = 0;
+
+    memberIndices.forEach((memberIndex) => {
+      steps[memberIndex].dueOffset = sharedOffset;
+    });
+  });
+
+  steps.forEach((step) => {
+    if (step.kind === "root") {
+      step.parallelGroup = "";
+      step.parallelWithPrevious = false;
+    } else if (!step.parallelGroup?.trim()) {
+      step.parallelGroup = "";
+    }
+  });
+
+  return steps;
+}
+
+function buildFlowStepPhases(flowSteps) {
+  const phases = [];
+  let index = 0;
+
+  while (index < flowSteps.length) {
+    const step = flowSteps[index];
+    const group = step.parallelGroup?.trim();
+    const members = [{ step, index }];
+    let next = index + 1;
+
+    if (group && step.kind !== "root") {
+      while (next < flowSteps.length && flowSteps[next].parallelGroup?.trim() === group) {
+        members.push({ step: flowSteps[next], index: next });
+        next += 1;
+      }
+    } else {
+      next = index + 1;
+    }
+
+    phases.push({
+      type: members.length > 1 ? "parallel" : "single",
+      members,
+    });
+    index = next;
+  }
+
+  return phases;
+}
+
+function syncParallelGroupOffsetsInDom(groupId, offsetValue) {
+  if (!els.workflowDetailBody || !groupId) return;
+  els.workflowDetailBody.querySelectorAll(".workflow-detail-step[data-parallel-group]").forEach((row) => {
+    if (row.dataset.parallelGroup !== groupId) return;
+    const offsetInput = row.querySelector('[data-field="dueOffset"]');
+    if (offsetInput) offsetInput.value = offsetValue;
   });
 }
 
@@ -3712,6 +3803,45 @@ function isWorkflowPhaseComplete(phase, rootTask, instance) {
         : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true });
     return matched?.status === "Completed";
   });
+}
+
+function isWorkflowParallelPhase(phase) {
+  return Boolean(phase && phase.defs.length > 1);
+}
+
+function getWorkflowPhaseOpenDefs(phase, rootTask, instance) {
+  if (!phase) return [];
+  return phase.defs.filter((def) => {
+    const matched =
+      def.kind === "root"
+        ? rootTask
+        : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true });
+    return matched?.status !== "Completed";
+  });
+}
+
+function createMissingWorkflowPhaseTasks(workflow, root, instance, phase, anchorTask) {
+  if (!phase) return [];
+
+  const createdAll = [];
+  phase.defs.forEach((def, phaseDefIndex) => {
+    if (def.kind === "root") return;
+
+    const existing = findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
+    if (existing) return;
+
+    const stepIndex = phase.indices[phaseDefIndex];
+    const created = createWorkflowStepTask({
+      workflow,
+      root,
+      instance,
+      stepEntry: { def, index: stepIndex },
+      anchorTask,
+    });
+    if (created) createdAll.push(created);
+  });
+
+  return createdAll;
 }
 
 function computeWorkflowStepCount(workflow) {
@@ -5004,16 +5134,18 @@ function getUpcomingTaskGroups() {
   };
 
   tasks.forEach((t) => {
-    if (isInboxTask(t) || !isActive(t) || !t.dueDate) return;
-    const diff = daysUntilDue(t.dueDate);
+    if (isInboxTask(t) || !isActive(t)) return;
+    const schedulingDue = getTaskSchedulingDueDate(t);
+    if (!schedulingDue) return;
+    const diff = daysUntilDue(schedulingDue);
     if (diff <= 0) return;
     if (diff === 1) {
       groups.tomorrow.push(t);
     } else if (diff === 2) {
       groups.d2.push(t);
-    } else if (isDueThisWeek(t.dueDate)) {
+    } else if (isDueThisWeek(schedulingDue)) {
       groups.thisWeek.push(t);
-    } else if (isDueNextWeek(t.dueDate)) {
+    } else if (isDueNextWeek(schedulingDue)) {
       groups.nextWeek.push(t);
     }
   });
@@ -7084,7 +7216,7 @@ function renderWorkflowDetailStepRow(step, index, total, flowSteps = []) {
       : `<span class="workflow-detail-step__parallel workflow-detail-step__parallel--empty" aria-hidden="true"></span>`;
 
   return `
-    <div class="workflow-detail-step${isRoot ? " workflow-detail-step--root" : ""}${step.parallelWithPrevious ? " workflow-detail-step--parallel" : ""}" data-step-index="${index}">
+    <div class="workflow-detail-step${isRoot ? " workflow-detail-step--root" : ""}${step.parallelWithPrevious ? " workflow-detail-step--parallel" : ""}${step.parallelGroup ? " workflow-detail-step--parallel-member" : ""}" data-step-index="${index}"${step.parallelGroup ? ` data-parallel-group="${escapeAttr(step.parallelGroup)}"` : ""}>
       <div class="workflow-detail-step__reorder">
         <button type="button" class="workflow-detail-step__move" data-move-up aria-label="위로"${index === 0 ? " disabled" : ""}>↑</button>
         <button type="button" class="workflow-detail-step__move" data-move-down aria-label="아래로"${index === total - 1 ? " disabled" : ""}>↓</button>
@@ -7227,16 +7359,28 @@ function bindWorkflowDetailEditorEvents() {
 
   els.workflowDetailBody.querySelectorAll('[data-field="parallelWithPrevious"]').forEach((input) => {
     input.addEventListener("change", () => {
-      if (!input.checked) return;
-      const row = input.closest(".workflow-detail-step");
-      const index = Number(row?.dataset.stepIndex);
-      if (!Number.isFinite(index) || index <= 0) return;
-      const offsetInput = row.querySelector('[data-field="dueOffset"]');
-      const prevRow = els.workflowDetailBody.querySelector(`.workflow-detail-step[data-step-index="${index - 1}"]`);
-      const prevOffset = prevRow?.querySelector('[data-field="dueOffset"]')?.value;
-      if (offsetInput && prevOffset !== undefined && prevOffset !== "") {
-        offsetInput.value = prevOffset;
+      syncWorkflowDetailDraftFromDom();
+      if (input.checked) {
+        const row = input.closest(".workflow-detail-step");
+        const index = Number(row?.dataset.stepIndex);
+        if (Number.isFinite(index) && index > 0) {
+          const prevOffset = workflowDetailDraft.flowSteps[index - 1]?.dueOffset;
+          if (prevOffset !== null && prevOffset !== undefined && workflowDetailDraft.flowSteps[index]) {
+            workflowDetailDraft.flowSteps[index].dueOffset = prevOffset;
+          }
+        }
       }
+      workflowDetailDraft.flowSteps = resolveParallelGroupsInFlowSteps(workflowDetailDraft.flowSteps);
+      renderWorkflowDetailEditor();
+    });
+  });
+
+  els.workflowDetailBody.querySelectorAll('[data-field="dueOffset"]').forEach((input) => {
+    input.addEventListener("input", () => {
+      const row = input.closest(".workflow-detail-step");
+      const groupId = row?.dataset.parallelGroup?.trim();
+      if (!groupId) return;
+      syncParallelGroupOffsetsInDom(groupId, input.value);
     });
   });
 
@@ -7253,17 +7397,39 @@ function bindWorkflowDetailEditorEvents() {
   });
 }
 
+function renderWorkflowDetailStepsGrouped(flowSteps) {
+  const phases = buildFlowStepPhases(flowSteps);
+
+  return phases
+    .map((phase, phaseIndex) => {
+      const arrow = phaseIndex > 0 ? '<div class="workflow-detail-arrow" aria-hidden="true">↓</div>' : "";
+
+      if (phase.type === "parallel") {
+        const rows = phase.members
+          .map(({ step, index }, memberIndex) => {
+            const sep =
+              memberIndex > 0
+                ? '<span class="workflow-detail-parallel__sep" aria-hidden="true">+</span>'
+                : "";
+            return `${sep}${renderWorkflowDetailStepRow(step, index, flowSteps.length, flowSteps)}`;
+          })
+          .join("");
+
+        return `${arrow}<div class="workflow-detail-parallel"><span class="workflow-detail-parallel__badge">병렬</span><div class="workflow-detail-parallel__steps">${rows}</div></div>`;
+      }
+
+      const { step, index } = phase.members[0];
+      return `${arrow}${renderWorkflowDetailStepRow(step, index, flowSteps.length, flowSteps)}`;
+    })
+    .join("");
+}
+
 function renderWorkflowDetailEditor() {
   if (!els.workflowDetailBody || !workflowDetailDraft) return;
 
   const draft = workflowDetailDraft;
   const flowSteps = draft.flowSteps || [];
-  const rows = flowSteps
-    .map((step, index) => {
-      const row = renderWorkflowDetailStepRow(step, index, flowSteps.length, flowSteps);
-      return index > 0 ? `<div class="workflow-detail-arrow" aria-hidden="true">↓</div>${row}` : row;
-    })
-    .join("");
+  const rows = renderWorkflowDetailStepsGrouped(flowSteps);
 
   els.workflowDetailBody.innerHTML = `
     <div class="form-group">
@@ -7299,7 +7465,7 @@ function openWorkflowDetailModal(ref) {
   const scopeInfo = resolveWorkflowEditScope(workflow.id, ref.studyId || selectedWorkflowStudyId);
   workflowDetailDraft = {
     name: workflow.name,
-    flowSteps: workflowRecordToFlowSteps(workflow),
+    flowSteps: resolveParallelGroupsInFlowSteps(workflowRecordToFlowSteps(workflow)),
     scopeMode: scopeInfo.scopeMode,
     studyIds: scopeInfo.studyIds,
     appliedStudies: scopeInfo.appliedStudies,
@@ -7667,8 +7833,15 @@ function processWorkflowTaskCompletion(completedTask) {
   );
   const phaseIndex = phases.findIndex((phase) => phase.indices.includes(currentIndex));
   const currentPhase = phaseIndex >= 0 ? phases[phaseIndex] : null;
+  const nextPhase = phaseIndex >= 0 && phaseIndex < phases.length - 1 ? phases[phaseIndex + 1] : null;
+
+  if (currentPhase && isWorkflowParallelPhase(currentPhase)) {
+    createMissingWorkflowPhaseTasks(workflow, root, instance, currentPhase, completedTask);
+  }
 
   if (!currentPhase || !isWorkflowPhaseComplete(currentPhase, root, instance)) {
+    const openDefs = getWorkflowPhaseOpenDefs(currentPhase, root, instance);
+    const parallelRemaining = openDefs.map((def) => def.taskName).filter(Boolean).join(", ");
     return {
       handled: true,
       created: null,
@@ -7676,11 +7849,11 @@ function processWorkflowTaskCompletion(completedTask) {
       isLastStep: false,
       workflowName,
       nextTaskName: null,
-      waitingForParallel: true,
+      waitingForParallel: isWorkflowParallelPhase(currentPhase) && Boolean(parallelRemaining),
+      parallelRemaining,
     };
   }
 
-  const nextPhase = phases[phaseIndex + 1];
   const progress = getWorkflowProgressStats(workflow, root, instance);
 
   if (!nextPhase || progress.completed >= progress.total) {
@@ -7695,28 +7868,8 @@ function processWorkflowTaskCompletion(completedTask) {
     };
   }
 
-  const createdAll = [];
-  const nextNames = [];
-
-  nextPhase.defs.forEach((def, phaseDefIndex) => {
-    if (def.kind === "root") return;
-    const stepIndex = nextPhase.indices[phaseDefIndex];
-    const stepEntry = { def, index: stepIndex };
-    const existing = findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
-    if (existing) return;
-
-    const created = createWorkflowStepTask({
-      workflow,
-      root,
-      instance,
-      stepEntry,
-      anchorTask: completedTask,
-    });
-    if (created) {
-      createdAll.push(created);
-      nextNames.push(created.task);
-    }
-  });
+  const createdAll = createMissingWorkflowPhaseTasks(workflow, root, instance, nextPhase, completedTask);
+  const nextNames = createdAll.map((task) => task.task);
 
   return {
     handled: true,
@@ -7726,6 +7879,7 @@ function processWorkflowTaskCompletion(completedTask) {
     workflowName,
     nextTaskName: nextNames.join(", "),
     nextTask: createdAll[0] || null,
+    createdParallelPhase: isWorkflowParallelPhase(nextPhase),
   };
 }
 
@@ -7746,9 +7900,18 @@ function finalizeWorkflowTaskCompletion(completedTask, result) {
 
   if (!result?.handled) return;
 
+  if (result.waitingForParallel) {
+    showToast(
+      result.parallelRemaining
+        ? `${result.workflowName} — 「${completedTask.task}」 완료. 병렬 Task 「${result.parallelRemaining}」도 각각 완료해 주세요.`
+        : `${result.workflowName} — 병렬 Task 중 일부만 완료되었습니다. 나머지도 각각 완료해 주세요.`
+    );
+    return;
+  }
+
   if (result.createdAll?.length > 1) {
     showToast(
-      `${result.workflowName} Workflow — 병렬 Task ${result.createdAll.length}건이 생성되었습니다. (${result.nextTaskName})${getWorkflowTaskCreationToastSuffix()}`
+      `${result.workflowName} Workflow — 병렬 Task ${result.createdAll.length}건이 함께 생성되었습니다. (${result.nextTaskName}) 각 Task는 개별로 완료해 주세요.${getWorkflowTaskCreationToastSuffix()}`
     );
     return;
   }
@@ -7773,7 +7936,7 @@ function handleTaskCompletedEffects(taskId) {
     const wfResult = processWorkflowTaskCompletion(completedTask);
     finalizeWorkflowTaskCompletion(completedTask, wfResult);
     return {
-      calendarCreates: wfResult.created?.id ? [wfResult.created.id] : [],
+      calendarCreates: (wfResult.createdAll || []).map((task) => task.id).filter(Boolean),
     };
   }
 
@@ -8028,28 +8191,52 @@ function getWorkflowProgressStats(workflow, rootTask, instance) {
 
 function getAdjacentWorkflowStepInfo(task, workflow, rootTask, instance) {
   const stepDefs = buildWorkflowTimelineStepDefs(workflow, rootTask);
+  const phases = buildWorkflowPhases(stepDefs);
   const currentIndex = Math.max(
     0,
     (task.stepIndex || getWorkflowStepIndexForTask(task, rootTask, workflow) || 1) - 1
   );
+  const currentPhaseIndex = phases.findIndex((phase) => phase.indices.includes(currentIndex));
 
-  const buildEntry = (def, index) => {
-    if (!def || index < 0 || index >= stepDefs.length) return null;
-    const matchedTask =
+  const buildPhaseEntry = (phase) => {
+    if (!phase) return null;
+    const matchedTasks = phase.defs.map((def) =>
       def.kind === "root"
         ? rootTask
-        : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true });
+        : findTaskForWorkflowStepInInstance(def.taskName, rootTask, instance, { matchExternal: true })
+    );
     return {
-      def,
-      matchedTask,
-      index,
+      defs: phase.defs,
+      indices: phase.indices,
+      matchedTasks,
+      label: phase.defs.map((def) => def.taskName).join(" + "),
+      isParallel: phase.defs.length > 1,
     };
   };
 
+  const currentPhase = currentPhaseIndex >= 0 ? phases[currentPhaseIndex] : null;
+
   return {
-    current: buildEntry(stepDefs[currentIndex], currentIndex),
-    prev: buildEntry(stepDefs[currentIndex - 1], currentIndex - 1),
-    next: buildEntry(stepDefs[currentIndex + 1], currentIndex + 1),
+    current: currentPhase
+      ? {
+          def: stepDefs[currentIndex],
+          matchedTask:
+            stepDefs[currentIndex].kind === "root"
+              ? rootTask
+              : findTaskForWorkflowStepInInstance(
+                  stepDefs[currentIndex].taskName,
+                  rootTask,
+                  instance,
+                  { matchExternal: true }
+                ),
+          index: currentIndex,
+          phase: buildPhaseEntry(currentPhase),
+        }
+      : null,
+    prev: buildPhaseEntry(currentPhaseIndex > 0 ? phases[currentPhaseIndex - 1] : null),
+    next: buildPhaseEntry(
+      currentPhaseIndex >= 0 && currentPhaseIndex < phases.length - 1 ? phases[currentPhaseIndex + 1] : null
+    ),
     currentIndex,
     total: stepDefs.length,
   };
@@ -8059,7 +8246,7 @@ function renderDashboardWorkflowAdjacentSteps(task, workflow, rootTask, instance
   const adjacent = getAdjacentWorkflowStepInfo(task, workflow, rootTask, instance);
   if (!adjacent.current) return "";
 
-  const renderStepRow = (label, entry, variant) => {
+  const renderPhaseRow = (label, entry, variant) => {
     if (!entry) {
       return `
         <div class="dashboard-workflow-adjacent__row dashboard-workflow-adjacent__row--${variant} dashboard-workflow-adjacent__row--empty">
@@ -8069,19 +8256,33 @@ function renderDashboardWorkflowAdjacentSteps(task, workflow, rootTask, instance
       `;
     }
 
-    const meta = entry.matchedTask
-      ? formatDueDisplay(entry.matchedTask)
-      : formatWorkflowStepDueHint(entry.def, null).replace(/^\s*\(/, "").replace(/\)$/, "") || "";
+    const parallelBadge = entry.isParallel
+      ? '<span class="dashboard-workflow-adjacent__parallel">병렬</span>'
+      : "";
+    const metaParts = entry.defs.map((def, defIndex) => {
+      const matchedTask = entry.matchedTasks?.[defIndex];
+      if (matchedTask) return formatDueDisplay(matchedTask);
+      return formatWorkflowStepDueHint(def, null).replace(/^\s*\(/, "").replace(/\)$/, "") || "";
+    }).filter(Boolean);
+    const meta = metaParts.length ? metaParts[0] : "";
 
     return `
-      <div class="dashboard-workflow-adjacent__row dashboard-workflow-adjacent__row--${variant}">
+      <div class="dashboard-workflow-adjacent__row dashboard-workflow-adjacent__row--${variant}${entry.isParallel ? " dashboard-workflow-adjacent__row--parallel" : ""}">
         <span class="dashboard-workflow-adjacent__label">${escapeHtml(label)}</span>
         <div class="dashboard-workflow-adjacent__content">
-          <span class="dashboard-workflow-adjacent__name">${escapeHtml(entry.def.taskName)}</span>
+          <span class="dashboard-workflow-adjacent__name">${escapeHtml(entry.label)}</span>
+          ${parallelBadge}
           ${meta ? `<span class="dashboard-workflow-adjacent__meta">${escapeHtml(meta)}</span>` : ""}
         </div>
       </div>
     `;
+  };
+
+  const currentEntry = adjacent.current.phase || {
+    label: adjacent.current.def.taskName,
+    isParallel: false,
+    defs: [adjacent.current.def],
+    matchedTasks: [adjacent.current.matchedTask],
   };
 
   return `
@@ -8090,9 +8291,9 @@ function renderDashboardWorkflowAdjacentSteps(task, workflow, rootTask, instance
         <span class="dashboard-workflow-adjacent__position-label">현재 위치</span>
         <span class="dashboard-workflow-adjacent__position-value">${adjacent.currentIndex + 1} / ${adjacent.total}</span>
       </div>
-      ${renderStepRow("이전", adjacent.prev, "prev")}
-      ${renderStepRow("현재", adjacent.current, "current")}
-      ${renderStepRow("다음", adjacent.next, "next")}
+      ${renderPhaseRow("이전", adjacent.prev, "prev")}
+      ${renderPhaseRow("현재", currentEntry, "current")}
+      ${renderPhaseRow("다음", adjacent.next, "next")}
     </section>
   `;
 }
@@ -8126,6 +8327,46 @@ function renderDashboardWorkflowDetailContent(task) {
   `;
 }
 
+function renderWorkflowTimelineStep(def, index, stepDefs, root, instance, task, options = {}) {
+  const interactive = options.interactive !== false;
+  const clickMode = options.clickMode || "edit";
+  const currentIndex = options.currentIndex ?? 0;
+
+  const matchedTask =
+    def.kind === "root"
+      ? root
+      : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
+  const isDone = matchedTask?.status === "Completed";
+  const isCurrent = index === currentIndex && !isDone;
+  let icon;
+  let stateClass;
+  if (isDone) {
+    icon = "✓";
+    stateClass = "workflow-timeline__step--done";
+  } else if (isCurrent) {
+    icon = "●";
+    stateClass = "workflow-timeline__step--current";
+  } else {
+    icon = "○";
+    stateClass = "workflow-timeline__step--pending";
+  }
+
+  const dueHint = !isDone ? formatWorkflowStepDueHint(def, matchedTask) : "";
+  const nameLabel = isCurrent ? `${def.taskName} (현재)` : `${def.taskName}${dueHint}`;
+  let stepInner;
+  if (matchedTask && interactive) {
+    const clickAttr =
+      clickMode === "dashboard"
+        ? `data-dashboard-step-task="${escapeAttr(matchedTask.id)}"`
+        : `data-edit="${escapeAttr(matchedTask.id)}"`;
+    stepInner = `<button type="button" class="workflow-timeline__btn" ${clickAttr}><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></button>`;
+  } else {
+    stepInner = `<div class="workflow-timeline__placeholder"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></div>`;
+  }
+
+  return `<div class="workflow-timeline__step ${stateClass}">${stepInner}</div>`;
+}
+
 function renderWorkflowTimeline(task, options = {}) {
   const interactive = options.interactive !== false;
   const clickMode = options.clickMode || "edit";
@@ -8133,49 +8374,39 @@ function renderWorkflowTimeline(task, options = {}) {
   if (!workflow || !root || !instance) return "";
 
   const stepDefs = buildWorkflowTimelineStepDefs(workflow, root);
+  const phases = buildWorkflowPhases(stepDefs);
   const currentIndex = Math.max(
     0,
     (task.stepIndex || getWorkflowStepIndexForTask(task, root, workflow) || 1) - 1
   );
   const workflowName = workflow.name?.trim() || getWorkflowRootLabel(workflow);
 
-  const rows = stepDefs
-    .map((def, index) => {
-      const matchedTask =
-        def.kind === "root"
-          ? root
-          : findTaskForWorkflowStepInInstance(def.taskName, root, instance, { matchExternal: true });
-      const isDone = matchedTask?.status === "Completed";
-      const isCurrent = index === currentIndex && !isDone;
-      let icon;
-      let stateClass;
-      if (isDone) {
-        icon = "✓";
-        stateClass = "workflow-timeline__step--done";
-      } else if (isCurrent) {
-        icon = "●";
-        stateClass = "workflow-timeline__step--current";
-      } else {
-        icon = "○";
-        stateClass = "workflow-timeline__step--pending";
+  const rows = phases
+    .map((phase, phaseIndex) => {
+      const arrow = phaseIndex > 0 ? '<div class="workflow-timeline__arrow" aria-hidden="true">↓</div>' : "";
+
+      if (phase.defs.length > 1) {
+        const parallelSteps = phase.defs
+          .map((def, defIndex) => {
+            const index = phase.indices[defIndex];
+            const sep =
+              defIndex > 0 ? '<span class="workflow-timeline__parallel-sep" aria-hidden="true">+</span>' : "";
+            return `${sep}${renderWorkflowTimelineStep(def, index, stepDefs, root, instance, task, {
+              interactive,
+              clickMode,
+              currentIndex,
+            })}`;
+          })
+          .join("");
+        return `${arrow}<div class="workflow-timeline__parallel"><span class="workflow-timeline__parallel-badge">병렬</span>${parallelSteps}</div>`;
       }
 
-      const dueHint = !isDone ? formatWorkflowStepDueHint(def, matchedTask) : "";
-      const nameLabel = isCurrent ? `${def.taskName} (현재)` : `${def.taskName}${dueHint}`;
-      let stepInner;
-      if (matchedTask && interactive) {
-        const clickAttr =
-          clickMode === "dashboard"
-            ? `data-dashboard-step-task="${escapeAttr(matchedTask.id)}"`
-            : `data-edit="${escapeAttr(matchedTask.id)}"`;
-        stepInner = `<button type="button" class="workflow-timeline__btn" ${clickAttr}><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></button>`;
-      } else {
-        stepInner = `<div class="workflow-timeline__placeholder"><span class="workflow-timeline__icon" aria-hidden="true">${icon}</span><span class="workflow-timeline__name">${escapeHtml(nameLabel)}</span></div>`;
-      }
-      const arrow =
-        index < stepDefs.length - 1 ? '<div class="workflow-timeline__arrow" aria-hidden="true">↓</div>' : "";
-
-      return `<div class="workflow-timeline__step ${stateClass}">${stepInner}${arrow}</div>`;
+      const index = phase.indices[0];
+      return `${arrow}${renderWorkflowTimelineStep(phase.defs[0], index, stepDefs, root, instance, task, {
+        interactive,
+        clickMode,
+        currentIndex,
+      })}`;
     })
     .join("");
 
@@ -10573,7 +10804,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "107";
+const APP_BUILD = "110";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10794,10 +11025,11 @@ function compareReminderTasks(a, b) {
 }
 
 function buildTaskReminderNotificationBody(task) {
+  const schedulingDue = getTaskSchedulingDueDate(task);
   return [
     `${task.study} / ${getStandardSiteName(task.site)}`,
     task.task,
-    `Due: ${formatDueLabel(task.dueDate)}`,
+    `Due: ${formatDueLabel(schedulingDue)}`,
   ].join("\n");
 }
 
@@ -11306,9 +11538,14 @@ function getDueDayBadge(dateStr, status) {
   return { label, tier, diff, className: `due-tier--${tier}` };
 }
 
-/** To-do Due — Dashboard 섹션 배치·필터·정렬 기준 */
+/** To-do Due — Dashboard 섹션 배치·필터·정렬 기준 (Workflow Task는 To-do 미설정 시 Work Due fallback) */
 function getTaskSchedulingDueDate(task) {
-  return task?.dueDate?.trim() || "";
+  const todoDue = task?.dueDate?.trim() || "";
+  if (todoDue) return todoDue;
+  if (isWorkflowConnectedTask(task)) {
+    return task?.workDueDate?.trim() || "";
+  }
+  return "";
 }
 
 /** Work Due — D-day 배지·표시 기준 (Work Due만 표시) */
@@ -11426,7 +11663,7 @@ function buildWorkflowGeneratedTaskPayload({
 }
 
 function getWorkflowTaskCreationToastSuffix() {
-  return " Work Due가 설정되었습니다. 할 일 Due는 Task 상세에서 필요 시 입력하세요.";
+  return " Work Due가 설정되었습니다. 할 일 Due 미설정 시 Work Due 기준으로 Dashboard에 표시됩니다.";
 }
 
 function formatTaskRuleDueSummary(rule) {
@@ -12073,7 +12310,7 @@ function populateTaskDetailForm(task) {
     const showHint = isWorkflowConnectedTask(task) && task.autoGenerated;
     todoWorkflowHint.hidden = !showHint;
     todoWorkflowHint.textContent = showHint
-      ? "Workflow에서 생성된 Task입니다. Work Due는 Workflow 기준이며, 할 일 Due는 아래에서 필요 시 직접 설정하세요."
+      ? "Workflow에서 생성된 Task입니다. Work Due는 Workflow 기준이며, 할 일 Due를 설정하면 Dashboard 배치는 할 일 Due를 우선합니다. 미설정 시 Work Due 기준입니다."
       : "";
   }
   document.getElementById("editStatus").value = task.status;
@@ -13185,7 +13422,7 @@ function renderDashboardTimelineTasks(taskList) {
   const groups = [];
   let currentGroup = null;
   taskList.forEach((task) => {
-    const key = task.dueDate || "__none__";
+    const key = getTaskSchedulingDueDate(task) || "__none__";
     if (!currentGroup || currentGroup.date !== key) {
       currentGroup = { date: key, tasks: [] };
       groups.push(currentGroup);

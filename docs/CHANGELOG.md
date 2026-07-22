@@ -17,6 +17,37 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 110 — 2026-07-22 — Parallel workflow create together, complete individually
+
+### Changed
+
+- **병렬 Workflow Task** — 이전 단계 완료 시 병렬 phase Task **전체를 한 번에 생성**
+- 병렬 Task **완료는 각각 개별 처리** — 하나 완료해도 나머지 자동 완료되지 않음
+- 병렬 phase 미완료 시 남은 Task 안내 토스트 표시
+- 병렬 Task 생성 시 "각 Task는 개별로 완료" 안내
+
+---
+
+## [1.4.0] — build 109 — 2026-07-22 — Workflow parallel steps fix
+
+### Fixed
+
+- **병렬 Workflow 단계** — anchor Task까지 같은 parallelGroup에 포함되어 한 phase로 완료·생성 처리
+- 병렬 그룹 내 **Work Due(offset) 공유** — 하나만 입력해도 그룹 전체에 반영
+- Workflow 편집기·타임라인·Dashboard adjacent **병렬 UI** (+ 구분, 병렬 배지)
+
+---
+
+## [1.4.0] — build 108 — 2026-07-22 — Workflow dashboard scheduling fallback
+
+### Changed
+
+- **Workflow Task Dashboard 배치** — To-do Due 미설정 시 **Work Due** 기준으로 Today/Tomorrow/Overdue 등 섹션에 표시
+- To-do Due가 설정된 Workflow Task는 **To-do Due** 우선으로 Dashboard 배치
+- Workflow 편집·Task 상세 안내 문구 업데이트
+
+---
+
 ## [1.4.0] — build 107 — 2026-07-22 — Workflow Work Due vs To-do Due
 
 ### Changed
