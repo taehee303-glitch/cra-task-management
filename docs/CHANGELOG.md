@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 113 — 2026-07-22 — Root parallel, Routine UX, My Tasks polish
+
+### Changed
+
+- **Workflow** — Root Task와 **병렬** 가능 (「병렬 시작」 제거, Root 직후 병렬 체크)
+- **Routine** — Offset 대신 **「며칠 전 / 당일」** 체크박스로 Task 자동 생성 시점 설정
+- **My Tasks** — 업무 마감일 작은 참고 표시(오른쪽), Workflow 진행률 Dashboard형 바
+
+---
+
 ## [1.4.0] — build 112 — 2026-07-22 — Root parallel + Routine offset
 
 ### Changed

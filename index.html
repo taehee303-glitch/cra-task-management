@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=112" />
+  <link rel="stylesheet" href="styles.css?v=113" />
   <script>
     (function () {
       var BUILD = "86";
@@ -1373,9 +1373,16 @@
             <input type="date" id="routineAnchorDate" />
           </div>
           <div id="routineOffsetFields" class="form-group form-group--wide">
-            <label for="routineOffsets">Offset (일 전, 쉼표 구분)</label>
-            <input type="text" id="routineOffsets" placeholder="14, 7, 3, 0" value="14, 7, 3, 0" inputmode="numeric" />
-            <p class="form-hint" id="routineOffsetHint">기준일(Anchor Date)로부터 D-N일 전에 Task가 생성됩니다. 예: 14, 7, 3, 0</p>
+            <span class="form-label">Task 자동 생성 시점</span>
+            <p class="form-hint" id="routineOffsetHint">마감일(또는 반복일) 며칠 전에 Task를 만들지 선택하세요.</p>
+            <div class="routine-reminder-grid" id="routineReminderGrid">
+              <label class="routine-reminder-option"><input type="checkbox" name="routineReminderDay" value="30" /> 30일 전</label>
+              <label class="routine-reminder-option"><input type="checkbox" name="routineReminderDay" value="14" checked /> 14일 전</label>
+              <label class="routine-reminder-option"><input type="checkbox" name="routineReminderDay" value="7" checked /> 7일 전</label>
+              <label class="routine-reminder-option"><input type="checkbox" name="routineReminderDay" value="3" checked /> 3일 전</label>
+              <label class="routine-reminder-option"><input type="checkbox" name="routineReminderDay" value="1" /> 1일 전</label>
+              <label class="routine-reminder-option"><input type="checkbox" name="routineReminderDay" value="0" checked /> 당일</label>
+            </div>
           </div>
           <div id="routineWeeklyFields" class="form-group" hidden>
             <label for="routineWeekday">요일</label>
@@ -1750,7 +1757,7 @@
   <script src="firebase-sync.js?v=95"></script>
   <script src="calendar-config.js?v=95"></script>
   <script src="calendar-sync.js?v=95"></script>
-  <script src="app.js?v=112"></script>
+  <script src="app.js?v=113"></script>
   <script src="pwa.js?v=95"></script>
 </body>
 </html>

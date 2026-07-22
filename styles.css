@@ -11405,9 +11405,113 @@ button.dashboard-v2__urgent-bucket:hover {
 
 /* ── Build 91: My Tasks row layout ── */
 .task-card--row {
-  grid-template-columns: minmax(52px, 64px) minmax(44px, 52px) minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(44px, 52px) minmax(0, 1fr) auto max-content;
   align-items: center;
   gap: calc(10px * var(--ui-scale));
+}
+
+.task-card__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: calc(4px * var(--ui-scale));
+  min-width: calc(52px * var(--ui-scale));
+}
+
+.task-card__work-due-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3px * var(--ui-scale));
+  padding: calc(2px * var(--ui-scale)) calc(6px * var(--ui-scale));
+  border-radius: calc(6px * var(--ui-scale));
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.task-card__work-due-ref-label {
+  font-size: calc(9px * var(--ui-scale));
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.task-card__work-due-ref--overdue {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.task-card__work-due-ref--today {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.task-card__work-due-ref--soon {
+  color: #c2410c;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.task-card__work-due-ref--none {
+  color: #cbd5e1;
+  background: transparent;
+  border-color: transparent;
+}
+
+.task-card__sub-row--wf {
+  margin-top: calc(4px * var(--ui-scale));
+}
+
+.task-card__sub-row--wf .dash-task-wf-bar {
+  width: min(100%, 9rem);
+}
+
+.task-list-due-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.task-read-grid td .dash-task-wf-bar {
+  margin-top: calc(4px * var(--ui-scale));
+  max-width: 10rem;
+}
+
+.routine-reminder-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.routine-reminder-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.routine-reminder-option:has(input:checked) {
+  border-color: #a5b4fc;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.routine-reminder-option input {
+  margin: 0;
 }
 
 .task-card__priority-text {

@@ -3692,12 +3692,18 @@ function renderWorkflowStoredStepPhases(steps, kind, renderStepHtml) {
     .join("");
 }
 
+function getStepDefParallelGroup(def) {
+  if (!def) return "";
+  if (def.parallelGroup?.trim()) return def.parallelGroup.trim();
+  return def.stepDef?.parallelGroup?.trim() || "";
+}
+
 function resolveParallelGroupsInFlowSteps(flowSteps) {
   const steps = flowSteps.map((step) => {
     if (step.kind === "root") {
       return {
         ...step,
-        parallelGroup: "",
+        parallelGroup: step.parallelGroup?.trim() || "",
         parallelWithPrevious: false,
       };
     }
@@ -3711,7 +3717,12 @@ function resolveParallelGroupsInFlowSteps(flowSteps) {
   for (let i = 1; i < steps.length; i += 1) {
     if (steps[i].kind === "root") continue;
     const group = steps[i].parallelGroup?.trim();
-    if (group && steps[i - 1].kind !== "root" && group === steps[i - 1].parallelGroup?.trim()) {
+    if (!group) continue;
+    if (steps[i - 1].kind === "root") {
+      if (steps[i].parallelWithPrevious) steps[i - 1].parallelGroup = group;
+      continue;
+    }
+    if (group === steps[i - 1].parallelGroup?.trim()) {
       steps[i].parallelWithPrevious = true;
     }
   }
@@ -3741,15 +3752,13 @@ function resolveParallelGroupsInFlowSteps(flowSteps) {
     if (step.kind === "root" || !step.parallelWithPrevious || i === 0) continue;
 
     const prev = steps[i - 1];
-    if (prev?.kind === "root") {
-      const groupId = step.parallelGroup?.trim() || generateId();
-      step.parallelGroup = groupId;
-      step.parallelWithPrevious = false;
-      continue;
-    }
-
     const groupId = step.parallelGroup?.trim() || generateId();
     step.parallelGroup = groupId;
+
+    if (prev?.kind === "root") {
+      prev.parallelGroup = groupId;
+      continue;
+    }
 
     let j = i - 1;
     while (j >= 0 && steps[j].kind !== "root") {
@@ -3786,9 +3795,13 @@ function resolveParallelGroupsInFlowSteps(flowSteps) {
 
   steps.forEach((step) => {
     if (step.kind === "root") {
-      step.parallelGroup = "";
-      step.parallelWithPrevious = false;
-    } else if (!step.parallelGroup?.trim()) {
+      if (!step.parallelGroup?.trim()) {
+        step.parallelGroup = "";
+        step.parallelWithPrevious = false;
+      }
+      return;
+    }
+    if (!step.parallelGroup?.trim()) {
       step.parallelGroup = "";
     }
   });
@@ -3797,32 +3810,22 @@ function resolveParallelGroupsInFlowSteps(flowSteps) {
 }
 
 function buildFlowStepPhases(flowSteps) {
-  const phases = [];
-  let index = 0;
+  const stepDefs = flowSteps.map((step) => ({
+    kind: step.kind,
+    taskName: step.taskName,
+    parallelGroup: step.parallelGroup,
+    stepDef:
+      step.kind === "root"
+        ? step.parallelGroup?.trim()
+          ? { parallelGroup: step.parallelGroup.trim() }
+          : null
+        : step,
+  }));
 
-  while (index < flowSteps.length) {
-    const step = flowSteps[index];
-    const group = step.parallelGroup?.trim();
-    const members = [{ step, index }];
-    let next = index + 1;
-
-    if (group && step.kind !== "root") {
-      while (next < flowSteps.length && flowSteps[next].parallelGroup?.trim() === group) {
-        members.push({ step: flowSteps[next], index: next });
-        next += 1;
-      }
-    } else {
-      next = index + 1;
-    }
-
-    phases.push({
-      type: members.length > 1 ? "parallel" : "single",
-      members,
-    });
-    index = next;
-  }
-
-  return phases;
+  return buildWorkflowPhases(stepDefs).map((phase) => ({
+    type: phase.defs.length > 1 ? "parallel" : "single",
+    members: phase.indices.map((index) => ({ step: flowSteps[index], index })),
+  }));
 }
 
 function syncParallelGroupOffsetsInDom(groupId, offsetValue) {
@@ -3840,10 +3843,14 @@ function buildWorkflowPhases(stepDefs) {
 
   while (index < stepDefs.length) {
     const def = stepDefs[index];
-    let group = def.stepDef?.parallelGroup?.trim();
-    const defs = [];
-    const indices = [];
-    let next = index;
+    let group = getStepDefParallelGroup(def);
+
+    if (!group && def.kind === "root" && index + 1 < stepDefs.length) {
+      const nextDef = stepDefs[index + 1];
+      if (nextDef.stepDef?.parallelWithPrevious) {
+        group = getStepDefParallelGroup(nextDef);
+      }
+    }
 
     if (!group && def.kind !== "root" && index + 1 < stepDefs.length) {
       const nextStepDef = stepDefs[index + 1].stepDef;
@@ -3856,9 +3863,12 @@ function buildWorkflowPhases(stepDefs) {
       group = def.stepDef.parallelGroup.trim();
     }
 
-    if (group && def.kind !== "root") {
-      while (next < stepDefs.length && stepDefs[next].kind !== "root") {
-        const stepGroup = stepDefs[next].stepDef?.parallelGroup?.trim();
+    if (group) {
+      const defs = [];
+      const indices = [];
+      let next = index;
+      while (next < stepDefs.length) {
+        const stepGroup = getStepDefParallelGroup(stepDefs[next]);
         if (next === index || stepGroup === group) {
           defs.push(stepDefs[next]);
           indices.push(next);
@@ -3867,14 +3877,12 @@ function buildWorkflowPhases(stepDefs) {
           break;
         }
       }
+      phases.push({ defs, indices });
+      index = next;
     } else {
-      defs.push(def);
-      indices.push(index);
-      next = index + 1;
+      phases.push({ defs: [def], indices: [index] });
+      index += 1;
     }
-
-    phases.push({ defs, indices });
-    index = next;
   }
 
   return phases;
@@ -3993,6 +4001,7 @@ function normalizeWorkflowRecord(workflow) {
       ? Math.max(1, Number(workflow.stepCount))
       : computeWorkflowStepCount({ preSteps, steps }),
     rootTaskName: workflow?.rootTaskName?.trim() || "",
+    rootParallelGroup: workflow?.rootParallelGroup?.trim() || "",
     usageCount: Number.isFinite(Number(workflow?.usageCount)) ? Math.max(0, Number(workflow.usageCount)) : 0,
     lastUsedAt: workflow?.lastUsedAt || null,
     source: workflow?.source || "manual",
@@ -6419,10 +6428,11 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
   const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
   const showOffsets = options.showOffsets !== false;
   const compact = Boolean(options.compact);
+  const rootParallelGroup = workflow?.rootParallelGroup?.trim() || "";
 
   const renderStep = (step, side) => {
     const offset = showOffsets ? formatWorkflowStepOffset(step, side) : "";
-    const parallel = step.parallelGroup ? ' workflow-flow-preview__step--parallel' : "";
+    const parallel = step.parallelGroup ? " workflow-flow-preview__step--parallel" : "";
     return `
       <div class="workflow-flow-preview__step${side === "pre" ? " workflow-flow-preview__step--pre" : ""}${parallel}">
         <span class="workflow-flow-preview__name">${escapeHtml(step.taskName)}</span>
@@ -6432,8 +6442,54 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
     `;
   };
 
+  const renderRootStep = () => `
+    <div class="workflow-flow-preview__step workflow-flow-preview__step--root${rootParallelGroup ? " workflow-flow-preview__step--parallel" : ""}">
+      <span class="workflow-flow-preview__name">${escapeHtml(rootLabel)}</span>
+      ${rootParallelGroup ? '<span class="workflow-flow-preview__meta workflow-flow-preview__meta--parallel">병렬</span>' : ""}
+    </div>
+  `;
+
   const renderSideSteps = (sideSteps, side) =>
     renderWorkflowStoredStepPhases(sideSteps, side, (step) => renderStep(step, side));
+
+  const renderRootPostPhases = (postSteps) => {
+    const resolvedPost = resolveParallelGroupsInStepList(postSteps);
+    const stepDefs = [
+      {
+        kind: "root",
+        taskName: rootLabel,
+        stepDef: rootParallelGroup ? { parallelGroup: rootParallelGroup } : null,
+        parallelGroup: rootParallelGroup,
+      },
+      ...workflowStepsToStepDefs(resolvedPost, "post"),
+    ];
+    const phases = buildWorkflowPhases(stepDefs);
+
+    return phases
+      .map((phase, phaseIndex) => {
+        const arrow =
+          phaseIndex > 0 || preSteps.length
+            ? '<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>'
+            : "";
+
+        if (phase.defs.length > 1) {
+          const parallelHtml = phase.defs
+            .map((def, defIndex) => {
+              const sep =
+                defIndex > 0 ? '<span class="workflow-flow-preview__parallel-sep" aria-hidden="true">+</span>' : "";
+              if (def.kind === "root") return `${sep}${renderRootStep()}`;
+              return `${sep}${renderStep(def.stepDef, "post")}`;
+            })
+            .join("");
+          return `${arrow}<div class="workflow-flow-preview__parallel"><span class="workflow-flow-preview__parallel-badge">병렬</span><div class="workflow-flow-preview__parallel-steps">${parallelHtml}</div></div>`;
+        }
+
+        const def = phase.defs[0];
+        if (def.kind === "root") return `${arrow}${renderRootStep()}`;
+        return `${arrow}${renderStep(def.stepDef, "post")}`;
+      })
+      .join("");
+  };
 
   const maxSteps = options.maxSteps ?? (compact ? 4 : preSteps.length + steps.length);
   const visiblePre = compact ? preSteps.slice(0, maxSteps) : preSteps;
@@ -6443,7 +6499,7 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
     : 0;
 
   const preHtml = renderSideSteps(visiblePre, "pre");
-  const postHtml = renderSideSteps(visiblePost, "post");
+  const rootPostHtml = renderRootPostPhases(visiblePost);
   const moreHtml =
     hiddenCount > 0
       ? `<div class="workflow-flow-preview__more">… +${hiddenCount} more</div>`
@@ -6452,11 +6508,7 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
   return `
     <div class="workflow-flow-preview${compact ? " workflow-flow-preview--compact" : ""}">
       ${preHtml}
-      ${preHtml ? `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>` : ""}
-      <div class="workflow-flow-preview__step workflow-flow-preview__step--root">
-        <span class="workflow-flow-preview__name">${escapeHtml(rootLabel)}</span>
-      </div>
-      ${postHtml ? `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>${postHtml}` : ""}
+      ${rootPostHtml || (preHtml ? `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>${renderRootStep()}` : renderRootStep())}
       ${moreHtml}
     </div>
   `;
@@ -7209,7 +7261,7 @@ function workflowRecordToFlowSteps(workflow) {
     dueOffset: 0,
     dueUnit: "calendar",
     priority: "Medium",
-    parallelGroup: "",
+    parallelGroup: workflow.rootParallelGroup?.trim() || "",
     parallelWithPrevious: false,
   });
 
@@ -7222,7 +7274,6 @@ function workflowRecordToFlowSteps(workflow) {
       parallelWithPrevious: Boolean(
         normalized.parallelWithPrevious ||
           (normalized.parallelGroup &&
-            prev?.kind !== "root" &&
             prev?.parallelGroup &&
             prev.parallelGroup === normalized.parallelGroup)
       ),
@@ -7251,18 +7302,20 @@ function flowStepsToWorkflowPayload(flowSteps) {
   const preSteps = [];
   const steps = [];
   let rootTaskName = "";
+  let rootParallelGroup = "";
 
   flowSteps.forEach((step) => {
     const normalized = normalizeWorkflowStep(step);
     if (step.kind === "root") {
       rootTaskName = (step.taskName || "").trim();
+      rootParallelGroup = step.parallelGroup?.trim() || "";
       return;
     }
     if (step.kind === "pre") preSteps.push(normalized);
     else steps.push(normalized);
   });
 
-  return { preSteps, steps, rootTaskName };
+  return { preSteps, steps, rootTaskName, rootParallelGroup };
 }
 
 function renderWorkflowDetailStepRow(step, index, total, flowSteps = []) {
@@ -7270,14 +7323,15 @@ function renderWorkflowDetailStepRow(step, index, total, flowSteps = []) {
   const offsetLabel = step.kind === "pre" ? "일 전" : "일 후";
   const prevStep = index > 0 ? flowSteps[index - 1] : null;
   const canParallel = !isRoot && prevStep;
-  const parallelLabel = prevStep?.kind === "root" ? "병렬 시작" : "병렬";
+  const parallelHint =
+    prevStep?.kind === "root" ? ' title="Root Task와 병렬"' : "";
 
   const parallelCell = isRoot
     ? ""
     : canParallel
-      ? `<label class="workflow-detail-step__parallel">
+      ? `<label class="workflow-detail-step__parallel"${parallelHint}>
         <input type="checkbox" class="workflow-detail-step__parallel-input" data-field="parallelWithPrevious"${step.parallelWithPrevious ? " checked" : ""} />
-        <span>${parallelLabel}</span>
+        <span>병렬</span>
       </label>`
       : `<span class="workflow-detail-step__parallel workflow-detail-step__parallel--empty" aria-hidden="true"></span>`;
 
@@ -7560,7 +7614,7 @@ function handleWorkflowDetailSave() {
     return;
   }
 
-  const { preSteps, steps, rootTaskName } = flowStepsToWorkflowPayload(draft.flowSteps || []);
+  const { preSteps, steps, rootTaskName, rootParallelGroup } = flowStepsToWorkflowPayload(draft.flowSteps || []);
   if (!rootTaskName) {
     showToast("기준 Task(Root) 이름을 입력해 주세요.");
     return;
@@ -7569,6 +7623,7 @@ function handleWorkflowDetailSave() {
   const payload = {
     name: draft.name.trim(),
     rootTaskName,
+    rootParallelGroup,
     preSteps: preSteps.filter((step) => step.taskName),
     steps: steps.filter((step) => step.taskName),
     source: "manual",
@@ -7765,7 +7820,7 @@ function isRoutineConnectedTask(task) {
 }
 
 function renderTaskWorkflowProgressBlock(task) {
-  return getWorkflowProgressDisplay(task).sectionHtml;
+  return renderDashboardTaskWorkflowBar(task);
 }
 
 function getWorkflowProgressDisplay(task) {
@@ -8205,13 +8260,15 @@ const DASHBOARD_WEEK_PREVIEW_LIMIT = 4;
 
 function buildWorkflowTimelineStepDefs(workflow, rootTask) {
   const steps = [];
+  const rootParallelGroup = workflow?.rootParallelGroup?.trim() || "";
   (workflow.preSteps || []).forEach((step) => {
     steps.push({ kind: "pre", taskName: step.taskName, stepDef: step });
   });
   steps.push({
     kind: "root",
     taskName: rootTask?.task?.trim() || getWorkflowRootLabel(workflow),
-    stepDef: null,
+    stepDef: rootParallelGroup ? { parallelGroup: rootParallelGroup } : null,
+    parallelGroup: rootParallelGroup,
   });
   (workflow.steps || []).forEach((step) => {
     steps.push({ kind: "post", taskName: step.taskName, stepDef: step });
@@ -8930,7 +8987,7 @@ function formatRoutineScheduleSummary(routine) {
   const schedule = routine.schedule || {};
   const offsets = (schedule.offsets || []).slice().sort((a, b) => b - a);
   const offsetLabel = offsets.length
-    ? ` · D-${offsets.filter((n) => n > 0).join("/D-")}${offsets.includes(0) ? "/Due" : ""}`
+    ? ` · ${offsets.map((n) => (n === 0 ? "당일" : `${n}일 전`)).join(", ")}`
     : "";
   if (schedule.type === "weekly") {
     return `매주 ${ROUTINE_WEEKDAY_LABELS[schedule.weekday] || "?"}요일${offsetLabel}`;
@@ -8939,7 +8996,7 @@ function formatRoutineScheduleSummary(routine) {
     return `매월 ${schedule.dayOfMonth}일${offsetLabel}`;
   }
   if (offsets.length) {
-    return `D-${offsets.filter((n) => n > 0).join("/D-")}${offsets.includes(0) ? "/Due" : ""}`;
+    return `마감일 기준 ${offsets.map((n) => (n === 0 ? "당일" : `${n}일 전`)).join(", ")}`;
   }
   return "마감일 기준";
 }
@@ -8989,6 +9046,20 @@ function renderRoutineMaster() {
   });
 }
 
+function readRoutineReminderDaysFromForm() {
+  const checked = [...document.querySelectorAll('input[name="routineReminderDay"]:checked')]
+    .map((input) => Number(input.value))
+    .filter((n) => Number.isFinite(n));
+  return checked.length ? [...new Set(checked)].sort((a, b) => b - a) : [14, 7, 3, 0];
+}
+
+function setRoutineReminderDaysInForm(offsets = []) {
+  const values = new Set((offsets || []).map((n) => String(n)));
+  document.querySelectorAll('input[name="routineReminderDay"]').forEach((input) => {
+    input.checked = values.has(input.value);
+  });
+}
+
 function openRoutineModal(routineId = null, presetKey = null) {
   if (!els.routineModal || !els.routineForm) return;
 
@@ -9003,7 +9074,7 @@ function openRoutineModal(routineId = null, presetKey = null) {
   document.getElementById("routinePriority").value = routine?.taskTemplate?.priority || preset?.priority || "Medium";
   document.getElementById("routineScheduleType").value = routine?.schedule?.type || preset?.schedule?.type || "anchor";
   document.getElementById("routineAnchorDate").value = routine?.schedule?.anchorDate || "";
-  document.getElementById("routineOffsets").value = (routine?.schedule?.offsets || preset?.schedule?.offsets || [14, 7, 3, 0]).join(", ");
+  setRoutineReminderDaysInForm(routine?.schedule?.offsets || preset?.schedule?.offsets || [14, 7, 3, 0]);
   document.getElementById("routineWeekday").value = String(routine?.schedule?.weekday ?? preset?.schedule?.weekday ?? 1);
   document.getElementById("routineDayOfMonth").value = String(routine?.schedule?.dayOfMonth ?? 1);
   document.getElementById("routineEnabled").value = String(routine?.enabled !== false);
@@ -9042,11 +9113,12 @@ function applyRoutineScheduleFieldsVisibility() {
   if (monthlyFields) monthlyFields.hidden = type !== "monthly";
   if (offsetHint) {
     if (type === "anchor") {
-      offsetHint.textContent = "기준일(Anchor Date)로부터 D-N일 전에 Task가 생성됩니다. 예: 14, 7, 3, 0";
+      offsetHint.textContent =
+        "기준일(마감일)을 정한 뒤, 선택한 날짜에 Task가 자동으로 생성됩니다.";
     } else if (type === "weekly") {
-      offsetHint.textContent = "매주 반복일 기준 D-N일 전에 Task가 생성됩니다. 예: 7, 3, 0";
+      offsetHint.textContent = "매주 반복일 기준으로, 선택한 날짜에 Task가 자동 생성됩니다.";
     } else {
-      offsetHint.textContent = "매월 반복일 기준 D-N일 전에 Task가 생성됩니다. 예: 7, 3, 0";
+      offsetHint.textContent = "매월 반복일 기준으로, 선택한 날짜에 Task가 자동 생성됩니다.";
     }
   }
 }
@@ -9068,11 +9140,7 @@ function handleRoutineSubmit(e) {
   const routineId = document.getElementById("routineId").value;
   const studyId = document.getElementById("routineStudyId")?.value || "";
   const scheduleType = document.getElementById("routineScheduleType").value;
-  const offsetsRaw = document.getElementById("routineOffsets").value || "";
-  const offsets = offsetsRaw
-    .split(/[,，\s]+/)
-    .map((n) => Number(n.trim()))
-    .filter((n) => Number.isFinite(n));
+  const offsets = readRoutineReminderDaysFromForm();
 
   const payload = {
     name: document.getElementById("routineName").value.trim(),
@@ -10894,7 +10962,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "112";
+const APP_BUILD = "113";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -13959,18 +14027,24 @@ function renderTaskPriorityProminent(task) {
   return `<span class="task-card__priority-text task-card__priority-text--${priorityClassName}">${escapeHtml(task.priority)}</span>`;
 }
 
-function renderTaskDueProminent(task) {
-  if (task.status === "Completed") {
-    return `<span class="task-card__due-text task-card__due-text--done">Done</span>`;
-  }
-
-  const workDue = task.workDueDate?.trim() || "";
-  if (!workDue) {
-    return `<span class="task-card__due-text task-card__due-text--none">—</span>`;
-  }
-
+function renderTaskWorkDueRef(task) {
+  if (task.status === "Completed") return "";
+  const workDue = task.workDueDate?.trim();
+  if (!workDue) return "";
   const badge = getDueDayBadge(workDue, task.status);
-  return `<span class="task-card__due-text ${badge.className}">업무 마감일: ${escapeHtml(badge.label)}</span>`;
+  const tierClass =
+    badge.tier === "overdue"
+      ? "task-card__work-due-ref--overdue"
+      : badge.tier === "today"
+        ? "task-card__work-due-ref--today"
+        : badge.tier === "soon"
+          ? "task-card__work-due-ref--soon"
+          : "";
+  return `<span class="task-card__work-due-ref ${tierClass}" title="업무 마감일 ${escapeAttr(workDue)}"><span class="task-card__work-due-ref-label">업무</span>${escapeHtml(badge.label)}</span>`;
+}
+
+function renderTaskDueProminent(task) {
+  return "";
 }
 
 function renderTaskQuickActions(task) {
@@ -13995,8 +14069,8 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
   const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "";
   const studySite =
     siteLabel && siteLabel !== "Site 미정" ? `${studyLabel} · ${siteLabel}` : studyLabel;
-  const badge = getDashboardDueBadge(task);
-  const workflowBlock = renderTaskWorkflowProgressBlock(task);
+  const wfBar = renderDashboardTaskWorkflowBar(task);
+  const workDueRef = renderTaskWorkDueRef(task);
   const routineBlock = renderTaskRoutineLabel(task);
   const isDone = task.status === "Completed";
   const priorityClassName = priorityClass(task.priority);
@@ -14022,13 +14096,11 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
             <span class="task-card__title">${escapeHtml(task.task)}</span>
           </span>
           <span class="task-card__study-site">${escapeHtml(studySite)}</span>
-          <div class="task-card__sub-row">
-            ${workflowBlock}
-          </div>
+          ${wfBar ? `<div class="task-card__sub-row task-card__sub-row--wf">${wfBar}</div>` : ""}
           ${routineBlock}
         </button>
         <div class="task-card__meta-row">
-          <span class="task-card__due-badge dash-v2-badge ${badge.className}"${badge.title ? ` title="${escapeAttr(badge.title)}"` : ""}>${escapeHtml(badge.label)}</span>
+          ${workDueRef}
           ${priorityBadge}
         </div>
       </div>
@@ -14043,7 +14115,6 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
 
   return `
     <article class="task-card task-card--action task-card--row ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
-      ${renderTaskDueProminent(task)}
       ${renderTaskPriorityProminent(task)}
       <div class="task-card__content">
         <button type="button" class="task-card__detail" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
@@ -14053,10 +14124,13 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
           </span>
           <div class="task-card__sub-row">
             ${renderTaskStudySiteMeta(task)}
-            ${workflowBlock}
           </div>
+          ${wfBar ? `<div class="task-card__sub-row task-card__sub-row--wf">${wfBar}</div>` : ""}
           ${routineBlock}
         </button>
+      </div>
+      <div class="task-card__aside">
+        ${workDueRef}
       </div>
       ${renderTaskQuickActions(task)}
     </article>
@@ -14077,7 +14151,7 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const badge = getDashboardDueBadge(task);
+  const workDueRef = renderTaskWorkDueRef(task);
   const studyLabel = task.study?.trim() || "—";
   const siteLabel = task.site?.trim() ? formatTaskSiteLabel(task) || getStandardSiteName(task.site) : "—";
   const workflowLabel = getDashboardWorkflowLabel(task);
@@ -14088,10 +14162,11 @@ function renderTableRow({ task, isSubtask, isLastSubtask }) {
         <button type="button" class="task-list-name" data-edit="${escapeAttr(task.id)}">${escapeHtml(task.task)}</button>
         <span class="task-card__study-site task-card__study-site--muted">${escapeHtml([studyLabel !== "—" ? studyLabel : "", siteLabel !== "—" ? siteLabel : ""].filter(Boolean).join(" · ") || "Study · Site 미정")}</span>
         ${workflowLabel ? `<span class="task-list-wf">${escapeHtml(workflowLabel)}</span>` : ""}
+        ${renderDashboardTaskWorkflowBar(task)}
       </td>
       <td>${escapeHtml(studyLabel)}</td>
       <td>${escapeHtml(siteLabel)}</td>
-      <td><span class="task-list-due dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span></td>
+      <td class="task-list-due-cell">${workDueRef || '<span class="task-card__work-due-ref task-card__work-due-ref--none">—</span>'}</td>
       <td class="actions-cell actions-cell--quick">
         ${renderTaskQuickActions(task)}
       </td>
