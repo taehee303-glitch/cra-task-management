@@ -4794,8 +4794,8 @@ function compareTasksByPriorityThenDue(a, b) {
   const aPriority = PRIORITY_SORT_ORDER[a.priority] ?? 2;
   const bPriority = PRIORITY_SORT_ORDER[b.priority] ?? 2;
   if (aPriority !== bPriority) return aPriority - bPriority;
-  const aDue = a.dueDate ? parseDate(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-  const bDue = b.dueDate ? parseDate(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const aDue = getTaskSchedulingDueDate(a) ? parseDate(getTaskSchedulingDueDate(a)).getTime() : Number.MAX_SAFE_INTEGER;
+  const bDue = getTaskSchedulingDueDate(b) ? parseDate(getTaskSchedulingDueDate(b)).getTime() : Number.MAX_SAFE_INTEGER;
   return aDue - bDue;
 }
 
@@ -4804,9 +4804,10 @@ function getTodayActionTasks() {
   return tasks
     .filter((t) => {
       if (isInboxTask(t) || !isActive(t)) return false;
-      if (t.dueDate && daysUntilDue(t.dueDate) < 0) return true;
-      if (t.dueDate === todayStr) return true;
-      if (t.dueDate && daysUntilDue(t.dueDate) === 1) return true;
+      const schedulingDue = getTaskSchedulingDueDate(t);
+      if (schedulingDue && daysUntilDue(schedulingDue) < 0) return true;
+      if (schedulingDue === todayStr) return true;
+      if (schedulingDue && daysUntilDue(schedulingDue) === 1) return true;
       if (isHighPriorityTask(t)) return true;
       return false;
     })
@@ -7974,16 +7975,20 @@ function getDashboardWeekPrepTasks() {
   const todayStr = toDateString(getToday());
   return tasks
     .filter((task) => {
-      if (!isActive(task) || !task.dueDate || !isDueThisWeek(task.dueDate)) return false;
-      return task.dueDate !== todayStr;
+      const schedulingDue = getTaskSchedulingDueDate(task);
+      if (!isActive(task) || !schedulingDue || !isDueThisWeek(schedulingDue)) return false;
+      return schedulingDue !== todayStr;
     })
-    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate));
+    .sort((a, b) => parseDate(getTaskSchedulingDueDate(a)) - parseDate(getTaskSchedulingDueDate(b)));
 }
 
 function getDashboardNextWeekTasks() {
   return tasks
-    .filter((task) => isActive(task) && task.dueDate && isDueNextWeek(task.dueDate))
-    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate));
+    .filter((task) => {
+      const schedulingDue = getTaskSchedulingDueDate(task);
+      return isActive(task) && schedulingDue && isDueNextWeek(schedulingDue);
+    })
+    .sort((a, b) => parseDate(getTaskSchedulingDueDate(a)) - parseDate(getTaskSchedulingDueDate(b)));
 }
 
 function getRecentlyCompletedTasks(limit = null) {
@@ -10271,7 +10276,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "101";
+const APP_BUILD = "103";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -10467,9 +10472,10 @@ const ReminderSettingsStore = {
 };
 
 function getTaskReminderType(task) {
-  if (!isActive(task) || !task.dueDate) return null;
+  const schedulingDue = getTaskSchedulingDueDate(task);
+  if (!isActive(task) || !schedulingDue) return null;
 
-  const diff = daysUntilDue(task.dueDate);
+  const diff = daysUntilDue(schedulingDue);
   if (diff < 0) return "overdue";
   if (diff === 0) return "d-0";
   if (diff === 1) return "d-1";
@@ -11003,8 +11009,18 @@ function getDueDayBadge(dateStr, status) {
   return { label, tier, diff, className: `due-tier--${tier}` };
 }
 
+/** To-do Due — Dashboard 섹션 배치·필터·정렬 기준 */
+function getTaskSchedulingDueDate(task) {
+  return task?.dueDate?.trim() || "";
+}
+
+/** Work Due — D-day 배지·표시 기준 (미설정 시 To-do Due fallback) */
+function getTaskDisplayDueDate(task) {
+  return task?.workDueDate?.trim() || task?.dueDate?.trim() || "";
+}
+
 function getTaskPrimaryDueDate(task) {
-  return task.workDueDate || task.dueDate || "";
+  return getTaskDisplayDueDate(task);
 }
 
 function getDueUrgency(dueDateStr, status) {
@@ -11028,9 +11044,10 @@ function formatDueLabel(dueDateStr) {
 }
 
 function formatDueDisplay(task) {
-  if (!task?.dueDate) return "Due 미정";
-  const suffix = formatDueDaySuffix(task.dueDate);
-  return `${task.dueDate} (${suffix})`;
+  const displayDate = getTaskDisplayDueDate(task);
+  if (!displayDate) return "Due 미정";
+  const suffix = formatDueDaySuffix(displayDate);
+  return `${displayDate} (${suffix})`;
 }
 
 function getDueDateDisplayClass(dueDateStr, status) {
@@ -12186,8 +12203,8 @@ function compareTasks(a, b) {
   const aCritical = a.priority === "Critical" ? 0 : 1;
   const bCritical = b.priority === "Critical" ? 0 : 1;
   if (aCritical !== bCritical) return aCritical - bCritical;
-  const aDue = a.dueDate ? parseDate(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-  const bDue = b.dueDate ? parseDate(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const aDue = getTaskSchedulingDueDate(a) ? parseDate(getTaskSchedulingDueDate(a)).getTime() : Number.MAX_SAFE_INTEGER;
+  const bDue = getTaskSchedulingDueDate(b) ? parseDate(getTaskSchedulingDueDate(b)).getTime() : Number.MAX_SAFE_INTEGER;
   return aDue - bDue;
 }
 function getWeekRange() {
@@ -12213,7 +12230,9 @@ function isCompleted(task) {
 
 function getTodayProgressStats() {
   const todayStr = toDateString(getToday());
-  const todayDueTasks = tasks.filter((t) => !isInboxTask(t) && t.dueDate === todayStr);
+  const todayDueTasks = tasks.filter(
+    (t) => !isInboxTask(t) && getTaskSchedulingDueDate(t) === todayStr
+  );
   const total = todayDueTasks.length;
   const completed = todayDueTasks.filter(isCompleted).length;
   const remaining = total - completed;
@@ -12228,10 +12247,16 @@ function getDashboardStats() {
   const activeTasks = workTasks.filter(isActive);
   const total = workTasks.length;
   const completed = workTasks.filter(isCompleted).length;
-  const overdue = activeTasks.filter((t) => daysUntilDue(t.dueDate) < 0).length;
-  const weekDue = activeTasks.filter((t) => isDueThisWeek(t.dueDate)).length;
+  const overdue = activeTasks.filter((t) => {
+    const schedulingDue = getTaskSchedulingDueDate(t);
+    return schedulingDue && daysUntilDue(schedulingDue) < 0;
+  }).length;
+  const weekDue = activeTasks.filter((t) => {
+    const schedulingDue = getTaskSchedulingDueDate(t);
+    return schedulingDue && isDueThisWeek(schedulingDue);
+  }).length;
   const weekPrep = getDashboardWeekPrepTasks().length;
-  const todayDue = activeTasks.filter((t) => t.dueDate === todayStr).length;
+  const todayDue = activeTasks.filter((t) => getTaskSchedulingDueDate(t) === todayStr).length;
   const nextWeekDue = getDashboardNextWeekTasks().length;
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -12246,11 +12271,12 @@ function matchesTaskQuickFilter(task) {
   if (taskQuickFilter === "all") return true;
 
   if (taskQuickFilter === "today") {
-    return isActive(task) && task.dueDate === toDateString(getToday());
+    return isActive(task) && getTaskSchedulingDueDate(task) === toDateString(getToday());
   }
 
   if (taskQuickFilter === "d1") {
-    return isActive(task) && daysUntilDue(task.dueDate) === 1;
+    const schedulingDue = getTaskSchedulingDueDate(task);
+    return isActive(task) && schedulingDue && daysUntilDue(schedulingDue) === 1;
   }
 
   if (taskQuickFilter === "completed") {
@@ -12258,7 +12284,8 @@ function matchesTaskQuickFilter(task) {
   }
 
   if (taskQuickFilter === "overdue") {
-    return isActive(task) && task.dueDate && daysUntilDue(task.dueDate) < 0;
+    const schedulingDue = getTaskSchedulingDueDate(task);
+    return isActive(task) && schedulingDue && daysUntilDue(schedulingDue) < 0;
   }
 
   if (taskQuickFilter === "open") {
@@ -12270,7 +12297,8 @@ function matchesTaskQuickFilter(task) {
   }
 
   if (taskQuickFilter === "week") {
-    return isActive(task) && task.dueDate && isDueThisWeek(task.dueDate);
+    const schedulingDue = getTaskSchedulingDueDate(task);
+    return isActive(task) && schedulingDue && isDueThisWeek(schedulingDue);
   }
 
   if (taskQuickFilter === "workflow") {
@@ -12282,7 +12310,7 @@ function matchesTaskQuickFilter(task) {
   }
 
   if (taskQuickFilter === "next-week") {
-    return isActive(task) && isDueNextWeek(task.dueDate);
+    return isActive(task) && isDueNextWeek(getTaskSchedulingDueDate(task));
   }
 
   return true;
@@ -12542,16 +12570,14 @@ function renderDashboardCommandBar(stats) {
   renderDashboardStudySnapshot();
 }
 
-function renderDashboardTaskMeta(task) {
-  const studyNo = task.study?.trim() || "";
+function renderDashboardTaskSiteMeta(task) {
   const siteNumber = getTaskStudySiteNumber(task);
   const siteName = task.site?.trim() ? getStandardSiteName(task.site) : "";
   const parts = [];
-  if (studyNo) parts.push(studyNo);
   if (siteNumber) parts.push(siteNumber);
   if (siteName) parts.push(siteName);
-  const label = parts.length ? parts.join(" · ") : "Study · Site 미정";
-  return escapeHtml(label);
+  if (!parts.length) return "";
+  return escapeHtml(parts.join(" · "));
 }
 
 function renderDashboardTaskWorkflowStep(task) {
@@ -12580,12 +12606,12 @@ function renderDashboardGreeting() {
 
 function getDashboardUrgentCounts() {
   const todayStr = toDateString(getToday());
-  const activeTasks = tasks.filter((t) => !isInboxTask(t) && isActive(t) && t.dueDate);
+  const activeTasks = tasks.filter((t) => !isInboxTask(t) && isActive(t) && getTaskSchedulingDueDate(t));
   return {
-    today: activeTasks.filter((t) => t.dueDate === todayStr).length,
-    d1: activeTasks.filter((t) => daysUntilDue(t.dueDate) === 1).length,
-    d2: activeTasks.filter((t) => daysUntilDue(t.dueDate) === 2).length,
-    d3: activeTasks.filter((t) => daysUntilDue(t.dueDate) === 3).length,
+    today: activeTasks.filter((t) => getTaskSchedulingDueDate(t) === todayStr).length,
+    d1: activeTasks.filter((t) => daysUntilDue(getTaskSchedulingDueDate(t)) === 1).length,
+    d2: activeTasks.filter((t) => daysUntilDue(getTaskSchedulingDueDate(t)) === 2).length,
+    d3: activeTasks.filter((t) => daysUntilDue(getTaskSchedulingDueDate(t)) === 3).length,
   };
 }
 
@@ -12733,11 +12759,11 @@ function getDashboardDueBadge(task) {
   if (task.status === "Completed") {
     return { label: "Completed", className: "dash-v2-badge--done due-tier--done" };
   }
-  const primaryDate = getTaskPrimaryDueDate(task);
-  if (!primaryDate) {
+  const displayDate = getTaskDisplayDueDate(task);
+  if (!displayDate) {
     return { label: "—", className: "dash-v2-badge--neutral due-tier--none" };
   }
-  const badge = getDueDayBadge(primaryDate, task.status);
+  const badge = getDueDayBadge(displayDate, task.status);
   const classMap = {
     overdue: "dash-v2-badge--overdue due-tier--overdue",
     today: "dash-v2-badge--today due-tier--today",
@@ -12746,7 +12772,12 @@ function getDashboardDueBadge(task) {
     done: "dash-v2-badge--done due-tier--done",
     none: "dash-v2-badge--neutral due-tier--none",
   };
-  return { label: badge.label, className: classMap[badge.tier] || "dash-v2-badge--neutral" };
+  const schedulingDate = getTaskSchedulingDueDate(task);
+  const title =
+    task.workDueDate?.trim() && schedulingDate && task.workDueDate.trim() !== schedulingDate
+      ? `Work Due ${badge.label} · To-do ${getDueDayBadge(schedulingDate, task.status).label}`
+      : "";
+  return { label: badge.label, className: classMap[badge.tier] || "dash-v2-badge--neutral", title };
 }
 
 function getDashboardWorkflowLabel(task) {
@@ -12908,15 +12939,21 @@ function renderDashboard() {
   renderDashboardHero();
 
   const overdueTasks = activeTasks
-    .filter((t) => daysUntilDue(t.dueDate) < 0)
-    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate));
+    .filter((t) => {
+      const schedulingDue = getTaskSchedulingDueDate(t);
+      return schedulingDue && daysUntilDue(schedulingDue) < 0;
+    })
+    .sort((a, b) => parseDate(getTaskSchedulingDueDate(a)) - parseDate(getTaskSchedulingDueDate(b)));
 
   const todayTasks = activeTasks
-    .filter((t) => t.dueDate === todayStr)
+    .filter((t) => getTaskSchedulingDueDate(t) === todayStr)
     .sort((a, b) => compareAttentionTasks(a, b));
 
   const tomorrowTasks = activeTasks
-    .filter((t) => daysUntilDue(t.dueDate) === 1)
+    .filter((t) => {
+      const schedulingDue = getTaskSchedulingDueDate(t);
+      return schedulingDue && daysUntilDue(schedulingDue) === 1;
+    })
     .sort((a, b) => compareAttentionTasks(a, b));
 
   renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks);
@@ -13078,7 +13115,8 @@ function renderDashItem(task, type, options = {}) {
     const badge = getDashboardDueBadge(task);
     const wfBar = renderDashboardTaskWorkflowBar(task);
     const hasWf = Boolean(wfBar);
-    const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
+    const siteMeta = renderDashboardTaskSiteMeta(task);
+    const siteMetaHtml = siteMeta ? `<span class="dash-task-row__meta">${siteMeta}</span>` : "";
 
     return `
     <article class="dash-task-row${hasWf ? " dash-task-row--has-wf" : ""} dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
@@ -13087,10 +13125,10 @@ function renderDashItem(task, type, options = {}) {
           ${criticalBadge}
           <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
         </span>
-        <span class="dash-task-row__meta">${escapeHtml(studyLabel + sitePart)}</span>
+        ${siteMetaHtml}
       </button>
       ${wfBar}
-      <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+      <span class="dash-v2-badge ${badge.className}"${badge.title ? ` title="${escapeAttr(badge.title)}"` : ""}>${escapeHtml(badge.label)}</span>
       <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
       <button type="button" class="dash-task-row__check-btn${isDone ? " dash-task-row__check-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
         <span class="dash-task-row__check-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
@@ -13231,14 +13269,14 @@ function renderTaskDueProminent(task) {
     return `<span class="task-card__due-text task-card__due-text--done">Done</span>`;
   }
 
-  const workDue = task.workDueDate || "";
-  const todoDue = task.dueDate || "";
-  if (!workDue && !todoDue) {
+  const workDue = task.workDueDate?.trim() || "";
+  const todoDue = getTaskSchedulingDueDate(task);
+  const displayDate = getTaskDisplayDueDate(task);
+  if (!displayDate) {
     return `<span class="task-card__due-text task-card__due-text--none">—</span>`;
   }
 
-  const primaryDate = workDue || todoDue;
-  const primaryBadge = getDueDayBadge(primaryDate, task.status);
+  const primaryBadge = getDueDayBadge(displayDate, task.status);
   let html = `<div class="task-card__due-stack">
     <span class="task-card__due-primary ${primaryBadge.className}">${escapeHtml(primaryBadge.label)}</span>`;
 
@@ -13269,7 +13307,8 @@ function renderTaskQuickActions(task) {
 }
 
 function renderTaskCard({ task, isSubtask, mobile = false }) {
-  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "";
+  const schedulingDue = getTaskSchedulingDueDate(task);
+  const urgency = schedulingDue ? getDueUrgency(schedulingDue, task.status) : "";
   const urgencyClass =
     urgency === "overdue" ? "task-card--overdue" : urgency === "urgent" ? "task-card--urgent" : "";
   const studyLabel = task.study?.trim() || "Study 미정";
@@ -13309,7 +13348,7 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
           ${routineBlock}
         </button>
         <div class="task-card__meta-row">
-          <span class="task-card__due-badge dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+          <span class="task-card__due-badge dash-v2-badge ${badge.className}"${badge.title ? ` title="${escapeAttr(badge.title)}"` : ""}>${escapeHtml(badge.label)}</span>
           ${priorityBadge}
         </div>
       </div>
@@ -13349,7 +13388,8 @@ function renderTable() {
 }
 
 function renderTableRow({ task, isSubtask, isLastSubtask }) {
-  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "normal";
+  const schedulingDue = getTaskSchedulingDueDate(task);
+  const urgency = schedulingDue ? getDueUrgency(schedulingDue, task.status) : "normal";
   const rowClass = [
     urgency === "overdue" ? "row--overdue" : urgency === "urgent" ? "row--urgent" : "",
     isSubtask ? "row--subtask" : "row--parent",

@@ -11940,15 +11940,15 @@ button.dashboard-v2__urgent-bucket:hover {
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 0.12rem;
+  gap: 0.18rem;
   flex-shrink: 0;
-  min-width: 3.2rem;
+  min-width: 4.8rem;
 }
 
 .dash-task-wf-bar__track {
   display: block;
-  width: 3.2rem;
-  height: 5px;
+  width: 4.8rem;
+  height: 7px;
   border-radius: 999px;
   background: #e2e8f0;
   overflow: hidden;
@@ -11962,7 +11962,7 @@ button.dashboard-v2__urgent-bucket:hover {
 }
 
 .dash-task-wf-bar__pct {
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: #6366f1;
   line-height: 1;
@@ -12005,6 +12005,6 @@ button.dashboard-v2__urgent-bucket:hover {
   }
 
   .dash-task-wf-bar__track {
-    width: 4rem;
+    width: 5.5rem;
   }
 }

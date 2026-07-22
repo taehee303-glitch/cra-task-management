@@ -17,6 +17,26 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 103 — 2026-07-22 — To-do Due vs Work Due split
+
+### Changed
+
+- **Dashboard 배치** — To-do Due(할 일 Due) 기준으로 오늘/내일/지연/이번 주 섹션 분류
+- **D-day 배지 표시** — Work Due(업무 마감일) 기준 D-day 표시 (미설정 시 To-do Due fallback)
+- Work Due와 To-do Due가 다를 때 배지 tooltip에 두 날짜 모두 표시
+
+---
+
+## [1.4.0] — build 102 — 2026-07-22 — Dashboard Hero & Task Card polish
+
+### Changed
+
+- **Hero** — 오늘/남음 필터 칩 제거 (하단 Task 섹션으로 충분)
+- **Task Card** — Study 그룹핑에 맞춰 하단 메타는 Site 정보만 표시
+- **WF Progress Bar** — Task 카드 우측 진행률 바 크기 확대
+
+---
+
 ## [1.4.0] — build 101 — 2026-07-22 — Dashboard Task Card + Study Grouping
 
 ### Changed
