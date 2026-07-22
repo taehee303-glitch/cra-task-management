@@ -4240,6 +4240,31 @@ body.body--settings-open {
   cursor: pointer;
 }
 
+.topbar__back {
+  display: none;
+  min-width: calc(44px * var(--ui-scale));
+  min-height: calc(44px * var(--ui-scale));
+  padding: 0 calc(8px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(10px * var(--ui-scale));
+  background: white;
+  color: var(--primary);
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.app-mode-daily .topbar__back:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-mode-daily .topbar--has-back .topbar__title {
+  text-align: center;
+}
+
 .topbar__title {
   flex: 1;
   font-size: 1.15rem;
@@ -12644,6 +12669,169 @@ button.dashboard-v2__urgent-bucket:hover {
   .app-mode-daily .mobile-daily__section-title {
     margin-bottom: 0;
   }
+}
+
+/* ── Build 119: Mobile Tasks compact actions, Calendar day popup, back nav ── */
+@media (max-width: 768px) {
+  .app-mode-daily .task-card--mobile-compact {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: calc(8px * var(--ui-scale));
+    padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-card__actions--mobile-compact {
+    display: block;
+    border-top: 1px solid #f1f5f9;
+    padding-top: calc(8px * var(--ui-scale));
+    margin-top: 0;
+  }
+
+  .app-mode-daily .task-card__quick-actions--mobile-compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: calc(6px * var(--ui-scale));
+    width: 100%;
+    overflow: visible;
+    flex-wrap: nowrap;
+  }
+
+  .app-mode-daily .task-card__quick-action--status {
+    min-width: 0;
+  }
+
+  .app-mode-daily .task-card__quick-action--status .status-dropdown__trigger {
+    width: 100%;
+    min-width: 0;
+    min-height: calc(34px * var(--ui-scale));
+    padding-inline: calc(8px * var(--ui-scale));
+    font-size: calc(11px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-card__quick-actions--mobile-compact .task-card__icon-btn {
+    width: calc(34px * var(--ui-scale));
+    height: calc(34px * var(--ui-scale));
+    min-width: calc(34px * var(--ui-scale));
+    font-size: calc(15px * var(--ui-scale));
+    flex-shrink: 0;
+  }
+
+  .app-mode-daily .calendar-month-day[data-calendar-date] {
+    cursor: pointer;
+  }
+
+  .app-mode-daily .calendar-month-day[data-calendar-date]:active {
+    background: #f8fafc;
+  }
+
+  .app-mode-daily .calendar-month-day__header {
+    pointer-events: none;
+  }
+}
+
+.calendar-day-modal-overlay {
+  z-index: 520;
+}
+
+.modal--calendar-day {
+  width: min(100%, calc(420px * var(--ui-scale)));
+  max-height: min(80dvh, calc(640px * var(--ui-scale)));
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-day-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--ui-scale));
+  padding: calc(14px * var(--ui-scale)) calc(16px * var(--ui-scale));
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-day-modal__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.calendar-day-modal__body {
+  overflow-y: auto;
+  padding: calc(10px * var(--ui-scale));
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--ui-scale));
+}
+
+.calendar-day-modal__empty {
+  margin: calc(12px * var(--ui-scale)) 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.calendar-day-modal__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(10px * var(--ui-scale));
+  width: 100%;
+  padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(10px * var(--ui-scale));
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.calendar-day-modal__item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(2px * var(--ui-scale));
+}
+
+.calendar-day-modal__item-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-modal__item-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-modal__item-status {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: calc(4px * var(--ui-scale)) calc(8px * var(--ui-scale));
+}
+
+.calendar-day-modal__item--overdue {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.calendar-day-modal__item--urgent {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.calendar-day-modal__item--done .calendar-day-modal__item-name {
+  text-decoration: line-through;
+  color: #94a3b8;
 }
 
 @media (max-width: 380px) {

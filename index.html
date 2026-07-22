@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <meta name="description" content="Clinical Research Associate Task Manager" />
-  <meta name="app-build" content="118" />
+  <meta name="app-build" content="119" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -17,10 +17,10 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="styles.css?v=118" />
+  <link rel="stylesheet" href="styles.css?v=119" />
   <script>
     (function () {
-      var BUILD = "118";
+      var BUILD = "119";
       try {
         var params = new URLSearchParams(location.search);
         if (params.get("b") !== BUILD) {
@@ -60,7 +60,7 @@
       bar.id = "authGateEscapeBar";
       bar.innerHTML =
         '<button type="button" class="auth-gate__skip btn btn--primary btn--sm" id="authGateSkipBtn">▶ Dashboard 건너뛰기</button>' +
-        '<button type="button" class="auth-gate__refresh btn btn--ghost btn--sm" id="authGateCacheRefreshBtn">최신 버전 새로고침 (Build 118)</button>';
+        '<button type="button" class="auth-gate__refresh btn btn--ghost btn--sm" id="authGateCacheRefreshBtn">최신 버전 새로고침 (Build 119)</button>';
       gate.appendChild(bar);
     });
   </script>
@@ -121,13 +121,13 @@
       <button type="button" class="auth-gate__sign-in btn btn--primary" id="authGateSignInBtn">Google로 로그인</button>
       <p class="auth-gate__hint" id="authGateHint"></p>
       <p class="auth-gate__error" id="authGateError" hidden role="alert"></p>
-      <p class="auth-gate__debug" id="authGateDebug">Build 118 · 준비 중…</p>
+      <p class="auth-gate__debug" id="authGateDebug">Build 119 · 준비 중…</p>
       <p class="auth-gate__alt-host" id="authGateAltHost" hidden></p>
       <p class="auth-gate__meta" id="authGateMeta"></p>
     </div>
     <div class="auth-gate__escape-bar" id="authGateEscapeBar">
       <button type="button" class="auth-gate__skip btn btn--primary btn--sm" id="authGateSkipBtn">▶ Dashboard 건너뛰기</button>
-      <button type="button" class="auth-gate__refresh btn btn--ghost btn--sm" id="authGateCacheRefreshBtn">최신 버전 새로고침 (Build 118)</button>
+      <button type="button" class="auth-gate__refresh btn btn--ghost btn--sm" id="authGateCacheRefreshBtn">최신 버전 새로고침 (Build 119)</button>
     </div>
   </div>
   <div class="workspace workspace--locked" id="workspace" hidden>
@@ -189,6 +189,7 @@
 
     <div class="workspace__body">
       <header class="topbar">
+        <button type="button" class="topbar__back" id="mobileBackBtn" hidden aria-label="뒤로">←</button>
         <button type="button" class="topbar__menu" id="sidebarToggleBtn" aria-label="메뉴 열기" aria-expanded="false">☰</button>
         <h1 class="topbar__title" id="topbarTitle">My Tasks</h1>
         <div class="topbar__actions">
@@ -1508,6 +1509,17 @@
     </div>
   </div>
 
+  <!-- Calendar Day Tasks Modal (Mobile) -->
+  <div class="modal-overlay calendar-day-modal-overlay" id="calendarDayModal" hidden>
+    <div class="modal modal--calendar-day" role="dialog" aria-modal="true" aria-labelledby="calendarDayModalTitle">
+      <header class="calendar-day-modal__header">
+        <h3 class="calendar-day-modal__title" id="calendarDayModalTitle">Task</h3>
+        <button type="button" class="modal-close" id="closeCalendarDayModalBtn" aria-label="닫기">&times;</button>
+      </header>
+      <div class="calendar-day-modal__body" id="calendarDayModalList"></div>
+    </div>
+  </div>
+
   <!-- Task Read Modal (Calendar) -->
   <div class="modal-overlay task-read-modal-overlay" id="taskReadModal" hidden>
     <div class="modal modal--task-read" role="dialog" aria-modal="true" aria-labelledby="taskReadTitle">
@@ -1757,7 +1769,7 @@
   <script src="firebase-sync.js?v=95"></script>
   <script src="calendar-config.js?v=95"></script>
   <script src="calendar-sync.js?v=95"></script>
-  <script src="app.js?v=118"></script>
+  <script src="app.js?v=119"></script>
   <script src="pwa.js?v=95"></script>
 </body>
 </html>

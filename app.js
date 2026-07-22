@@ -224,6 +224,7 @@ const MOBILE_FILTER_LABELS = TASK_QUICK_FILTER_LABELS;
 const PRIORITY_SORT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
 let currentViewName = "dashboard";
+let mobileNavSuppressPop = false;
 let followUpPromptContext = null;
 let pendingFollowUpParentTask = null;
 let workflowDetailEditRef = null;
@@ -287,12 +288,17 @@ const els = {
   sidebar: document.getElementById("sidebar"),
   sidebarBackdrop: document.getElementById("sidebarBackdrop"),
   sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
+  mobileBackBtn: document.getElementById("mobileBackBtn"),
   topbarTitle: document.getElementById("topbarTitle"),
   quickAddInput: document.getElementById("quickAddInput"),
   quickAddBtn: document.getElementById("quickAddBtn"),
   dashboardQuickAddInput: document.getElementById("dashboardQuickAddInput"),
   dashboardQuickAddBtn: document.getElementById("dashboardQuickAddBtn"),
   taskReadModal: document.getElementById("taskReadModal"),
+  calendarDayModal: document.getElementById("calendarDayModal"),
+  calendarDayModalTitle: document.getElementById("calendarDayModalTitle"),
+  calendarDayModalList: document.getElementById("calendarDayModalList"),
+  closeCalendarDayModalBtn: document.getElementById("closeCalendarDayModalBtn"),
   taskReadBody: document.getElementById("taskReadBody"),
   taskReadTitle: document.getElementById("taskReadTitle"),
   taskReadPriority: document.getElementById("taskReadPriority"),
@@ -1593,6 +1599,12 @@ async function finishAppBootstrap() {
       openTaskDetail(taskId);
     }
   });
+  bindEvent(els.closeCalendarDayModalBtn, "click", () => closeCalendarDayModal({ fromUserBack: true }));
+  els.calendarDayModal?.addEventListener("click", (event) => {
+    if (event.target === els.calendarDayModal) closeCalendarDayModal({ fromUserBack: true });
+  });
+  bindEvent(els.mobileBackBtn, "click", () => performMobileBack());
+  window.addEventListener("popstate", handleMobilePopState);
   els.mobileFilterBtns.forEach((btn) => {
     btn.addEventListener("click", () => handleMobileFilterClick(btn.dataset.mobileFilter));
   });
@@ -1787,7 +1799,7 @@ async function finishAppBootstrap() {
   bindEvent(els.dashboardWorkflowEditBtn, "click", () => {
     if (dashboardWorkflowTaskId) navigateToMyTasksEdit(dashboardWorkflowTaskId);
   });
-  bindEvent(els.taskDetailBackBtn, "click", closeTaskDetail);
+  bindEvent(els.taskDetailBackBtn, "click", () => closeTaskDetail({ fromUserBack: true }));
   bindEvent(els.cancelEditBtn, "click", closeTaskDetail);
   bindEvent(els.deleteTaskDetailBtn, "click", () => {
     const id = document.getElementById("editId")?.value;
@@ -1803,7 +1815,7 @@ async function finishAppBootstrap() {
   bindEvent(els.taskDetailChecklist, "click", handleTaskChecklistClick);
   bindEvent(els.taskDetailChecklist, "change", handleTaskChecklistChange);
   bindEvent(els.openSettingsBtn, "click", () => openSettingsModal());
-  bindEvent(els.closeSettingsModalBtn, "click", closeSettingsModal);
+  bindEvent(els.closeSettingsModalBtn, "click", () => closeSettingsModal({ fromUserBack: true }));
   bindEvent(els.settingsBackBtn, "click", () => openSettingsPanel("main"));
   document.querySelectorAll("[data-settings-panel]").forEach((btn) => {
     btn.addEventListener("click", () => openSettingsPanel(btn.dataset.settingsPanel));
@@ -1818,7 +1830,7 @@ async function finishAppBootstrap() {
   bindEvent(els.settingsExportBtn, "click", exportTasksToCsv);
   bindEvent(els.settingsResetCacheBtn, "click", handleResetLocalCache);
   bindEvent(els.settingsModal, "click", (e) => {
-    if (e.target === els.settingsModal) closeSettingsModal();
+    if (e.target === els.settingsModal) closeSettingsModal({ fromUserBack: true });
   });
   bindEvent(els.referenceSearchInput, "input", handleReferenceSearchInput);
   bindEvent(els.referenceCloudSyncBtn, "click", handleReferenceCloudSyncClick);
@@ -5062,6 +5074,102 @@ function isDailyMode() {
   return MOBILE_BREAKPOINT.matches;
 }
 
+function pushMobileNavState(kind, payload = {}) {
+  if (!isDailyMode()) return;
+  history.pushState({ mobileNav: true, kind, ...payload }, "");
+}
+
+function syncMobileHistoryBack() {
+  if (!history.state?.mobileNav) return;
+  mobileNavSuppressPop = true;
+  history.back();
+}
+
+function handleMobilePopState() {
+  if (!isDailyMode()) return;
+  if (mobileNavSuppressPop) {
+    mobileNavSuppressPop = false;
+    return;
+  }
+  performMobileBack({ fromHistory: true });
+}
+
+function canMobileGoBack() {
+  if (!isDailyMode()) return false;
+  if (els.calendarDayModal && !els.calendarDayModal.hidden) return true;
+  if (els.taskReadModal && !els.taskReadModal.hidden) return true;
+  if (els.settingsModal && !els.settingsModal.hidden) return true;
+  if (els.addTaskModal && !els.addTaskModal.hidden) return true;
+  if (selectedTaskId && els.taskDetailPanel && !els.taskDetailPanel.hidden) return true;
+  if (dashboardWorkflowTaskId && els.dashboardWorkflowPanel && !els.dashboardWorkflowPanel.hidden) return true;
+  if (["study-master", "site-master", "system-master"].includes(currentViewName)) {
+    const panel = getMasterViewPanel(currentViewName);
+    if (panel?.classList.contains("master-mobile-detail-open")) return true;
+    return true;
+  }
+  return false;
+}
+
+function updateMobileBackUi() {
+  if (!els.mobileBackBtn) return;
+  const show = canMobileGoBack();
+  els.mobileBackBtn.hidden = !show;
+  document.querySelector(".topbar")?.classList.toggle("topbar--has-back", show);
+}
+
+function performMobileBack(options = {}) {
+  if (!isDailyMode()) return false;
+
+  if (els.calendarDayModal && !els.calendarDayModal.hidden) {
+    closeCalendarDayModal({ skipHistory: options.fromHistory });
+    return true;
+  }
+  if (els.taskReadModal && !els.taskReadModal.hidden) {
+    closeTaskReadView();
+    if (!options.fromHistory) syncMobileHistoryBack();
+    updateMobileBackUi();
+    return true;
+  }
+  if (els.settingsModal && !els.settingsModal.hidden) {
+    if (currentSettingsPanel !== "main") {
+      openSettingsPanel("main");
+      updateMobileBackUi();
+      return true;
+    }
+    closeSettingsModal({ skipHistory: options.fromHistory });
+    return true;
+  }
+  if (els.addTaskModal && !els.addTaskModal.hidden) {
+    closeAddTaskModal();
+    if (!options.fromHistory) syncMobileHistoryBack();
+    updateMobileBackUi();
+    return true;
+  }
+  if (selectedTaskId && els.taskDetailPanel && !els.taskDetailPanel.hidden) {
+    closeTaskDetail({ skipHistory: options.fromHistory });
+    return true;
+  }
+  if (dashboardWorkflowTaskId && els.dashboardWorkflowPanel && !els.dashboardWorkflowPanel.hidden) {
+    closeDashboardWorkflowDetail();
+    if (!options.fromHistory) syncMobileHistoryBack();
+    updateMobileBackUi();
+    return true;
+  }
+  if (["study-master", "site-master", "system-master"].includes(currentViewName)) {
+    const panel = getMasterViewPanel(currentViewName);
+    if (panel?.classList.contains("master-mobile-detail-open")) {
+      closeMasterMobileDetail(currentViewName);
+      if (!options.fromHistory) syncMobileHistoryBack();
+      updateMobileBackUi();
+      return true;
+    }
+    switchView("reference");
+    updateMobileBackUi();
+    return true;
+  }
+  return false;
+}
+
 function getViewTitle(viewName) {
   if (isDailyMode() && viewName === "dashboard") return "Home";
   if (isDailyMode() && viewName === "tasks") return "Today";
@@ -5080,12 +5188,16 @@ function applyAppMode() {
   if (els.sidebarToggleBtn) {
     els.sidebarToggleBtn.hidden = daily;
   }
+  if (daily && !history.state?.mobileRoot) {
+    history.replaceState({ mobileRoot: true }, "");
+  }
   if (!daily && currentViewName === "reference") {
     switchView("dashboard");
   }
   if (selectedTaskId) {
     closeTaskDetail();
   }
+  updateMobileBackUi();
 }
 
 function openMasterSheet() {
@@ -5106,6 +5218,7 @@ function getMasterViewPanel(viewName) {
 function setMasterMobileDetail(viewName, isOpen, editMode = false) {
   if (!isDailyMode()) return;
   const panel = getMasterViewPanel(viewName);
+  const wasOpen = panel?.classList.contains("master-mobile-detail-open");
   panel?.classList.toggle("master-mobile-detail-open", isOpen);
   panel?.classList.toggle("master-mobile-edit-open", editMode);
   const barId =
@@ -5116,6 +5229,8 @@ function setMasterMobileDetail(viewName, isOpen, editMode = false) {
         : "systemMasterMobileBar";
   const bar = document.getElementById(barId);
   if (bar) bar.hidden = !isOpen;
+  if (isOpen && !wasOpen) pushMobileNavState("masterDetail", { view: viewName });
+  updateMobileBackUi();
 }
 
 function closeMasterMobileDetail(viewName) {
@@ -5527,6 +5642,7 @@ function switchView(viewName) {
   }
   const showFab = FAB_VIEWS.includes(viewName);
   if (els.fabRoot) els.fabRoot.hidden = !showFab;
+  updateMobileBackUi();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -5635,6 +5751,8 @@ function openAddTaskModal(presetOrOptions = null) {
     els.taskWorkflowMatchHint.innerHTML = "";
   }
   requestAnimationFrame(() => els.task?.focus());
+  if (isDailyMode()) pushMobileNavState("addTask");
+  updateMobileBackUi();
 }
 
 function closeAddTaskModal() {
@@ -5644,6 +5762,7 @@ function closeAddTaskModal() {
   pendingFollowUpParentTask = null;
   if (els.taskWorkflowMatchHint) els.taskWorkflowMatchHint.hidden = true;
   updateAddTaskFollowUpContextPanel();
+  updateMobileBackUi();
 }
 
 function handleNavAction(action) {
@@ -5798,6 +5917,74 @@ function bindCalendarTaskClicks(container) {
       openTaskReadView(btn.dataset.edit);
     });
   });
+  bindCalendarDayClicks(container);
+}
+
+function bindCalendarDayClicks(container) {
+  if (!isDailyMode()) return;
+  container?.querySelectorAll("[data-calendar-date]").forEach((cell) => {
+    cell.addEventListener("click", (event) => {
+      if (event.target.closest("[data-edit]")) return;
+      openCalendarDayModal(cell.dataset.calendarDate);
+    });
+  });
+}
+
+function formatCalendarDayModalTitle(dateStr) {
+  const date = parseDate(dateStr);
+  if (!date || Number.isNaN(date.getTime())) return dateStr;
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 (${weekday})`;
+}
+
+function renderCalendarDayTaskItem(task) {
+  const urgency = task.dueDate ? getDueUrgency(task.dueDate, task.status) : "normal";
+  const urgencyClass =
+    urgency === "overdue"
+      ? " calendar-day-modal__item--overdue"
+      : urgency === "urgent"
+        ? " calendar-day-modal__item--urgent"
+        : "";
+  const doneClass = task.status === "Completed" ? " calendar-day-modal__item--done" : "";
+  const study = task.study?.trim() || "";
+  const site = getTaskStudySiteNumber(task);
+  const meta = [study, site].filter(Boolean).join(" · ");
+  return `
+    <button type="button" class="calendar-day-modal__item${urgencyClass}${doneClass}" data-edit="${escapeAttr(task.id)}">
+      <span class="calendar-day-modal__item-main">
+        <span class="calendar-day-modal__item-name">${escapeHtml(task.task)}</span>
+        ${meta ? `<span class="calendar-day-modal__item-meta">${escapeHtml(meta)}</span>` : ""}
+      </span>
+      <span class="calendar-day-modal__item-status">${escapeHtml(task.status)}</span>
+    </button>
+  `;
+}
+
+function openCalendarDayModal(dateStr) {
+  if (!isDailyMode() || !els.calendarDayModal) return;
+  const dayTasks = getTasksForDate(dateStr);
+  if (els.calendarDayModalTitle) {
+    els.calendarDayModalTitle.textContent = formatCalendarDayModalTitle(dateStr);
+  }
+  if (els.calendarDayModalList) {
+    els.calendarDayModalList.innerHTML = dayTasks.length
+      ? dayTasks.map(renderCalendarDayTaskItem).join("")
+      : '<p class="calendar-day-modal__empty">이 날짜에 등록된 Task가 없습니다.</p>';
+    bindTaskListActions(els.calendarDayModalList);
+  }
+  els.calendarDayModal.hidden = false;
+  pushMobileNavState("calendarDay", { date: dateStr });
+  updateMobileBackUi();
+}
+
+function closeCalendarDayModal(options = {}) {
+  if (!els.calendarDayModal) return;
+  els.calendarDayModal.hidden = true;
+  if (els.calendarDayModalList) els.calendarDayModalList.innerHTML = "";
+  if (options.fromUserBack && !options.skipHistory) {
+    syncMobileHistoryBack();
+  }
+  updateMobileBackUi();
 }
 
 let taskReadViewId = null;
@@ -5815,6 +6002,8 @@ function openTaskReadView(taskId) {
   }
   if (els.taskReadBody) els.taskReadBody.innerHTML = renderTaskReadContent(task);
   els.taskReadModal.hidden = false;
+  if (isDailyMode()) pushMobileNavState("taskRead", { taskId });
+  updateMobileBackUi();
 }
 
 function closeTaskReadView() {
@@ -5823,6 +6012,7 @@ function closeTaskReadView() {
     els.taskReadModal.hidden = true;
     delete els.taskReadModal.dataset.taskId;
   }
+  updateMobileBackUi();
 }
 
 function renderTaskReadContent(task) {
@@ -6069,7 +6259,7 @@ function renderCalendarMonthView() {
     const hiddenCount = Math.max(0, dayTasks.length - visibleTasks.length);
 
     cells.push(`
-      <div class="calendar-month-day${inMonth ? "" : " calendar-month-day--outside"}${isToday ? " calendar-month-day--today" : ""}">
+      <div class="calendar-month-day${inMonth ? "" : " calendar-month-day--outside"}${isToday ? " calendar-month-day--today" : ""}" data-calendar-date="${escapeAttr(dateStr)}">
         <div class="calendar-month-day__header">
           <span class="calendar-month-day__date">${day.getDate()}</span>
           ${dayTasks.length ? `<span class="calendar-month-day__count">${dayTasks.length}</span>` : ""}
@@ -8571,6 +8761,8 @@ function openDashboardWorkflowDetail(taskId) {
   }
   if (els.dashboardWorkflowPanel) els.dashboardWorkflowPanel.hidden = false;
   document.body.classList.add("dashboard-workflow-open");
+  if (isDailyMode()) pushMobileNavState("dashboardWorkflow", { taskId: task.id });
+  updateMobileBackUi();
   updateDashboardWorkflowSelection();
   els.dashboardWorkflowBody?.scrollTo(0, 0);
 }
@@ -8581,6 +8773,7 @@ function closeDashboardWorkflowDetail() {
   if (els.dashboardWorkflowBody) els.dashboardWorkflowBody.innerHTML = "";
   document.body.classList.remove("dashboard-workflow-open");
   updateDashboardWorkflowSelection();
+  updateMobileBackUi();
 }
 
 function navigateToMyTasksEdit(taskId) {
@@ -10963,7 +11156,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "118";
+const APP_BUILD = "119";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -11360,6 +11553,7 @@ function openSettingsPanel(panel = "main") {
   }
   if (panel === "data") updateDataSettingsUi();
   if (panel === "about") updateAboutSettingsUi();
+  updateMobileBackUi();
 }
 
 function updateCalendarSyncUi() {
@@ -11651,12 +11845,18 @@ function openSettingsModal(panel = "main") {
   }
   els.settingsModal.hidden = false;
   lockSettingsBodyScroll();
+  if (isDailyMode()) pushMobileNavState("settings");
+  updateMobileBackUi();
 }
 
-function closeSettingsModal() {
+function closeSettingsModal(options = {}) {
   els.settingsModal.hidden = true;
   unlockSettingsBodyScroll();
   openSettingsPanel("main");
+  if (options.fromUserBack && !options.skipHistory) {
+    syncMobileHistoryBack();
+  }
+  updateMobileBackUi();
 }
 
 let settingsBodyOverflowBackup = "";
@@ -12508,6 +12708,9 @@ function openTaskDetail(id) {
   if (!task) return;
 
   closeDashboardWorkflowDetail();
+  if (isDailyMode() && els.calendarDayModal && !els.calendarDayModal.hidden) {
+    closeCalendarDayModal({ skipHistory: true });
+  }
   selectedTaskId = id;
   populateTaskDetailForm(task);
 
@@ -12516,15 +12719,17 @@ function openTaskDetail(id) {
   if (isDailyMode()) {
     document.body.classList.add("task-detail-mobile-open");
     lockTaskDetailBodyScroll();
+    pushMobileNavState("taskDetail", { id });
   }
 
   if (els.taskDetailBackBtn) els.taskDetailBackBtn.hidden = !isDailyMode();
   if (els.closeTaskDetailBtn) els.closeTaskDetailBtn.hidden = isDailyMode();
   updateTaskListSelection();
+  updateMobileBackUi();
   els.taskDetailPanel?.querySelector(".task-detail-panel__scroll")?.scrollTo(0, 0);
 }
 
-function closeTaskDetail() {
+function closeTaskDetail(options = {}) {
   selectedTaskId = null;
   taskDetailChecklistDraft = [];
   if (els.taskDetailPanel) els.taskDetailPanel.hidden = true;
@@ -12535,6 +12740,10 @@ function closeTaskDetail() {
   if (els.editSiteInfoToggleBtn) els.editSiteInfoToggleBtn.hidden = true;
   if (els.editSiteMasterHint) els.editSiteMasterHint.hidden = true;
   updateTaskListSelection();
+  if (options.fromUserBack && !options.skipHistory) {
+    syncMobileHistoryBack();
+  }
+  updateMobileBackUi();
 }
 
 let taskDetailBodyOverflowBackup = "";
@@ -14152,6 +14361,18 @@ function renderTaskQuickActions(task, options = {}) {
   const calendarSynced = task.calendarSync?.eventId;
   const isDone = task.status === "Completed";
   const includeMeta = Boolean(options.includeMeta);
+  const mobileCompact = Boolean(options.mobileCompact);
+
+  if (mobileCompact) {
+    return `
+    <div class="task-card__quick-actions task-card__quick-actions--mobile-compact">
+      <div class="task-card__quick-action task-card__quick-action--status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</div>
+      <button type="button" class="task-card__icon-btn${calendarSynced ? " task-card__icon-btn--synced" : ""}" data-google-calendar="${escapeAttr(task.id)}" title="Google Calendar" aria-label="Google Calendar">📅</button>
+      <button type="button" class="task-card__icon-btn task-card__icon-btn--complete${isDone ? " task-card__icon-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>✓</button>
+    </div>
+  `;
+  }
+
   const wfBar = includeMeta ? renderDashboardTaskWorkflowBar(task) : "";
   const workDueRef = includeMeta ? renderTaskWorkDueRef(task) : "";
 
@@ -14189,10 +14410,7 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
 
   if (mobile) {
     return `
-    <article class="task-card task-card--action task-card--mobile ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="task-card__check${isDone ? " task-card__check--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-        <span aria-hidden="true">${isDone ? "✓" : ""}</span>
-      </button>
+    <article class="task-card task-card--action task-card--mobile task-card--mobile-compact ${isSubtask ? "task-card--subtask" : ""} ${urgencyClass}${isDone ? " task-card--completed" : ""}${selectedTaskId === task.id ? " task-card--selected" : ""}" data-task-id="${escapeAttr(task.id)}">
       <div class="task-card__content">
         <button type="button" class="task-card__detail" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)} 상세 보기">
           <span class="task-card__title-line">
@@ -14206,10 +14424,8 @@ function renderTaskCard({ task, isSubtask, mobile = false }) {
           ${priorityBadge}
         </div>
       </div>
-      <div class="task-card__actions task-card__actions--action task-card__actions--meta">
-        ${renderTaskQuickActions(task, { includeMeta: true })}
-        <button type="button" class="task-card__action task-card__action--detail" data-edit="${escapeAttr(task.id)}" title="상세 보기" aria-label="상세 보기">›</button>
-        ${renderTaskMoreMenu(task)}
+      <div class="task-card__actions task-card__actions--action task-card__actions--meta task-card__actions--mobile-compact">
+        ${renderTaskQuickActions(task, { mobileCompact: true })}
       </div>
     </article>
   `;
