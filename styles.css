@@ -292,14 +292,14 @@ body.pwa-standalone {
 
   .bottom-nav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 300;
-    padding: 6px max(8px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-bottom))
-      max(8px, env(safe-area-inset-right));
+    padding: 6px max(4px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-bottom))
+      max(4px, env(safe-area-inset-right));
     background: rgba(255, 255, 255, 0.96);
     border-top: 1px solid var(--border);
     box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
@@ -311,14 +311,15 @@ body.pwa-standalone {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    min-height: 52px;
-    padding: 6px 4px;
+    gap: 2px;
+    min-height: 50px;
+    min-width: 0;
+    padding: 4px 2px;
     border: none;
     border-radius: 10px;
     background: transparent;
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: 0.64rem;
     font-weight: 600;
     cursor: pointer;
   }
@@ -329,12 +330,16 @@ body.pwa-standalone {
   }
 
   .bottom-nav__icon {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
     line-height: 1;
   }
 
   .bottom-nav__label {
-    line-height: 1.1;
+    line-height: 1.05;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .app {
@@ -12471,5 +12476,183 @@ button.dashboard-v2__urgent-bucket:hover {
 
   .dash-task-wf-bar__track {
     width: 5.5rem;
+  }
+}
+
+/* ── Build 118: Mobile Daily UX (phone only; desktop unchanged) ── */
+@media (max-width: 768px) {
+  .app-mode-daily .reference-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: calc(8px * var(--ui-scale));
+    padding-top: calc(10px * var(--ui-scale));
+  }
+
+  .app-mode-daily .reference-footer__btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(4px * var(--ui-scale));
+    min-height: calc(72px * var(--ui-scale));
+    padding: calc(10px * var(--ui-scale));
+    border: 1px solid var(--border);
+    border-radius: calc(12px * var(--ui-scale));
+    background: #fff;
+    text-align: center;
+  }
+
+  .app-mode-daily .reference-footer__icon {
+    font-size: 1.25rem;
+  }
+
+  .app-mode-daily .reference-footer__label {
+    font-size: 0.78rem;
+  }
+
+  .app-mode-daily .reference-view {
+    padding-bottom: calc(8px * var(--ui-scale));
+  }
+
+  .app-mode-daily .reference-search {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: calc(8px * var(--ui-scale));
+    background: var(--bg, #f1f5f9);
+  }
+
+  .app-mode-daily .dashboard-quick-capture--top {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: calc(6px * var(--ui-scale));
+    background: var(--bg, #f1f5f9);
+  }
+
+  .app-mode-daily .dashboard--compact {
+    padding-bottom: calc(4px * var(--ui-scale));
+  }
+
+  .app-mode-daily .dash-list--v2 .dash-task-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "main main main"
+      "badge status check";
+    gap: calc(6px * var(--ui-scale)) calc(8px * var(--ui-scale));
+    padding: calc(10px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  }
+
+  .app-mode-daily .dash-task-row--has-wf {
+    grid-template-areas:
+      "main main main"
+      "wf wf wf"
+      "badge status check";
+  }
+
+  .app-mode-daily .dash-task-row__main {
+    grid-area: main;
+  }
+
+  .app-mode-daily .dash-task-wf-bar {
+    grid-area: wf;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .app-mode-daily .dash-task-wf-bar__track {
+    flex: 1;
+    width: auto;
+    max-width: none;
+  }
+
+  .app-mode-daily .dash-v2-badge {
+    grid-area: badge;
+    justify-self: start;
+  }
+
+  .app-mode-daily .dash-task-row__status {
+    grid-area: status;
+    justify-self: end;
+  }
+
+  .app-mode-daily .dash-task-row__check-btn {
+    grid-area: check;
+    width: calc(36px * var(--ui-scale));
+    height: calc(36px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__actions--meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: calc(4px * var(--ui-scale));
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-top: calc(8px * var(--ui-scale));
+    margin-top: calc(2px * var(--ui-scale));
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__actions--meta::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__quick-actions {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__quick-action .status-dropdown__trigger {
+    min-width: calc(76px * var(--ui-scale));
+    min-height: calc(36px * var(--ui-scale));
+    font-size: calc(11px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__icon-btn {
+    width: calc(36px * var(--ui-scale));
+    height: calc(36px * var(--ui-scale));
+    font-size: calc(16px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__quick-actions .dash-task-wf-bar {
+    min-width: calc(72px * var(--ui-scale));
+    height: calc(36px * var(--ui-scale));
+    padding-inline: calc(8px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-card--mobile .task-card__quick-actions .task-card__work-due-ref {
+    min-width: calc(72px * var(--ui-scale));
+    height: calc(36px * var(--ui-scale));
+    min-height: calc(36px * var(--ui-scale));
+    font-size: calc(11px * var(--ui-scale));
+  }
+
+  .app-mode-daily .task-filter--mobile {
+    padding-bottom: calc(2px * var(--ui-scale));
+  }
+
+  .app-mode-daily .mobile-daily__section-head {
+    justify-content: space-between;
+    margin-bottom: calc(4px * var(--ui-scale));
+  }
+
+  .app-mode-daily .mobile-daily__section-title {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .bottom-nav__btn {
+    font-size: 0.58rem;
+    min-height: 48px;
+  }
+
+  .bottom-nav__icon {
+    font-size: 1.05rem;
   }
 }
