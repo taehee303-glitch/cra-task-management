@@ -8928,13 +8928,16 @@ function handleWorkflowLearnSave() {
 
 function formatRoutineScheduleSummary(routine) {
   const schedule = routine.schedule || {};
+  const offsets = (schedule.offsets || []).slice().sort((a, b) => b - a);
+  const offsetLabel = offsets.length
+    ? ` · D-${offsets.filter((n) => n > 0).join("/D-")}${offsets.includes(0) ? "/Due" : ""}`
+    : "";
   if (schedule.type === "weekly") {
-    return `매주 ${ROUTINE_WEEKDAY_LABELS[schedule.weekday] || "?"}요일`;
+    return `매주 ${ROUTINE_WEEKDAY_LABELS[schedule.weekday] || "?"}요일${offsetLabel}`;
   }
   if (schedule.type === "monthly") {
-    return `매월 ${schedule.dayOfMonth}일`;
+    return `매월 ${schedule.dayOfMonth}일${offsetLabel}`;
   }
-  const offsets = (schedule.offsets || []).slice().sort((a, b) => b - a);
   if (offsets.length) {
     return `D-${offsets.filter((n) => n > 0).join("/D-")}${offsets.includes(0) ? "/Due" : ""}`;
   }
