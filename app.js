@@ -10963,7 +10963,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "116";
+const APP_BUILD = "117";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -13226,11 +13226,16 @@ function renderDashboardTaskWorkflowBar(task) {
 function groupDashboardTasksByStudy(taskList) {
   const map = new Map();
   taskList.forEach((task) => {
-    const study = task.study?.trim() || "Study 미정";
+    const study = task.study?.trim();
+    if (!study) return;
     if (!map.has(study)) map.set(study, []);
     map.get(study).push(task);
   });
   return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "ko"));
+}
+
+function shouldShowDashboardStudyHeaders(grouped) {
+  return grouped.length > 1 || grouped.some(([, studyTasks]) => studyTasks.length > 1);
 }
 
 function getDashboardStudyInsights() {
@@ -13327,24 +13332,29 @@ function renderDashboardCommandBar(stats) {
   renderDashboardStudySnapshot();
 }
 
-function renderDashboardTaskStudySiteMeta(task) {
+function renderDashboardTaskStudySiteMeta(task, options = {}) {
+  if (options.hideStudyMeta) return "";
+
   const study = task.study?.trim() || "";
   const siteNumber = getTaskStudySiteNumber(task);
+  const siteName = task.site?.trim() ? getStandardSiteName(task.site) : "";
   const parts = [];
-  if (study) parts.push(study);
-  if (siteNumber) parts.push(siteNumber);
+
+  if (options.studyInHeader) {
+    if (siteNumber) parts.push(siteNumber);
+    if (siteName) parts.push(siteName);
+  } else {
+    if (study) parts.push(study);
+    if (siteNumber) parts.push(siteNumber);
+    if (siteName) parts.push(siteName);
+  }
+
   if (!parts.length) return "";
   return escapeHtml(parts.join(" · "));
 }
 
 function renderDashboardTaskSiteMeta(task) {
-  const siteNumber = getTaskStudySiteNumber(task);
-  const siteName = task.site?.trim() ? getStandardSiteName(task.site) : "";
-  const parts = [];
-  if (siteNumber) parts.push(siteNumber);
-  if (siteName) parts.push(siteName);
-  if (!parts.length) return "";
-  return escapeHtml(parts.join(" · "));
+  return renderDashboardTaskStudySiteMeta(task, { studyInHeader: true });
 }
 
 function renderDashboardTaskWorkflowStep(task) {
@@ -13536,7 +13546,7 @@ function getDashboardDueBadge(task) {
   }
   const workDue = task.workDueDate?.trim();
   if (!workDue) {
-    return { label: "—", className: "dash-v2-badge--neutral due-tier--none" };
+    return null;
   }
   const badge = getDueDayBadge(workDue, task.status);
   const classMap = {
@@ -13633,14 +13643,21 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
   } else if (layout === "schedule") {
     itemsHtml = renderDashboardTimelineTasks(visible);
   } else {
-    const grouped = groupDashboardTasksByStudy(visible);
-    const showStudyHeaders = grouped.length > 1 || grouped.some(([, studyTasks]) => studyTasks.length > 1);
+    const studiedTasks = visible.filter((task) => task.study?.trim());
+    const unstudiedTasks = visible.filter((task) => !task.study?.trim());
+    const grouped = groupDashboardTasksByStudy(studiedTasks);
+    const showStudyHeaders = shouldShowDashboardStudyHeaders(grouped);
 
     itemsHtml = grouped
       .map(([study, studyTasks]) => {
         const tasksHtml = studyTasks
           .map((task, index) =>
-            renderDashItem(task, type, { compact: true, layout: "v2", focus: filter === "today" && index === 0 })
+            renderDashItem(task, type, {
+              compact: true,
+              layout: "v2",
+              focus: filter === "today" && index === 0,
+              studyInHeader: showStudyHeaders,
+            })
           )
           .join("");
 
@@ -13654,6 +13671,18 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
         `;
       })
       .join("");
+
+    if (unstudiedTasks.length) {
+      itemsHtml += unstudiedTasks
+        .map((task) =>
+          renderDashItem(task, type, {
+            compact: true,
+            layout: "v2",
+            hideStudyMeta: true,
+          })
+        )
+        .join("");
+    }
   }
 
   return `${itemsHtml}${renderDashboardMoreButton(filter, taskList, limit)}`;
@@ -13889,8 +13918,14 @@ function renderDashItem(task, type, options = {}) {
     const badge = getDashboardDueBadge(task);
     const wfBar = renderDashboardTaskWorkflowBar(task);
     const hasWf = Boolean(wfBar);
-    const siteMeta = renderDashboardTaskStudySiteMeta(task);
+    const siteMeta = renderDashboardTaskStudySiteMeta(task, {
+      studyInHeader: Boolean(options.studyInHeader),
+      hideStudyMeta: Boolean(options.hideStudyMeta),
+    });
     const siteMetaHtml = siteMeta ? `<span class="dash-task-row__meta">${siteMeta}</span>` : "";
+    const dueBadgeHtml = badge?.label
+      ? `<span class="dash-v2-badge ${badge.className}"${badge.title ? ` title="${escapeAttr(badge.title)}"` : ""}>${escapeHtml(badge.label)}</span>`
+      : "";
 
     return `
     <article class="dash-task-row${hasWf ? " dash-task-row--has-wf" : ""} dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
@@ -13902,7 +13937,7 @@ function renderDashItem(task, type, options = {}) {
         ${siteMetaHtml}
       </button>
       ${wfBar}
-      <span class="dash-v2-badge ${badge.className}"${badge.title ? ` title="${escapeAttr(badge.title)}"` : ""}>${escapeHtml(badge.label)}</span>
+      ${dueBadgeHtml}
       <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
       <button type="button" class="dash-task-row__check-btn${isDone ? " dash-task-row__check-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
         <span class="dash-task-row__check-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
