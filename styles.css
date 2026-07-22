@@ -11929,3 +11929,82 @@ button.dashboard-v2__urgent-bucket:hover {
     grid-column: 3;
   }
 }
+
+/* Build 101: Task card WF bar + study grouping */
+.dash-task-row--has-wf {
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+}
+
+.dash-task-wf-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.12rem;
+  flex-shrink: 0;
+  min-width: 3.2rem;
+}
+
+.dash-task-wf-bar__track {
+  display: block;
+  width: 3.2rem;
+  height: 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.dash-task-wf-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8b5cf6, #6366f1);
+}
+
+.dash-task-wf-bar__pct {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #6366f1;
+  line-height: 1;
+}
+
+.dash-study-group + .dash-study-group {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.dash-study-group__title {
+  margin: 0 0 0.25rem;
+  padding: 0 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.dash-study-group__list {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 640px) {
+  .dash-task-row--has-wf {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-rows: auto auto;
+  }
+
+  .dash-task-wf-bar {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    padding: 0 0.3rem 0.15rem;
+  }
+
+  .dash-task-wf-bar__track {
+    width: 4rem;
+  }
+}

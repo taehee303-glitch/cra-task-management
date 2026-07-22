@@ -17,6 +17,20 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 101 — 2026-07-22 — Dashboard Task Card + Study Grouping
+
+### Changed
+
+- **Dashboard** — Build 100 Command Center 레이아웃 되돌림 (slim Hero + 2-column main grid)
+- **Task Card** — Workflow 연결 Task만 카드 우측에 compact Progress Bar + % 표시
+- **Study Grouping** — 동일 Study Task를 섹션 내에서 묶어 표시
+
+### Removed
+
+- Dashboard 상단 Workflow Summary / Command Bar / Study Workflow 스냅샷
+
+---
+
 ## [1.4.0] — build 100 — 2026-07-22 — CRA Command Center Dashboard
 
 ### Changed

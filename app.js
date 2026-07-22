@@ -10271,7 +10271,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "100";
+const APP_BUILD = "101";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {
@@ -12418,32 +12418,34 @@ function getDashboardWorkflowTypeBadge(task) {
   return short.length > 8 ? short.slice(0, 8) : short;
 }
 
-function renderDashboardWorkflowCompactPanel(task) {
+function renderDashboardTaskWorkflowBar(task) {
   if (!isWorkflowConnectedTask(task)) return "";
   const ctx = resolveWorkflowContext(task);
   if (!ctx.workflow || !ctx.root || !ctx.instance) return "";
 
   const progress = getWorkflowProgressStats(ctx.workflow, ctx.root, ctx.instance);
-  const stepLabels = getWorkflowStepLabels(ctx.workflow, ctx.root, ctx.instance);
   const total = progress.total || 1;
   const completed = progress.completed || 0;
   const pct = Math.min(100, Math.round((completed / total) * 100));
-  const nextLine = stepLabels.nextStepName
-    ? `<span class="dash-cmd-wf__next">Next: ${escapeHtml(stepLabels.nextStepName)}</span>`
-    : "";
 
   return `
-    <div class="dash-cmd-wf" aria-label="Workflow Progress">
-      <span class="dash-cmd-wf__label">Workflow Progress</span>
-      <div class="dash-cmd-wf__track-row">
-        <div class="dash-cmd-wf__track" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}">
-          <span class="dash-cmd-wf__fill" style="width:${pct}%"></span>
-        </div>
-        <span class="dash-cmd-wf__pct">${pct}%</span>
+    <div class="dash-task-wf-bar" aria-label="Workflow 진행률 ${pct}%">
+      <div class="dash-task-wf-bar__track" role="progressbar" aria-valuenow="${completed}" aria-valuemin="0" aria-valuemax="${total}">
+        <span class="dash-task-wf-bar__fill" style="width:${pct}%"></span>
       </div>
-      ${nextLine}
+      <span class="dash-task-wf-bar__pct">${pct}%</span>
     </div>
   `;
+}
+
+function groupDashboardTasksByStudy(taskList) {
+  const map = new Map();
+  taskList.forEach((task) => {
+    const study = task.study?.trim() || "Study 미정";
+    if (!map.has(study)) map.set(study, []);
+    map.get(study).push(task);
+  });
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "ko"));
 }
 
 function getDashboardStudyInsights() {
@@ -12826,10 +12828,26 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
   } else if (layout === "schedule") {
     itemsHtml = renderDashboardTimelineTasks(visible);
   } else {
-    itemsHtml = visible
-      .map((task, index) =>
-        renderDashItem(task, type, { compact: true, layout: "v2", focus: filter === "today" && index === 0 })
-      )
+    const grouped = groupDashboardTasksByStudy(visible);
+    const showStudyHeaders = grouped.length > 1 || grouped.some(([, studyTasks]) => studyTasks.length > 1);
+
+    itemsHtml = grouped
+      .map(([study, studyTasks]) => {
+        const tasksHtml = studyTasks
+          .map((task, index) =>
+            renderDashItem(task, type, { compact: true, layout: "v2", focus: filter === "today" && index === 0 })
+          )
+          .join("");
+
+        if (!showStudyHeaders) return tasksHtml;
+
+        return `
+          <section class="dash-study-group">
+            <h4 class="dash-study-group__title">${escapeHtml(study)}</h4>
+            <div class="dash-study-group__list">${tasksHtml}</div>
+          </section>
+        `;
+      })
       .join("");
   }
 
@@ -12837,11 +12855,34 @@ function renderDashboardSectionTasks(taskList, type, filter, limit, options = {}
 }
 
 function renderDashboardHero() {
-  renderDashboardCommandBar(getDashboardStats());
+  const progress = getTodayProgressStats();
+
+  if (els.todayProgressTotal) els.todayProgressTotal.textContent = String(progress.total);
+  if (els.todayProgressCompleted) els.todayProgressCompleted.textContent = String(progress.completed);
+  if (els.todayProgressRemaining) {
+    els.todayProgressRemaining.textContent =
+      progress.total === 0 ? "0" : progress.remaining === 0 ? "0" : String(progress.remaining);
+  }
+  if (els.todayProgressCount) {
+    els.todayProgressCount.textContent = `${progress.completed} / ${progress.total}`;
+  }
+  if (els.todayProgressPercent) els.todayProgressPercent.textContent = `${progress.rate}%`;
+  if (els.todayProgressFill) els.todayProgressFill.style.width = `${progress.rate}%`;
+  if (els.dashboardEncouragement) {
+    els.dashboardEncouragement.textContent = getDashboardEncouragementMessage(progress.remaining, progress.total);
+    els.dashboardEncouragement.dataset.remaining = String(progress.remaining);
+    els.dashboardEncouragement.dataset.total = String(progress.total);
+  }
+
+  if (els.overallProgressPercent) els.overallProgressPercent.textContent = `${progress.rate}%`;
+  if (els.overallProgressSubtitle) {
+    els.overallProgressSubtitle.textContent = `${progress.completed} / ${progress.total}`;
+  }
+  if (els.overallProgressFill) els.overallProgressFill.style.width = `${progress.rate}%`;
 }
 
 function renderTodayProgressHero() {
-  renderDashboardCommandBar(getDashboardStats());
+  renderDashboardHero();
 }
 
 function renderOverallProgress(stats) {
@@ -12868,15 +12909,15 @@ function renderDashboard() {
 
   const overdueTasks = activeTasks
     .filter((t) => daysUntilDue(t.dueDate) < 0)
-    .sort((a, b) => compareDashboardCommandTasks(a, b));
+    .sort((a, b) => parseDate(a.dueDate) - parseDate(b.dueDate));
 
   const todayTasks = activeTasks
     .filter((t) => t.dueDate === todayStr)
-    .sort((a, b) => compareDashboardCommandTasks(a, b));
+    .sort((a, b) => compareAttentionTasks(a, b));
 
   const tomorrowTasks = activeTasks
     .filter((t) => daysUntilDue(t.dueDate) === 1)
-    .sort((a, b) => compareDashboardCommandTasks(a, b));
+    .sort((a, b) => compareAttentionTasks(a, b));
 
   renderDashboardTaskSections(todayTasks, tomorrowTasks, overdueTasks);
   updateReminderStatusBadge();
@@ -12981,7 +13022,7 @@ function renderDashboardEmptyMsg(text) {
 
 function bindDashboardTaskActions() {
   if (!els.viewDashboard) return;
-  els.viewDashboard.querySelectorAll(".dash-cmd-row__main[data-edit], .dash-task-row__main[data-edit], .dash-timeline__item[data-edit]").forEach((btn) => {
+  els.viewDashboard.querySelectorAll(".dash-task-row__main[data-edit], .dash-timeline__item[data-edit]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       openTaskDetail(btn.dataset.edit);
@@ -13035,33 +13076,24 @@ function renderDashItem(task, type, options = {}) {
 
   if (layoutV2) {
     const badge = getDashboardDueBadge(task);
-    const wfBadge = getDashboardWorkflowTypeBadge(task);
-    const wfPanel = renderDashboardWorkflowCompactPanel(task);
-    const priorityClassName = priorityClass(task.priority);
-    const focusClass = options.focus ? " dash-cmd-row--focus" : "";
+    const wfBar = renderDashboardTaskWorkflowBar(task);
+    const hasWf = Boolean(wfBar);
+    const sitePart = siteLabel !== "Site 미정" ? ` · ${siteLabel}` : "";
 
     return `
-    <article class="dash-cmd-row dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${focusClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
-      <button type="button" class="dash-cmd-row__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
-        <div class="dash-cmd-row__body">
-          <div class="dash-cmd-row__identity">
-            <span class="dash-cmd-row__title-line">
-              ${criticalBadge}
-              <span class="dash-cmd-row__title">${escapeHtml(task.task)}</span>
-            </span>
-            <div class="dash-cmd-row__meta-row">
-              <span class="dash-cmd-row__meta">${renderDashboardTaskMeta(task)}</span>
-              ${wfBadge ? `<span class="dash-cmd-row__wf-type">${escapeHtml(wfBadge)}</span>` : ""}
-            </div>
-          </div>
-          ${wfPanel}
-        </div>
+    <article class="dash-task-row${hasWf ? " dash-task-row--has-wf" : ""} dash-item--interactive dash-item--${type}${criticalClass}${selectedClass}${isDone ? " dash-item--completed" : ""}" data-task-id="${escapeAttr(task.id)}">
+      <button type="button" class="dash-task-row__main" data-edit="${escapeAttr(task.id)}" aria-label="${escapeAttr(task.task)}">
+        <span class="dash-task-row__title-line">
+          ${criticalBadge}
+          <span class="dash-task-row__title">${escapeHtml(task.task)}</span>
+        </span>
+        <span class="dash-task-row__meta">${escapeHtml(studyLabel + sitePart)}</span>
       </button>
-      <span class="dash-cmd-row__due dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
-      <span class="dash-cmd-row__priority dash-cmd-priority dash-cmd-priority--${priorityClassName}">${escapeHtml(task.priority)}</span>
-      <span class="dash-cmd-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
-      <button type="button" class="dash-cmd-row__check-btn${isDone ? " dash-cmd-row__check-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
-        <span class="dash-cmd-row__check-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
+      ${wfBar}
+      <span class="dash-v2-badge ${badge.className}">${escapeHtml(badge.label)}</span>
+      <span class="dash-task-row__status">${renderInlineStatusDropdown(task, { compact: true, statuses: TASK_CARD_STATUS_OPTIONS })}</span>
+      <button type="button" class="dash-task-row__check-btn${isDone ? " dash-task-row__check-btn--done" : ""}" data-complete="${escapeAttr(task.id)}" title="완료" aria-label="완료"${isDone ? " disabled" : ""}>
+        <span class="dash-task-row__check-icon" aria-hidden="true">${isDone ? "✓" : ""}</span>
       </button>
     </article>
   `;
