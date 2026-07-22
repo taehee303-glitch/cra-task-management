@@ -17,6 +17,16 @@ _(none)_
 
 ---
 
+## [1.4.0] — build 111 — 2026-07-22 — Parallel workflow visual display fix
+
+### Fixed
+
+- 병렬 Workflow 단계가 저장/로드 시 **parallelGroup·parallelWithPrevious** 정상 유지
+- Workflow 편집기·Library 미리보기·Task 타임라인에서 병렬 단계 **가로(+) 배치** — phase 사이만 ↓ 화살표
+- anchor Task 누락으로 병렬이 순차 화살표로 보이던 문제 수정
+
+---
+
 ## [1.4.0] — build 110 — 2026-07-22 — Parallel workflow create together, complete individually
 
 ### Changed

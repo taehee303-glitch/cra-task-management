@@ -3636,7 +3636,60 @@ function normalizeWorkflowStep(step) {
       ? step.defaultStatus
       : DEFAULT_STATUS,
     parallelGroup: step?.parallelGroup?.trim() || "",
+    parallelWithPrevious: Boolean(step?.parallelWithPrevious),
   };
+}
+
+function resolveParallelGroupsInStepList(steps) {
+  if (!Array.isArray(steps) || !steps.length) return [];
+
+  const flowSteps = steps.map((step) => ({
+    kind: "post",
+    ...normalizeWorkflowStep(step),
+  }));
+
+  for (let i = 1; i < flowSteps.length; i += 1) {
+    if (flowSteps[i].parallelWithPrevious) continue;
+    const group = flowSteps[i].parallelGroup?.trim();
+    if (group && group === flowSteps[i - 1].parallelGroup?.trim()) {
+      flowSteps[i].parallelWithPrevious = true;
+    }
+  }
+
+  const resolved = resolveParallelGroupsInFlowSteps(flowSteps);
+  return resolved.map((step) => normalizeWorkflowStep(step));
+}
+
+function workflowStepsToStepDefs(steps, kind = "post") {
+  return (steps || []).map((step) => ({
+    kind,
+    taskName: step.taskName,
+    stepDef: step,
+  }));
+}
+
+function renderWorkflowStoredStepPhases(steps, kind, renderStepHtml) {
+  const resolved = resolveParallelGroupsInStepList(steps);
+  const phases = buildWorkflowPhases(workflowStepsToStepDefs(resolved, kind));
+
+  return phases
+    .map((phase, phaseIndex) => {
+      const arrow = phaseIndex > 0 ? '<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>' : "";
+
+      if (phase.defs.length > 1) {
+        const parallelHtml = phase.defs
+          .map((def, defIndex) => {
+            const sep =
+              defIndex > 0 ? '<span class="workflow-flow-preview__parallel-sep" aria-hidden="true">+</span>' : "";
+            return `${sep}${renderStepHtml(def.stepDef)}`;
+          })
+          .join("");
+        return `${arrow}<div class="workflow-flow-preview__parallel"><span class="workflow-flow-preview__parallel-badge">병렬</span><div class="workflow-flow-preview__parallel-steps">${parallelHtml}</div></div>`;
+      }
+
+      return `${arrow}${renderStepHtml(phase.defs[0].stepDef)}`;
+    })
+    .join("");
 }
 
 function resolveParallelGroupsInFlowSteps(flowSteps) {
@@ -3768,16 +3821,23 @@ function buildWorkflowPhases(stepDefs) {
 
   while (index < stepDefs.length) {
     const def = stepDefs[index];
-    const group = def.stepDef?.parallelGroup?.trim();
-    const defs = [def];
-    const indices = [index];
-    let next = index + 1;
+    let group = def.stepDef?.parallelGroup?.trim();
+    const defs = [];
+    const indices = [];
+    let next = index;
+
+    if (!group && def.kind !== "root" && index + 1 < stepDefs.length) {
+      const nextStepDef = stepDefs[index + 1].stepDef;
+      if (nextStepDef?.parallelWithPrevious && nextStepDef?.parallelGroup?.trim()) {
+        group = nextStepDef.parallelGroup.trim();
+      }
+    }
 
     if (group && def.kind !== "root") {
-      while (next < stepDefs.length) {
-        const nextDef = stepDefs[next];
-        if (nextDef.stepDef?.parallelGroup?.trim() === group) {
-          defs.push(nextDef);
+      while (next < stepDefs.length && stepDefs[next].kind !== "root") {
+        const stepGroup = stepDefs[next].stepDef?.parallelGroup?.trim();
+        if (next === index || stepGroup === group) {
+          defs.push(stepDefs[next]);
           indices.push(next);
           next += 1;
         } else {
@@ -3785,6 +3845,8 @@ function buildWorkflowPhases(stepDefs) {
         }
       }
     } else {
+      defs.push(def);
+      indices.push(index);
       next = index + 1;
     }
 
@@ -3878,10 +3940,14 @@ function sortFlowStepsByDueOffset(flowSteps) {
 }
 
 function normalizeWorkflowRecord(workflow) {
-  const preSteps = Array.isArray(workflow?.preSteps)
-    ? workflow.preSteps.map(normalizeWorkflowStep).filter((s) => s.taskName)
-    : [];
-  const steps = Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : [];
+  const preSteps = resolveParallelGroupsInStepList(
+    Array.isArray(workflow?.preSteps)
+      ? workflow.preSteps.map(normalizeWorkflowStep).filter((s) => s.taskName)
+      : []
+  );
+  const steps = resolveParallelGroupsInStepList(
+    Array.isArray(workflow?.steps) ? workflow.steps.map(normalizeWorkflowStep).filter((s) => s.taskName) : []
+  );
   const tags = Array.isArray(workflow?.tags)
     ? [...new Set(workflow.tags.map((tag) => String(tag).trim()).filter(Boolean))]
     : [];
@@ -6343,34 +6409,8 @@ function renderWorkflowFlowPreview(workflow, options = {}) {
     `;
   };
 
-  const renderSideSteps = (sideSteps, side) => {
-    let html = "";
-    let index = 0;
-    while (index < sideSteps.length) {
-      const step = sideSteps[index];
-      const group = step.parallelGroup?.trim();
-      if (group) {
-        const groupSteps = [step];
-        let next = index + 1;
-        while (next < sideSteps.length && sideSteps[next].parallelGroup?.trim() === group) {
-          groupSteps.push(sideSteps[next]);
-          next += 1;
-        }
-        html += `<div class="workflow-flow-preview__parallel">${groupSteps.map((item) => renderStep(item, side)).join('<span class="workflow-flow-preview__parallel-sep" aria-hidden="true">+</span>')}</div>`;
-        if (next < sideSteps.length) {
-          html += `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>`;
-        }
-        index = next;
-      } else {
-        html += `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>${renderStep(step, side)}`;
-        if (index < sideSteps.length - 1) {
-          html += `<div class="workflow-flow-preview__arrow" aria-hidden="true">↓</div>`;
-        }
-        index += 1;
-      }
-    }
-    return html;
-  };
+  const renderSideSteps = (sideSteps, side) =>
+    renderWorkflowStoredStepPhases(sideSteps, side, (step) => renderStep(step, side));
 
   const maxSteps = options.maxSteps ?? (compact ? 4 : preSteps.length + steps.length);
   const visiblePre = compact ? preSteps.slice(0, maxSteps) : preSteps;
@@ -7134,7 +7174,8 @@ function workflowRecordToFlowSteps(workflow) {
       kind: "pre",
       ...normalized,
       parallelWithPrevious: Boolean(
-        normalized.parallelGroup && prev?.parallelGroup && prev.parallelGroup === normalized.parallelGroup
+        normalized.parallelWithPrevious ||
+          (normalized.parallelGroup && prev?.parallelGroup && prev.parallelGroup === normalized.parallelGroup)
       ),
     });
   });
@@ -7156,10 +7197,11 @@ function workflowRecordToFlowSteps(workflow) {
       kind: "post",
       ...normalized,
       parallelWithPrevious: Boolean(
-        normalized.parallelGroup &&
-          prev?.kind !== "root" &&
-          prev?.parallelGroup &&
-          prev.parallelGroup === normalized.parallelGroup
+        normalized.parallelWithPrevious ||
+          (normalized.parallelGroup &&
+            prev?.kind !== "root" &&
+            prev?.parallelGroup &&
+            prev.parallelGroup === normalized.parallelGroup)
       ),
     });
   });
@@ -8398,7 +8440,7 @@ function renderWorkflowTimeline(task, options = {}) {
             })}`;
           })
           .join("");
-        return `${arrow}<div class="workflow-timeline__parallel"><span class="workflow-timeline__parallel-badge">병렬</span>${parallelSteps}</div>`;
+        return `${arrow}<div class="workflow-timeline__parallel"><span class="workflow-timeline__parallel-badge">병렬</span><div class="workflow-timeline__parallel-steps">${parallelSteps}</div></div>`;
       }
 
       const index = phase.indices[0];
@@ -10804,7 +10846,7 @@ function isActive(task) {
 }
 
 const APP_VERSION = "1.1.0";
-const APP_BUILD = "110";
+const APP_BUILD = "111";
 const FIREBASE_SDK_VERSION = "10.14.1";
 
 const SETTINGS_PANEL_TITLES = {

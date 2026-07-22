@@ -6362,17 +6362,34 @@ body.body--settings-open {
 
 .workflow-flow-preview__parallel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  justify-content: center;
+  flex-direction: column;
   gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px dashed #c4b5fd;
+  border-radius: 10px;
+  background: #faf5ff;
+}
+
+.workflow-flow-preview__parallel-badge {
+  align-self: flex-start;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #7c3aed;
+  letter-spacing: 0.04em;
 }
 
 .workflow-flow-preview__parallel-sep {
   align-self: center;
   color: #7c3aed;
   font-weight: 800;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.workflow-flow-preview__parallel .workflow-flow-preview__step {
+  flex: 1 1 6.5rem;
+  min-width: min(100%, 6.5rem);
 }
 
 .workflow-flow-preview__step--parallel {
@@ -6782,10 +6799,13 @@ body.body--settings-open {
   letter-spacing: 0.04em;
 }
 
-.workflow-detail-parallel__steps {
+.workflow-detail-parallel__steps,
+.workflow-flow-preview__parallel-steps,
+.workflow-timeline__parallel-steps {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 0.35rem;
 }
 
@@ -8137,17 +8157,15 @@ body.body--settings-open {
 
 .workflow-timeline__parallel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 0.35rem;
-  padding: 0.35rem 0.45rem;
-  border: 1px dashed #ddd6fe;
+  padding: 0.45rem 0.55rem;
+  border: 1px dashed #c4b5fd;
   border-radius: 10px;
-  background: #faf5ff;
+  background: #f5f3ff;
 }
 
 .workflow-timeline__parallel-badge {
-  flex: 0 0 100%;
   font-size: 0.62rem;
   font-weight: 700;
   color: #7c3aed;
@@ -8155,9 +8173,22 @@ body.body--settings-open {
 }
 
 .workflow-timeline__parallel-sep {
+  align-self: center;
   color: #a78bfa;
-  font-weight: 700;
-  font-size: 0.85rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.workflow-timeline__parallel .workflow-timeline__step {
+  flex: 1 1 8rem;
+  min-width: min(100%, 8rem);
+}
+
+.workflow-timeline__parallel .workflow-timeline__btn,
+.workflow-timeline__parallel .workflow-timeline__placeholder {
+  height: 100%;
 }
 
 .dashboard-workflow-adjacent__parallel {
